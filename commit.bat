@@ -2,7 +2,6 @@
 cd %~dp0
 
 git pull
-git add .
-git commit -a
+git add -u .
+git commit
 git push -u origin master
-pause
