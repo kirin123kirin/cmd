@@ -1,0 +1,12 @@
+option echo off
+option batch abort
+option transfer binary
+option confirm off
+option exclude "*/opt/python; mingw32/; mingw64/; old;"
+option exclude "*.bak; Thumb.db; *.msi; My Pictures; My Music; My Videos;"
+
+open aws
+cd /home/yellow/Dropbox/portable.app
+lcd "\\10.145.120.39\Y"
+synchronize local -criteria=either
+exit
