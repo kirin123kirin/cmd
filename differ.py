@@ -1,175 +1,411 @@
 # -*- coding: utf-8 -*-
-import pandas as pd
-import difflib
-from profiler import pandas_read_any, logger, outputter
-import os,sys
-import psutil as ps
-enc        = "cp932"
+# author : m.yamagami
 
-class DiffCode:
-    SIMILAR = "Same"         # starts with '  '
-    RIGHTONLY = "!Append"       # starts with '+ '
-    LEFTONLY = "!Delete"        # starts with '- '
-    CHANGED = "!Change"         # either three or four lines with the prefixes ('-', '+', '?'), ('-', '?', '+') or ('-', '?', '+', '?') respectively
+__version__ = '0.0.3'
+import os
+import sys
+import csv
+import re
+from difflib import SequenceMatcher
+from itertools import tee
+from io import StringIO
 
-class DifflibParser:
-    def __init__(self, text1, text2):
-        self.__text1 = text1
-        self.__text2 = text2
-        self.__diff = list(difflib.ndiff(text1, text2))
-        self.__currentLineno = 0
+try:
+    from cytoolz.itertoolz import zip_longest
+except:
+    from itertools import zip_longest
+
+#from itertools import zip_longest
+
+emsg = """
+## WARNING ##
+    ** Please install module `pip install xsorted` **
+
+"""
+
+try:
+    from xsorted import xsorted
+except ImportError as e:
+    sys.stderr.write(emsg)
+    xsorted = sorted
+
+def guess_sep(s):
+    return csv.Sniffer().sniff(s).delimiter
+
+def getencoding():
+    d = dict(win32="cp932", linux="utf-8", cygwin="utf-8", darwin="utf-8")
+    return d[sys.platform]
+
+def getlinesep():
+    d = dict(win32="\r\n", linux="\n", cygwin="\n", darwin="\n")
+    return d[sys.platform]
+
+
+def opener(f, encoding=None):
+    if hasattr(f, "read"):
+        return f
+    if isinstance(f, str):
+        if os.path.exists(os.path.dirname(f)):
+            return open(f)
+        else:
+            raise ValueError("File not Found `{}`".format(f))
+
+class logger(object):
+    def __init__(self, filepath_or_buffer=None, autoclose=True):
+        self.name = None
+        self.autoclose = autoclose
+        if filepath_or_buffer is None:
+            self.con = sys.stdout
+        elif isinstance(filepath_or_buffer, str) and os.path.exists(os.path.dirname(filepath_or_buffer)):
+            self.name = filepath_or_buffer
+            self.con = open(self.name, "w")
+        elif isinstance(filepath_or_buffer, StringIO) or filepath_or_buffer == sys.stdout:
+            self.con = filepath_or_buffer
+        elif hasattr(filepath_or_buffer, "write"):
+            self.con = filepath_or_buffer
+            self.name = self.con.name
+        else:
+            raise AttributeError("unknown type logfilepath `{}`".format(filepath_or_buffer))
+    def close(self):
+        if hasattr(self.con, "close") and self.name and self.autoclose:
+            self.con.close()
+    def __getattr__(self,name):
+        self.con.__getattr__(name)
+    def __enter__(self):
+        return self.con
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type:
+            sys.stderr.write("{}\n{}\n{}".format(exc_type, exc_value, traceback))
+        self.close()
+
+
+def pprint(a,b, title="", sep=",", linesep="\n", *arg, **kw):
+    with StringIO() as sio:
+        Differ(a,b, *arg, **kw).pprint(f=sio,title=title, sep=sep, linesep=linesep)
+        return sio.getvalue()
+
+def count(a,b,*arg, **kw):
+    s = Differ(a,b, *arg, **kw)
+    for d in s:
+        pass
+    return s.result
+
+def is_same(a,b,*arg, **kw):
+    s = Differ(a,b, *arg, **kw)
+    for d in s:
+        pass
+    return s.is_same
+
+_render_ = """
+## {title} Summary  ##
+equal  : {equal} line
+replace: {replace} line
+delete : {delete} line
+insert : {insert} line
+
+"""
+def sumary(a,b,title="", *arg, **kw):
+    s = Differ(a,b, *arg, **kw)
+    return _render_.format(title=title, **s.result)
+
+def items(a,b,*arg, **kw):
+    for d in Differ(a,b, *arg, **kw):
+        yield d
+
+lf = re.compile(r"\r?\n")
+rmlf = lambda x: lf.sub("", x)
+
+class Differ(object):
+    def __init__(self, a, b, skipequal=True, header=False, key=None, in_memory=True, isjunk=None):
+        """
+        Useful Diff Iterator
+        
+        Parameter: 
+            a : (iteratable) diff target list1 require
+            b : (iteratable) diff target list2 require
+            skipequal : (boolean) do you wan't output same sequence? (default True is non same only)
+            key : (1 arg callable) diff compare key function
+            in_memory : (boolean) when very large data is `False` (default True)
+            
+        Example:
+        >>> for tag, in Differ(a=list("abc"), b=list("aac")):
+        ...            print(d)
+        ('replace', 1, "b", 1, "a")
+        
+        Return: 
+        tuple(tag, i, la, j, lb)
+            tag : str('replace' or 'insert, or 'delete'  or 'equal')
+            i      : index of a
+            la    : side by a data
+            j      : index of a
+            lb    : side by b data
+        """
+        self.a = a
+        self.b = b
+        self.header = header
+        self.key = key
+        self.in_memory = in_memory
+        self.skipequal = skipequal
+        self.isjunk = isjunk
+        self.result = dict(equal=0, replace=0, delete=0, insert=0)
+        self.header_a = None
+        self.header_b = None
+    
+    @property
+    def sorter(self):
+        if self.in_memory:
+            return sorted
+        else:
+            if xsorted.__module__ is "builtins":
+                raise ImportError(emsg)
+                sys.exit(1)
+            return xsorted
+            
+    def is_same(self):
+        """
+        check function
+        Same or Different?
+        
+        Return boolean
+        """
+        return sum(self.result.values()) - self.result["equal"] == 0
+    
+    def detail(self, sep=",", linesep="\n", title=""): #TODO memory usage
+        csv.register_dialect('user', delimiter=sep, lineterminator=linesep, quoting=csv.QUOTE_MINIMAL)
+        ret = "## {} Detail  ##\n".format(title)
+        ret += sep.join(["VALID","FILE1_LINENO","FILE1_LINENO", "SPLIT","[RESULT...]\n"])
+        
+        for tag,context,i,j in self.compare():
+            if i is None:
+                i = "-"
+            else:
+                i += 1
+            if j is None:
+                j = "-"
+            else:
+                j += 1
+
+            ret += sep.join(str(x) for x in flatten([tag, i, j, "|", context])) + linesep
+        return ret
+
+    def sumary(self, title=""):
+        return _render_.format(title=title, **self.result)
+
+    def pprint(self, f=None, sep=",", linesep="\n", title=""):
+        """
+        Diff result log prety printing function
+        Return:
+            default STDOUT print
+        """
+        
+        with logger(f) as w:
+            w.write(self.detail(sep=sep, linesep=linesep, title=title))               
+            w.write(self.sumary(title=title))
+
+    def codes(self):
+        if self.key:
+            self.a = self.sorter(self.a, key=self.key)
+            self.b = self.sorter(self.b, key=self.key)
+        seq = SequenceMatcher(self.isjunk, self.a, self.b, autojunk=False)
+
+        if self.header:
+            tag = self.header_a == self.header_b and "equal" or "replace"
+            self.result[tag] += 1
+            yield tag, 0, self.header_a, 0, self.header_b
+      
+        for tag, i1, i2, j1, j2 in seq.get_opcodes():
+            lon = zip_longest(range(i1,i2), self.a[i1:i2], range(j1,j2), self.b[j1:j2])
+            for i, contexta, j, contextb in lon:
+                self.result[tag] += 1
+                if self.skipequal and tag == "equal":
+                    continue
+                yield tag, i, contexta, j, contextb
+
+
+    def _compare(self):
+        if hasattr(self.b, "__next__"):
+            if self.in_memory:
+                self.a, self.b = list(self.a), list(self.b)
+            else:
+                self.a, self.b = _listlike(self.a), _listlike(self.b)
+        
+        if self.header:
+            if self.header_a is None:
+                if hasattr(self.a, "__next__"):
+                    self.header_a = next(self.a)
+                else:
+                    self.header_a, self.a = self.a[0], self.a[1:]
+            if self.header_b is None:
+                if hasattr(self.b, "__next__"):
+                    self.header_b = next(self.b)
+                else:
+                    self.header_b, self.b = self.b[0], self.b[1:]
+        
+        try:
+            for tag,i,a,j,b in self.codes():
+                yield tag, i, a and a, j, b and b
+        
+        except TypeError:
+            if self.header:
+                self.header_a, self.header_b = repr(self.header_a), repr(self.header_b)
+                
+            self.a, self.b = [repr(y) for y in self.a], [repr(y) for y in self.b]
+        
+            for tag,i,a,j,b in self.codes():
+                yield tag, i, a and eval(a), j, b and eval(b)
+
+    def compare(self):
+        cr = True
+        for tag,i,a,j,b in self._compare():
+            if tag in ["equal","delete"]:
+                yield tag,a,i,j
+            if tag == "replace":
+                if "user" not in csv.list_dialects() and cr is True:
+                    cr = csv.register_dialect('user', delimiter=guess_sep(a), quoting=csv.QUOTE_MINIMAL)
+                yield tag,_rowcompare(a,b,dialect="user"),i,j
+            if tag in ["insert"]:
+                yield tag,b,None,j
 
     def __iter__(self):
-        return self
+        return self._compare()
 
-    def __next__(self):
-        result = {}
-        if self.__currentLineno >= len(self.__diff):
-            raise StopIteration
-        currentLine = self.__diff[self.__currentLineno]
-        code = currentLine[:2]
-        line = currentLine[2:]
-        if code == '  ':
-            result['before'] = line
-            result['code'] = DiffCode.SIMILAR
-        elif code == '- ':
-            result['before'] = line
-            incrementalChange = self.__tryGetIncrementalChange(self.__currentLineno)
-            if not incrementalChange:
-                result['code'] = DiffCode.LEFTONLY
-            else:
-                result['code'] = DiffCode.CHANGED
-                # result['leftchanges'] = incrementalChange['left'] if 'left' in incrementalChange else None
-                # result['rightchanges'] = incrementalChange['right'] if 'right' in incrementalChange else None
-                result['after'] = incrementalChange['after']
-                self.__currentLineno += incrementalChange['skiplines']
-        elif code == '+ ':
-            result['after'] = line
-            result['code'] = DiffCode.RIGHTONLY
-        self.__currentLineno += 1
-        return result
+def _listlike(iterator):
+    class Slice(object):
+        def __init__(self, iter):
+            self._iter, self._root = tee(iter)
+            self._length = None
+            self._cache = []
+        def __getitem__(self, k):
+            if isinstance(k, slice):
+                return [self._get_value(i) for i in range(k.start, k.stop, k.step or 1)]
+            return self._get_value(k)
+        def _get_value(self, k):
+            cache_len = len(self._cache)
+            
+            if k < cache_len:
+                return self._cache[k]
 
-    def __tryGetIncrementalChange(self, lineno):
-        lineOne = self.__diff[lineno] if lineno < len(self.__diff) else None
-        lineTwo = self.__diff[lineno + 1] if lineno + 1 < len(self.__diff) else None
-        lineThree = self.__diff[lineno + 2] if lineno + 2 < len(self.__diff) else None
-        lineFour = self.__diff[lineno + 3] if lineno + 3 < len(self.__diff) else None
+            self._root, root_copy = tee(self._root)
+            ret = None
 
-        changes = {}
-        # ('-', '?', '+', '?') case
-        if lineOne and lineOne[:2] == '- ' and \
-           lineTwo and lineTwo[:2] == '? ' and \
-           lineThree and lineThree[:2] == '+ ' and \
-           lineFour and lineFour[:2] == '? ':
-            # changes['left'] = [i for (i,c) in enumerate(lineTwo[2:]) if c in ['-', '^']]
-            # changes['right'] = [i for (i,c) in enumerate(lineFour[2:]) if c in ['+', '^']]
-            changes['after'] = lineThree[2:]
-            changes['skiplines'] = 3
-            return changes
-        # ('-', '+', '?')
-        elif lineOne and lineOne[:2] == '- ' and \
-           lineTwo and lineTwo[:2] == '+ ' and \
-           lineThree and lineThree[:2] == '? ':
-            # changes['right'] = [i for (i,c) in enumerate(lineThree[2:]) if c in ['+', '^']]
-            # changes['left'] = []
-            changes['after'] = lineTwo[2:]
-            changes['skiplines'] = 2
-            return changes
-        # ('-', '?', '+')
-        elif lineOne and lineOne[:2] == '- ' and \
-           lineTwo and lineTwo[:2] == '? ' and \
-           lineThree and lineThree[:2] == '+ ':
-            # changes['right'] = []
-            # changes['left'] = [i for (i,c) in enumerate(lineTwo[2:]) if c in ['-', '^']]
-            changes['after'] = lineThree[2:]
-            changes['skiplines'] = 2
-            return changes
-        # no incremental change
+            for i in range(k - cache_len + 1):
+                ret = next(root_copy)
+                self._cache.append(ret)
+
+            self._root = root_copy
+            return ret
+        def __next__(self):
+            return next(self._iter)
+        def __len__(self):
+            if self._length is None:
+                self._iter, root_copy = tee(self._iter)
+                self._length = sum(1 for _ in root_copy)
+                del root_copy
+            return self._length
+        def cacheclear(self):
+            self._cache = []
+            
+    return Slice(iterator)
+
+def _norm(x):
+    if x is None:
+        return []
+    if isinstance(x, str) or isinstance(x, int):
+        return [x]
+    return x
+
+def _parserow(x, dialect):
+    if x is None:
+        return []
+    if isinstance(x, int):
+        return [x]
+    if isinstance(x, str):
+        return list(csv.reader([x],dialect=dialect))[0]
+    return x
+
+def _rowcompare(a, b, dialect=None):
+    ret = []
+    if dialect is None:
+        z = zip_longest(_norm(a), _norm(b), fillvalue="")
+    else:
+        z = zip_longest(_parserow(a, dialect), _parserow(b, dialect), fillvalue="")
+    
+    for aa, bb in z:
+        if aa == bb:
+            ret.append(aa)
+        elif aa and not bb:
+            ret.append("{} ---> DEL".format(aa))
+        elif not aa and bb:
+            ret.append("ADD ---> {}".format(bb))
         else:
-            return None
+            ret.append("{} ---> {}".format(aa, bb))
+    return ret        
 
-def _differ(before_df, after_df):
-    diff = DifflibParser(before_df.to_csv(sep="\t",header=False,index=False).splitlines(),
-                                          after_df.to_csv(sep="\t",header=False,index=False).splitlines())
-    t_bdf = before_df.T
-    t_adf = after_df.T
-    for d in diff:
-        if d["code"].startswith("!"):
-            if d.get("before"):
-                bsr = pd.Series(d["before"].split("\t"), index=before_df.columns)
-                bL = (before_df.loc[t_bdf.isin(bsr).all()].index + 1).tolist()
-            if d.get("after"):
-                asr = pd.Series(d["after"].split("\t"), index=after_df.columns)
-                aL = (after_df.loc[t_adf.isin(asr).all()].index + 1).tolist()
-            if d["code"] == DiffCode.CHANGED:
-                babool = bsr != asr
-                chstr = bsr[babool].astype(str) + "===>" + asr[babool].astype(str)
-                bsr[chstr.index] = chstr
-                bsr["LineNo"] = "{}<===>{}".format(bL[0],aL[0])
-                yield bsr
-            elif d["code"] == DiffCode.LEFTONLY: #Delete
-                bsr["LineNo"] = "{}<===DEL".format(bL[0])
-                yield bsr
-            elif d["code"] == DiffCode.RIGHTONLY: #Append
-                asr["LineNo"] = "ADD===>{}".format(aL[0])
-                yield asr
-    del t_bdf, t_adf, diff
+def flatten(L):
+    ret = []
+    fr = list(L)
 
-def pandas_df_diff(before_df, after_df, keys=[], changed_only=True):
-    if keys:
-        s = keys + list(filter(lambda x: x not in keys, before_df.columns))
-    else:
-        s = before_df.columns.tolist()
-    outcolumn = before_df.columns.tolist() + ["LineNo"]
-    c = pd.DataFrame(_differ(before_df[s], after_df[s]))[outcolumn]
-    if changed_only:
-        col = c[c.apply(lambda x: x.str.match(".*===.*"))].dropna(axis=1, how="all").columns
-        return c[col]
-    else:
-        return c
+    while len(fr) > 0:
+        n = fr.pop(0)
+        if isinstance(n, list):
+            fr = n + fr
+        else:
+            ret.append(n)
+    return ret
 
-def main(f_before, f_after,keys=[], changed_only=True, header=True, enc="cp932"):
-    filesize = "beforefile {:,.1f}KB , afterfile {:,.1f}KB".format(os.stat(f_before).st_size / 1024,os.stat(f_after).st_size / 1024)
-    logger("[DEBUG] loading size %s)" % (filesize))
+def test():
+    a = [[1,2,3],[1,2,3]]
+    b = [[1,2,3],[3,2,1]]
     
-    ret = pandas_df_diff(pandas_read_any(f_before,encoding=enc),
-                                          pandas_read_any(f_after,encoding=enc),
-                                          keys=keys,
-                                          changed_only=changed_only)
-    outputter(ret.to_csv(index=False, header= header, encoding=enc))
-
-if __name__ == '__main__':
-    import optparse
-    enc        = "cp932"
-    verbose    = False
+    assert list(Differ(a,b,skipequal=False)) == [('equal', 0, [1, 2, 3], 0, [1, 2, 3]), ('replace', 1, [1, 2, 3], 1, [3, 2, 1])]
+#    print(list(Differ(a,b,skipequal=False,header=True)))
+    assert(list(Differ(a,b,skipequal=False,header=True)) == [('equal', 0, [1, 2, 3], 0, [1, 2, 3]), ('replace', 0, [1, 2, 3], 0, [3, 2, 1])])
     
-    usage = "usage: differ [-v] [-c] [-e utf-8] [-k col1,col2..] ??????? ??????? > diff_out.csv\n"
-    op = optparse.OptionParser(usage)
-
-    op.add_option("-v", "--verbose", action="store_true", default=False,
-                            help="????")
-    op.add_option("-c", "--changed_only",action="store_true", default=False,
-                            help="???????")
-    op.add_option("-e", "--encoding", type='choice', choices=['cp932', 'utf-8', 'eucjp'], default="cp932",
-                            help="???????(?????cp932)\n???cp932 utf-8 eucjp")
-    op.add_option("-k", "--keys", type='string', default=[],
-                            help="??????\n??????????????")
-
-    options, args = op.parse_args()
-
-    if len(args) != 2:
-        sys.stderr.write("????????????????????\n\n" + op.usage)
-        exit(1)
-
-    enc         = options.encoding
-    verbose = options.verbose
-    changed_only     = options.changed_only
-    header   = True
-    keys = options.keys.split(",")
-
+    anser = [('equal', 0, 1, 0, 1), ('replace', 1, 1, 1, 2), ('equal', 2, 3, 2, 3), ('delete', 3, 4, None, None)]
+    a = (x for x in (1,1,3,4))
+    b = (x for x in (1,2,3))
+    assert list(Differ(a,b,skipequal=False)) == anser
+    a = (1,1,3,4)
+    b = (1,2,3)
+    assert list(Differ(a,b,skipequal=False)) == anser
+    a = [1,1,3,4]
+    b = [1,2,3]
+    assert list(Differ(a,b,skipequal=False)) == anser
     
-    main(args[0], args[1], keys, changed_only, header, enc)
-        
+    assert _rowcompare(a,b) == [1, '1 ---> 2', 3, '4 ---> DEL']
+#    print(pprint(a,b))
+    assert(pprint(a,b) == '##  Detail  ##\nVALID,FILE1_LINENO,FILE1_LINENO,SPLIT,[RESULT...]\nreplace,2,2,|,1 ---> 2\ndelete,4,-,|,4\n\n##  Summary  ##\nequal  : 2 line\nreplace: 1 line\ndelete : 1 line\ninsert : 0 line\n\n')
+
+    s = Differ(a,b)
+    ss = StringIO()
+    s.pprint(f=ss)
+    assert(ss.getvalue()=='##  Detail  ##\nVALID,FILE1_LINENO,FILE1_LINENO,SPLIT,[RESULT...]\nreplace,2,2,|,1 ---> 2\ndelete,4,-,|,4\n\n##  Summary  ##\nequal  : 2 line\nreplace: 1 line\ndelete : 1 line\ninsert : 0 line\n\n')
+    
+    
+    b = _listlike(a)
+    assert(b[3]==4)
+    assert(b[3]==4)
+    assert(b[0]==1)
+    assert(b[0:3]==[1, 1, 3])
+    assert(len(b)==4)
+    assert(list(b)==[1, 1, 3, 4])
 
 
+    # sort test    
+    a = [[1,2,3],[1,2,3]]
+    b = [[3,2,1],[1,2,3]]
+    s2 = Differ(a,b,key=str)
+    assert(list(s2.compare()) == [('replace', ['1 ---> 3', 2, '3 ---> 1'], 1, 1)])
+    
+    a,b = r"C:\temp\hoge_before.csv C:\temp\hoge_after.csv".split(" ")
+    s=Differ(open(a), open(b),header=True)
+    assert(list(s.compare())[0] == ('equal', 'mpg,cyl,displ,hp,weight,accel,yr,origin,name\n', 0, 0))
+#    print(s.result)
+    assert(s.result == {'equal': 386, 'replace': 3, 'delete': 2, 'insert': 1})
+    
+    
 
+if __name__ == "__main__":
+    test()
+    
+    

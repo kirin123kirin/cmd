@@ -1,161 +1,137 @@
-#!/usr/bin/env python
-
-#
-# Sort large text files in a minimum amount of memory
-#
+# -*- coding: utf-8 -*-
 import os
 import sys
-import argparse
+import re
+import csv
+import heapq
+from tempfile import NamedTemporaryFile
+import psutil as ps
 
-class FileSplitter(object):
-    BLOCK_FILENAME_FORMAT = 'block_{0}.dat'
+#TODO xsorted
+class SortError(Exception):
+    pass
 
-    def __init__(self, filename):
+
+def parse_memory(s):
+    if s[-1].lower() == 'k':
+        return int(s[:-1]) * 1024
+    elif s[-1].lower() == 'm':
+        return int(s[:-1]) * 1024 * 1024
+    elif s[-1].lower() == 'g':
+        return int(s[:-1]) * 1024 * 1024 * 1024
+    else:
+        return int(s)
+
+def is_memsort(f):
+    vm = ps.virtual_memory()
+    available_mem = vm.available
+    needs_mem = os.stat(f).st_size * 2.5
+    return available_mem > needs_mem
+
+rm = re.compile('[!$ ,:;|\t]+') #TODO
+def guess_sep(s):
+    try:
+        sep = csv.Sniffer().sniff(s).delimiter
+        if rm.search(sep):
+            return sep
+        else:
+            return None
+    except csv.Error as e:
+        if str(e) == 'Could not determine delimiter':
+            return None
+
+_validnum = re.compile("\d*\.?\d+")
+def _tonum(s):
+    s = s.replace("'",'').replace('"','')
+    if not s:
+        return 0.0
+    if _validnum.match(s):
+        return float(s)
+    else:
+        return float("".join(map(lambda x: str(ord(x)), s))) * 10 ** 8
+
+class LargeSort(object):
+    def __init__(self, filename,
+              header=True, sep=None, 
+              key=None, reverse=False,
+              max_mem="1M", tmpdir=None):
         self.filename = filename
-        self.block_filenames = []
+        self.fp = open(filename)
+        self.header = header
+        if self.header:
+            self.headstr = self.fp.readline()
+        else:
+            self.headstr = ""
+        self.sep = sep or guess_sep(self.headstr)
+        if key == "num":
+            self.key = self._bynum
+        elif key == "lower":
+            self.key = self._bylower
+        else:
+            self.key = key
+        self.reverse = reverse
+        self.max_mem = parse_memory(max_mem)
+        if self.header:
+            self.columns = [re.sub(r'(^[\'"]+|[\'"]+$)', '', c) for c in self.headstr.split(self.sep)]
+        else:
+            self.columns = []
+        self.kw = dict(key=self.key, reverse=self.reverse)
+        self.tmpdir = tmpdir
+        self.split_filenames = []
+        self.output = None
 
-    def write_block(self, data, block_number):
-        filename = self.BLOCK_FILENAME_FORMAT.format(block_number)
-        file = open(filename, 'w')
-        file.write(data)
-        file.close()
-        self.block_filenames.append(filename)
-
-    def get_block_filenames(self):
-        return self.block_filenames
-
-    def split(self, block_size, sort_key=None):
-        file = open(self.filename, 'r')
-        i = 0
-
+    def _bynum(self, line):
+        return [_tonum(s) for s in line.split(self.sep)]
+    
+    def _bylower(self, line):
+        return [s for s in line.lower().split(self.sep)]
+    
+    def tmpsplit(self):
+        """Split into smaller files of maximum size and return the filenames.
+        """
         while True:
-            lines = file.readlines(block_size)
-
+            lines = self.fp.readlines(self.max_mem)
             if lines == []:
                 break
-
-            if sort_key is None:
-                lines.sort()
-            else:
-                lines.sort(key=sort_key)
-
-            self.write_block(''.join(lines), i)
-            i += 1
-
-    def cleanup(self):
-        map(lambda f: os.remove(f), self.block_filenames)
-
-
-class NWayMerge(object):
-    def select(self, choices):
-        min_index = -1
-        min_str = None
-
-        for i in range(len(choices)):
-            if min_str is None or choices[i] < min_str:
-                min_index = i
-
-        return min_index
-
-
-class FilesArray(object):
-    def __init__(self, files):
-        self.files = files
-        self.empty = set()
-        self.num_buffers = len(files)
-        self.buffers = {i: None for i in range(self.num_buffers)}
-
-    def get_dict(self):
-        return {i: self.buffers[i] for i in range(self.num_buffers) if i not in self.empty}
-
-    def refresh(self):
-        for i in range(self.num_buffers):
-            if self.buffers[i] is None and i not in self.empty:
-                self.buffers[i] = self.files[i].readline()
-
-                if self.buffers[i] == '':
-                    self.empty.add(i)
-
-        if len(self.empty) == self.num_buffers:
-            return False
-
-        return True
-
-    def unshift(self, index):
-        value = self.buffers[index]
-        self.buffers[index] = None
-
-        return value
-
-
-class FileMerger(object):
-    def __init__(self, merge_strategy):
-        self.merge_strategy = merge_strategy
-
-    def merge(self, filenames, outfilename, buffer_size):
-        outfile = open(outfilename, 'w', buffer_size)
-        buffers = FilesArray(self.get_file_handles(filenames, buffer_size))
-
-        while buffers.refresh():
-            min_index = self.merge_strategy.select(buffers.get_dict())
-            outfile.write(buffers.unshift(min_index))
-
-    def get_file_handles(self, filenames, buffer_size):
-        files = {}
-
-        for i in range(len(filenames)):
-            files[i] = open(filenames[i], 'r', buffer_size)
-
-        return files
-
-
-
-class ExternalSort(object):
-    def __init__(self, block_size, sep=None, keys=[]):
-        self.block_size = block_size
-        self.sep = sep
-        self.keys = keys
+            with NamedTemporaryFile(prefix=os.path.basename(sys.argv[0]),
+                                    delete=False, mode='w', dir=self.tmpdir) as w:
+                self.split_filenames.append(w.name)
+                w.writelines(sorted(lines, **self.kw))        
+        return map(open, self.split_filenames)
     
-    def sort_key(x):
-        r = x.split(self.sep)
-        return [r[i] for i in self.keys]
-
-    def sort(self, filename):
-        if self.sep and self.keys:
-            sort_key = self.sort_key
+    def memorysort(self, outputfilename=None):
+        self.output = outputfilename or self.filename + ".sort"
+        with open(self.output, "w") as w:
+            if self.header:
+                w.write(self.headstr)
+            w.writelines(sorted(self.fp, **self.kw))
+        
+        return self.output
+    
+    def mergesort(self, outputfilename=None):
+        self.output = outputfilename or self.filename + ".sort"
+        with open(self.output, "w") as w:
+            if self.header:
+                w.write(self.headstr)
+            w.writelines(heapq.merge(*self.tmpsplit(), **self.kw))
+        self.clean()
+        return self.output
+    
+    def sort(self, outputfilename=None):
+        if is_memsort(self.filename):
+            return self.memorysort(outputfilename)
         else:
-        	sort_key = None
-        num_blocks = self.get_number_blocks(filename, self.block_size)
-        splitter = FileSplitter(filename)
-        splitter.split(self.block_size, sort_key)
-
-        merger = FileMerger(NWayMerge())
-        buffer_size = self.block_size / (num_blocks + 1)
-        merger.merge(splitter.get_block_filenames(), filename + '.out', int(buffer_size))
-
-        splitter.cleanup()
-
-    def get_number_blocks(self, filename, block_size):
-        return (os.stat(filename).st_size / block_size) + 1
-
-
-def parse_memory(string):
-    if string[-1].lower() == 'k':
-        return int(string[:-1]) * 1024
-    elif string[-1].lower() == 'm':
-        return int(string[:-1]) * 1024 * 1024
-    elif string[-1].lower() == 'g':
-        return int(string[:-1]) * 1024 * 1024 * 1024
-    else:
-        return int(string)
-
-
+            return self.mergesort(outputfilename)
+    
+    def clean(self):
+        for f in self.split_filenames:
+            os.remove(f)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-m',
                         '--mem',
-                        help='memory to use for sorting',
+                        help='memory to use for sorting default 100M (ex.100K, 2048K, 10M, 1G)',
                         default='100M')
     parser.add_argument('filename',
                         metavar='<filename>',
@@ -163,17 +139,47 @@ def main():
                         help='Target File')
     parser.add_argument('-s',
                         '--sep',
-                        help='Separating Delimitter',
+                        help='Separated Delimitter Character; if Unknown char then "guess"',
+                        default="")
+    parser.add_argument('-c',
+                        '--columns',
+                        help='sorting columns ; comma separated value',
+                        default=[])
+    parser.add_argument('-o',
+                        '--outputfile',
+                        help='outputfile path: default is Same Directory write',
                         default=None)
-    parser.add_argument('-k',
-                        '--key',
-                        help='sorting keys ; comma separated value',
-                        default="")                        
+    parser.add_argument('-N',
+                        '--noheader',
+                        action='store_true',
+                        default=False,
+                        help='Noheader')
+    parser.add_argument('-r',
+                        '--reverse',
+                        action='store_true',
+                        default=False,
+                        help='sort reversed')
+    parser.add_argument('-n',
+                        '--numeric',
+                        help='sort by numeric',
+                        default=None)
+    parser.add_argument('-l',
+                        '--lower',
+                        help='sort by lower string',
+                        default=None)
     args = parser.parse_args()
+    if args.columns != [] and args.columns:
+        args.columns = args.columns.split(",")
 
-    sorter = ExternalSort(parse_memory(args.mem), args.sep, arg.key.split(","))
-    sorter.sort(args.filename[0])
+    s = LargeSort(filename=args.filename[0],
+                sep=args.sep,
+                key=args.numeric or args.lower, #TODO
+                header=args.noheader is False,
+                reverse=args.reverse,
+                max_mem=args.mem)
+    s.sort(args.outputfile)
 
 
 if __name__ == '__main__':
+    import argparse
     main()

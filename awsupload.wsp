@@ -13,15 +13,15 @@ put "%APPROOT%*.cmd"
 put "%APPROOT%*.ini"
 
 cd /home/yellow/Dropbox/portable.app/opt/bin
-lcd "%APPROOT%\opt\bin"
+lcd "%APPROOT%\bin"
 synchronize remote -criteria=either
 
 cd /home/yellow/Dropbox/portable.app/opt/cmd
-lcd "%APPROOT%\opt\cmd"
+lcd "%APPROOT%\cmd"
 synchronize remote -criteria=either
 
 cd /home/yellow/Dropbox/portable.app/opt/data
-lcd "%APPROOT%\opt\data"
+lcd "%APPROOT%\data"
 synchronize remote -criteria=either
 
 cd /home/yellow/Dropbox/portable.app/build
