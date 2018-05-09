@@ -8,6 +8,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 from glob import iglob
 import pandas as pd
 import numpy as np
+from subprocess import check_call
 
 inpdir = os.getenv("PYTHONPATH")
 inproot,pythondirs = os.path.splitdrive(inpdir)
@@ -20,6 +21,7 @@ libdir = pathjoin(outdir, "Lib")
 archivedir=r"\\FREENAS\data1\Downloads"
 
 def lsdir(path):
+    dirinclude = ["\\Tools\\", "\\Scripts\\"]
     extexclude = ['.c', '.cpp', '.cs', '.csc', '.csh', '.h', '.java', '.lock', '.py', '.sample', '.pyx', 'Thumb.db', '.chm', "desktop.ini", ".shp"]
     direxclude = [".git", ".svn", "\\demos\\","\\demo\\", "\\Demos\\", ".dist-info", ".egg-info", "\\tests\\", "\\example"]
     for pth in iglob(path):
@@ -29,19 +31,70 @@ def lsdir(path):
             elif any(x in root for x in direxclude):
                 continue
             for file in files:
-                if file in extexclude or splitext(file)[-1] in extexclude:
+                if any(x in root for x in dirinclude):
+                    yield pathjoin(root, file)
+                elif file in extexclude or splitext(file)[-1] in extexclude:
                     continue
-                if file.endswith(".pyc") and ".opt-" in file:
+                elif file.endswith(".pyc") and ".opt-" in file:
                     continue
-                yield pathjoin(root, file)
+                else:
+                    yield pathjoin(root, file)
 
 def all_exept_python(path):
     for pth in iglob(path):
         for root, dirs, files in os.walk(pth):
-            if pythondirs in root:
+            if pythondirs in root or ".git" in root or ".svn" in root:
                 continue
             for file in files:
                 yield os.path.join(root, file)
+
+ENV = os.environ['PATH'].split(os.pathsep)
+EXEC = [".exe", ".bat", ".cmd", ".wsh", ".vbs"]
+def which(executable):    
+    for path in ENV:
+        path = path.strip('"')
+
+        fpath = os.path.join(path, executable)
+
+        if os.path.isfile(fpath) and os.access(fpath, os.X_OK):
+            return fpath
+
+    if os.name == 'nt':
+        if splitext(executable)[-1]:
+            return None
+        else:
+            for ext in EXEC:
+                ret = which(executable + ext)
+                if ret:
+                    return ret
+
+    return None
+
+
+MINIFY = which("minify.exe") + " -a {} -o {}"
+def minify(inputpath, outputpath=None):
+    if outputpath is None:
+        prf, suf = splitext(inputpath)
+        outputpath = "{}.min{}".format(prf, suf)
+    try:
+        return check_call(MINIFY.format(inputpath, outputpath), shell=True)
+    except:
+        return shutil.copy(inputpath, outputpath)
+
+UPX = which("upx.exe") + " --best "
+notupx = re.compile(r"(\\libgcc.+\.dll|\\qwindows\.dll|\\platforms\\.*\.dll|PyQt5\\.*\.dll|tk.*.dll|\\pythonwin\\|\\win32\\|\\pywin32_system32\\|\\gui(?:-[36][24])?\.exe)")
+def upx(inputpath, outputpath=None):
+    ext = os.path.splitext(inputpath)[-1].lower()
+    if ext in [".exe", ".dll", ".pyd"] and not notupx.search(inputpath):
+        cmd = UPX + inputpath
+        if outputpath is None:
+            cmd += " -o " + outputpath
+        try:
+            return check_call(cmd, shell=True)
+        except:
+            pass
+    if outputpath and inputpath != outputpath:
+        return shutil.copy(inputpath, outputpath)
 
 def getdst(src):
     dst = src.replace(inpdir, outdir)
@@ -50,10 +103,12 @@ def getdst(src):
         dst = dst.replace(".pyc.pyc", ".pyc")
     dst = dst.replace("\__pycache__","")
     dst = dst.replace(r"\site-packages","")
+    dst = dst.replace(".min.",".")
     return dst.replace(r"\Lib\pywin32_system32","")
 
 def maketable(inpdir=inpdir, outdir=outdir):
     src = pd.Series(lsdir(inpdir))
+    src = src[~src.isin(src[src.apply(lambda x: ".min." in x)].str.replace(".min.","."))]
     excepts = [e for e in [pathjoin(inpdir, "Lib\\site-packages\\bokeh\\core\\__init__.py")] if pathexists(e)]
     if excepts:
         src = src.append(pd.Series(data=excepts, name="src"),ignore_index=True)
@@ -87,11 +142,17 @@ def maketable(inpdir=inpdir, outdir=outdir):
 def mkdirs(path):
     return pathlib.Path(path).mkdir(parents=True, exist_ok=True)
 
+
 def buildpython(df, outzipname):
     print("Build `{}`".format(basename(outzipname)))
-    for i, row in df[["src", "dst"]][~df.zipok].iterrows():
+    for i, row in df[["src", "dst","ext"]][~df.zipok].iterrows():
         mkdirs(dirname(row.dst))
-        shutil.copy(row.src, row.dst)
+        if row.ext in [".css", ".htm", ".html", ".js", ".json", ".map"] and ".min." not in row.src:
+            minify(row.src, row.dst)
+#        elif row.ext in [".exe", ".dll", ".pyd"]:
+#            upx(row.src, row.dst)
+        else:
+            shutil.copy(row.src, row.dst)
     
     os.chdir(libdir)
     pypth = pathjoin(outdir, "python36._pth")
@@ -140,12 +201,11 @@ def main(archivedir=archivedir):
     df = maketable()
     
     buildpython(df[df.nano == True], pathjoin(archivedir, "python_nano64.zip"))
-    shutil.make_archive(pathjoin(archivedir,"PortableApp15_nano"), "zip", outroot)
-#    
-#    buildpython(df[df.nano == False], pathjoin(archivedir, "python_min64.zip"))
-#    shutil.make_archive(pathjoin(archivedir,"PortableApp15_min"), "zip", outroot)
+    shutil.make_archive(pathjoin(archivedir,"PortableApp16_nano"), "zip", outroot)
+    
+    buildpython(df[df.nano == False], pathjoin(archivedir, "python_min64.zip"))
+    shutil.make_archive(pathjoin(archivedir,"PortableApp16_min"), "zip", outroot)
 
-main()
-
-
+if __name__ == "__main__":
+    main()
 

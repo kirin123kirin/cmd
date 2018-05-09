@@ -2,7 +2,7 @@ option echo off
 option batch abort
 option transfer binary
 option confirm off
-option exclude "*/opt/python; mingw32/; mingw64/; old;"
+option exclude "*/usr/local/python; old;"
 option exclude "*.bak; Thumb.db; *.msi; My Pictures; My Music; My Videos;"
 
 open aws
@@ -12,28 +12,16 @@ put "%APPROOT%*.bat"
 put "%APPROOT%*.cmd"
 put "%APPROOT%*.ini"
 
-cd /home/yellow/Dropbox/portable.app/opt/bin
+cd /home/yellow/Dropbox/portable.app/usr/local/bin
 lcd "%APPROOT%\bin"
 synchronize remote -criteria=either
 
-cd /home/yellow/Dropbox/portable.app/opt/cmd
-lcd "%APPROOT%\cmd"
-synchronize remote -criteria=either
-
-cd /home/yellow/Dropbox/portable.app/opt/data
+cd /home/yellow/Dropbox/portable.app/usr/local/data
 lcd "%APPROOT%\data"
-synchronize remote -criteria=either
-
-cd /home/yellow/Dropbox/portable.app/build
-lcd "%APPROOT%\build"
 synchronize remote -criteria=either
 
 cd /home/yellow/Dropbox/portable.app/etc
 lcd "%APPROOT%\etc"
-synchronize remote -criteria=either
-
-cd /home/yellow/Dropbox/portable.app/usr
-lcd "%APPROOT%\usr"
 synchronize remote -criteria=either
 
 exit

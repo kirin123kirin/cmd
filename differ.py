@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # author : m.yamagami
 
-__version__ = '0.0.3'
+__version__ = '0.0.4'
 import os
 import sys
 import csv
@@ -202,6 +202,12 @@ class Differ(object):
             w.write(self.detail(sep=sep, linesep=linesep, title=title))               
             w.write(self.sumary(title=title))
 
+    def range(self, start, end):
+        if self.header:
+            return range(start+1, end+1)
+        else:
+            return range(start, end)
+
     def codes(self):
         if self.key:
             self.a = self.sorter(self.a, key=self.key)
@@ -214,8 +220,12 @@ class Differ(object):
             yield tag, 0, self.header_a, 0, self.header_b
       
         for tag, i1, i2, j1, j2 in seq.get_opcodes():
-            lon = zip_longest(range(i1,i2), self.a[i1:i2], range(j1,j2), self.b[j1:j2])
+            lon = zip_longest(self.range(i1,i2), self.a[i1:i2], self.range(j1,j2), self.b[j1:j2])
             for i, contexta, j, contextb in lon:
+                if contexta == contextb: tag = "equal"
+                elif not contexta: tag = "insert"
+                elif not contextb: tag = "delete"
+                else: tag = "replace"
                 self.result[tag] += 1
                 if self.skipequal and tag == "equal":
                     continue
@@ -243,7 +253,7 @@ class Differ(object):
         
         try:
             for tag,i,a,j,b in self.codes():
-                yield tag, i, a and a, j, b and b
+                yield tag, i, _norm(a), j, _norm(b) #TODO
         
         except TypeError:
             if self.header:
@@ -252,19 +262,18 @@ class Differ(object):
             self.a, self.b = [repr(y) for y in self.a], [repr(y) for y in self.b]
         
             for tag,i,a,j,b in self.codes():
-                yield tag, i, a and eval(a), j, b and eval(b)
+                yield tag, i, a and eval(a) or [], j, b and eval(b) or []
 
     def compare(self):
-        cr = True
         for tag,i,a,j,b in self._compare():
-            if tag in ["equal","delete"]:
+            if tag == "equal":
                 yield tag,a,i,j
             if tag == "replace":
-                if "user" not in csv.list_dialects() and cr is True:
-                    cr = csv.register_dialect('user', delimiter=guess_sep(a), quoting=csv.QUOTE_MINIMAL)
-                yield tag,_rowcompare(a,b,dialect="user"),i,j
-            if tag in ["insert"]:
+                yield tag, _comp(a,b),i,j #TODO
+            if tag == "insert":
                 yield tag,b,None,j
+            if tag == "delete":
+                yield tag,a,i, None
 
     def __iter__(self):
         return self._compare()
@@ -314,6 +323,19 @@ def _norm(x):
         return [x]
     return x
 
+def _comp(a, b):
+    ret = []
+    for aa, bb in zip_longest(a, b, fillvalue=""):
+        if aa == bb:
+            ret.append(aa)
+        elif aa and not bb:
+            ret.append("{} ---> DEL".format(aa))
+        elif not aa and bb:
+            ret.append("ADD ---> {}".format(bb))
+        else:
+            ret.append("{} ---> {}".format(aa, bb))
+    return ret
+
 def _parserow(x, dialect):
     if x is None:
         return []
@@ -329,7 +351,6 @@ def _rowcompare(a, b, dialect=None):
         z = zip_longest(_norm(a), _norm(b), fillvalue="")
     else:
         z = zip_longest(_parserow(a, dialect), _parserow(b, dialect), fillvalue="")
-    
     for aa, bb in z:
         if aa == bb:
             ret.append(aa)
@@ -339,7 +360,7 @@ def _rowcompare(a, b, dialect=None):
             ret.append("ADD ---> {}".format(bb))
         else:
             ret.append("{} ---> {}".format(aa, bb))
-    return ret        
+    return ret
 
 def flatten(L):
     ret = []
@@ -354,16 +375,19 @@ def flatten(L):
     return ret
 
 def test():
+    global a, b, anser, s, ss, s2
     a = [[1,2,3],[1,2,3]]
     b = [[1,2,3],[3,2,1]]
     
     assert list(Differ(a,b,skipequal=False)) == [('equal', 0, [1, 2, 3], 0, [1, 2, 3]), ('replace', 1, [1, 2, 3], 1, [3, 2, 1])]
-#    print(list(Differ(a,b,skipequal=False,header=True)))
-    assert(list(Differ(a,b,skipequal=False,header=True)) == [('equal', 0, [1, 2, 3], 0, [1, 2, 3]), ('replace', 0, [1, 2, 3], 0, [3, 2, 1])])
+    assert list(Differ(a,b,skipequal=True)) == [('replace', 1, [1, 2, 3], 1, [3, 2, 1])]
+    assert list(Differ(a,b,skipequal=False,header=True)) == [('equal', 0, [1, 2, 3], 0, [1, 2, 3]), ('replace', 1, [1, 2, 3], 1, [3, 2, 1])]
+    assert list(Differ(a,b,skipequal=True,header=True)) == [('equal', 0, [1, 2, 3], 0, [1, 2, 3]), ('replace', 1, [1, 2, 3], 1, [3, 2, 1])]
     
-    anser = [('equal', 0, 1, 0, 1), ('replace', 1, 1, 1, 2), ('equal', 2, 3, 2, 3), ('delete', 3, 4, None, None)]
+    anser = [('equal', 0, [1], 0, [1]), ('replace', 1, [1], 1, [2]), ('equal', 2, [3], 2, [3]), ('delete', 3, [4], None, [])]
     a = (x for x in (1,1,3,4))
     b = (x for x in (1,2,3))
+#    print(list(Differ(a,b,skipequal=False)) is anser)
     assert list(Differ(a,b,skipequal=False)) == anser
     a = (1,1,3,4)
     b = (1,2,3)
@@ -399,10 +423,10 @@ def test():
     
     a,b = r"C:\temp\hoge_before.csv C:\temp\hoge_after.csv".split(" ")
     s=Differ(open(a), open(b),header=True)
-    assert(list(s.compare())[0] == ('equal', 'mpg,cyl,displ,hp,weight,accel,yr,origin,name\n', 0, 0))
+#    print(list(s.compare()))
+    assert(list(s.compare())[0] == ('equal', ['mpg,cyl,displ,hp,weight,accel,yr,origin,name\n'], 0, 0))
 #    print(s.result)
     assert(s.result == {'equal': 386, 'replace': 3, 'delete': 2, 'insert': 1})
-    
     
 
 if __name__ == "__main__":

@@ -428,7 +428,7 @@ class Excel(object):
         """each All tables Rows
             return: dict-> tablename, generator(row)
         """
-        return dict([s, self.readlines(s, *args, **kw)] for s in self.sheet())
+        return dict([s, self.readlines(s, *args, **kw)] for s in self.sheets())
         
     def dump(self, sheet, outputfilename, sep=",", encoding="cp932", *args, **kw):
         """

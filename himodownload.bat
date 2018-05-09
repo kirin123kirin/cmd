@@ -5,11 +5,11 @@ set TARGET=\\10.145.120.39\Y
 
 rem robocopy "%TARGET%" "%APPROOT%"
 
-set CPCMD=FastCopy.exe /auto_close /open_window /cmd=update
+set CPCMD=FastCopy.exe /auto_close /open_window /cmd=update /exclude="python\"
 
-%CPCMD% "%TARGET%\opt\bin\*" /to="%APPROOT%\bin\"
-%CPCMD% "%TARGET%\opt\cmd\*" /to="%APPROOT%\cmd\"
-%CPCMD% "%TARGET%\opt\data\*" /to="%APPROOT%\data\"
-%CPCMD% "%TARGET%\build\*.py" /to="%APPROOT%\build\"
-%CPCMD% "%TARGET%\etc\*" /to="%APPROOT%\etc\"
-%CPCMD% "%TARGET%\home\yellow\*" /to="%APPROOT%\home\yellow\"
+%CPCMD% "%TARGET%\*" /to="%APPROOT%\"
+REM %CPCMD% "%TARGET%\usr\local\sakura\*" /to="%APPROOT%\usr\local\sakura\"
+REM %CPCMD% "%TARGET%\usr\local\data\*" /to="%APPROOT%\usr\local\data\"
+REM %CPCMD% "%TARGET%\build\*.py" /to="%APPROOT%\build\"
+REM %CPCMD% "%TARGET%\etc\*" /to="%APPROOT%\etc\"
+REM %CPCMD% "%TARGET%\bin\*" /to="%APPROOT%\bin\"

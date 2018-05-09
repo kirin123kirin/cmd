@@ -7,7 +7,7 @@ from tempfile import gettempdir
 from msutils import Excel, MSDB
 from differ import Differ, flatten, logger
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 BUFSIZE = 5 * 1024 * 1024
 SEP = ","
@@ -42,35 +42,48 @@ def struct_diff(f1, f2, w, title="", **kw):
     a = "f1.{}s()".format(title.lower())
     b = "f2.{}s()".format(title.lower())
 
-    for tag, tar,_,_ in Differ(eval(a), eval(b),skipequal=False).compare():
-        sh1, sh2 = (tar.split(" ---> ") + [None])[0:2]
-        g1 = f1.readlines(sh1, **rkw)
-        g2 = f2.readlines(sh2 or sh1, **rkw)        
-        dd = Differ(g1, g2, **values_at(kw, ["skipequal","header","key","in_memory","isjunk"]))
+    for tag, [tar],_,_ in Differ(eval(a), eval(b),skipequal=False).compare():
+        sh1, sh2 = (tar.split(" ---> ") + [""])[:2]
+        if tag == "equal":
+            sh2 = sh1
+        if tag == "insert":
+            sh1, sh2 = None, sh1
+        sh1 = None if sh1 == "ADD" else sh1
+        sh2 = None if tag == "delete" or sh2 == "DEL" else sh2
+        sh2 = sh1 if sh2 == "" else sh2
+        print(f"running diff {tag.upper()}: {f1.filename}[{sh1}] vs {f2.filename}[{sh2}]", file=sys.stderr)
+        
         
         # make Summary
         changed[tar] = dict(title='{}="{}"'.format(title, tar),equal=0, delete=0,insert=0, replace=0)
-        mklog = lambda f: "{} lines x {} cols".format(f.nrow(tar), f.ncol(tar))
+        mklog = lambda f, t=tar : "{} lines x {} cols".format(f.nrow(t), f.ncol(t))
+
 
         # make Detail
-        if tag in ["replace", "equal"]:
+        if sh1 and sh2:
+            g1 = f1.readlines(sh1, **rkw)
+            g2 = f2.readlines(sh2, **rkw)
+            dd = Differ(g1, g2, **values_at(kw, ["skipequal","header","key","in_memory","isjunk"]))
+            
             w.write(dd.detail(title=title + " " + tar))
             changed[tar].update(dd.result)
-            if dd.is_same():
+            if dd.is_same() and sh1 == sh2:
                 changed[tar]["log"] = "[!{}!] {} ({})".format(tag.upper(), tar, mklog(f1))
             else:
-                changed[tar]["log"] = "[!{}!] {} ({} ---> {})".format("REPLACE", tar, mklog(f1), mklog(f2))
-
-        else:        
-            if tag == "delete":  ff, gg = f1, g1
-            if tag == "insert":  ff, gg = f2, g2
+                changed[tar]["log"] = "[!{}!] {} ({} ---> {})".format("REPLACE", tar, mklog(f1, sh1), mklog(f2, sh2))
+        else:
+            if sh1 and not sh2: # mean deleted Sheet or Table
+                ff, gg = f1, f1.readlines(sh1, **rkw)
+            if not sh1 and sh2: # mean added Sheet or Table
+                ff, gg = f2, f2.readlines(sh2, **rkw)
 
             for i, line in enumerate(gg):
                 w.write(sepjoin(tag, tar,i+1,"-",line))
 
-            changed[tar].update(dict(tag=i))
-            changed[tar]["log"] = "[!{}!] {} ({})".format(tag.upper(), tar, mklog(ff))
+            changed[tar].update({tag:i})
+            changed[tar]["log"] = "[!{}!] {} ({})".format(tag.upper(), tar, mklog(ff, sh1 or sh2))
 
+        w.write(LINESEP+LINESEP)
         
     for tar, val in changed.items():
         w.write(SUMARY.format(**val))
@@ -177,10 +190,17 @@ def test():
 
 if __name__ == "__main__":
 #    test()
-#    sys.argv.extend("-sf C:/temp/hoge.csv C:/temp/hoge_after.csv".split(" "))
+#    sys.argv.extend("-sH C:/temp/hoge_before.csv C:/temp/hoge_after.csv".split(" "))
 #    sys.argv.extend("-sf C:/temp/diff1.xlsx C:/temp/diff2.xlsx".split(" "))
 #    sys.argv.extend("-s C:/temp/t/old.xlsx C:/temp/t/new.xlsx".split(" "))
 #    sys.argv.extend("C:/temp/diff1.xlsx C:/temp/diff2.xlsx".split(" "))
 #    sys.argv.extend("C:/temp/sample.accdb C:/temp/diff2.accdb".split(" "))
+#    sys.argv.extend("C:/work/old.xlsx C:/work/new.xlsx".split(" "))
 #    sys.argv.append("-h")
     main()
+#    from io import StringIO
+#    sio = StringIO()
+#    
+#    a,b = "C:/work/old.xlsx C:/work/new.xlsx".split(" ")
+#    exceldiff(a,b, logfilepath=sio)
+    

@@ -2,7 +2,7 @@ option echo off
 option batch abort
 option transfer binary
 option confirm off
-option exclude "*/opt/python; mingw32/; mingw64/; old;"
+option exclude "old"
 option exclude "*.bak; Thumb.db; *.msi; My Pictures; My Music; My Videos;"
 
 open aws
