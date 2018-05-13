@@ -243,8 +243,8 @@ def pandas_profile(df, top=10):
         xdf["レコード数"]           = n_rec
         
         ds = df[col].str.encode(enc).str.len().describe()
-        xdf["最大バイト長"]         = int(ds["max"])
-        xdf["最小バイト長"]         = int(ds["min"])
+        xdf["最大バイト長"]         = int(ds.fillna(0)["max"])
+        xdf["最小バイト長"]         = int(ds.fillna(0)["min"])
 
         n_null = df[col].isin(NULL_LIST).sum()
         xdf["NULL数"]               = n_null

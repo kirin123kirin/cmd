@@ -9,6 +9,8 @@ from glob import iglob
 import pandas as pd
 import numpy as np
 from subprocess import check_call
+import platform
+from itertools import chain
 
 inpdir = os.getenv("PYTHONPATH")
 inproot,pythondirs = os.path.splitdrive(inpdir)
@@ -21,7 +23,7 @@ libdir = pathjoin(outdir, "Lib")
 archivedir=r"\\FREENAS\data1\Downloads"
 
 def lsdir(path):
-    dirinclude = ["\\Tools\\", "\\Scripts\\"]
+    dirinclude = ["\\Tools\\", "\\Scripts\\", "\\distutils\\", "\\setuptools\\"]
     extexclude = ['.c', '.cpp', '.cs', '.csc', '.csh', '.h', '.java', '.lock', '.py', '.sample', '.pyx', 'Thumb.db', '.chm', "desktop.ini", ".shp"]
     direxclude = [".git", ".svn", "\\demos\\","\\demo\\", "\\Demos\\", ".dist-info", ".egg-info", "\\tests\\", "\\example"]
     for pth in iglob(path):
@@ -82,18 +84,18 @@ def minify(inputpath, outputpath=None):
         return shutil.copy(inputpath, outputpath)
 
 UPX = which("upx.exe") + " --best "
-notupx = re.compile(r"(\\libgcc.+\.dll|\\qwindows\.dll|\\platforms\\.*\.dll|PyQt5\\.*\.dll|tk.*.dll|\\pythonwin\\|\\win32\\|\\pywin32_system32\\|\\gui(?:-[36][24])?\.exe)")
+notupx = re.compile(r"(\\wininst.+.exe|\\libgcc.+\.dll|\\qwindows\.dll|\\platforms\\.*\.dll|PyQt5\\.*\.dll|tk.*.dll|\\pythonwin\\|\\win32\\|\\pywin32_system32\\|\\gui(?:-[36][24])?\.exe)")
 def upx(inputpath, outputpath=None):
     ext = os.path.splitext(inputpath)[-1].lower()
     if ext in [".exe", ".dll", ".pyd"] and not notupx.search(inputpath):
         cmd = UPX + inputpath
-        if outputpath is None:
+        if outputpath is not None:
             cmd += " -o " + outputpath
         try:
             return check_call(cmd, shell=True)
         except:
             pass
-    if outputpath and inputpath != outputpath:
+    if outputpath is not None:
         return shutil.copy(inputpath, outputpath)
 
 def getdst(src):
@@ -102,7 +104,7 @@ def getdst(src):
         dst = dst.replace(".cpython-36.pyc","") + ".pyc"
         dst = dst.replace(".pyc.pyc", ".pyc")
     dst = dst.replace("\__pycache__","")
-    dst = dst.replace(r"\site-packages","")
+#    dst = dst.replace(r"\site-packages","")
     dst = dst.replace(".min.",".")
     return dst.replace(r"\Lib\pywin32_system32","")
 
@@ -149,8 +151,8 @@ def buildpython(df, outzipname):
         mkdirs(dirname(row.dst))
         if row.ext in [".css", ".htm", ".html", ".js", ".json", ".map"] and ".min." not in row.src:
             minify(row.src, row.dst)
-#        elif row.ext in [".exe", ".dll", ".pyd"]:
-#            upx(row.src, row.dst)
+        elif row.ext in [".exe", ".dll", ".pyd"]:
+            upx(row.src, row.dst)
         else:
             shutil.copy(row.src, row.dst)
     
@@ -160,7 +162,7 @@ def buildpython(df, outzipname):
 
     with open(pypth, mode) as pth:
         if mode == "w":
-            pth.write(".\npython36.zip\nLib\nDLLs\nimport site\nsite.main()\n\n")
+            pth.write(".\npython36.zip\npython36.zip\\site-packages\nLib\nLib\\site-packages\nDLLs\nimport site\nsite.main()\n\n")
         for zi in df.dst[df.ext == ".pth"]:
             with open(zi) as f:
                 for line in f:
@@ -191,6 +193,15 @@ def buildother(inproot=inproot, outroot=outroot):
         mkdirs(dirname(dst))
         shutil.copy(src, dst)
 
+def dotnetdllcopy(outdir=outdir):
+    if platform.architecture()[0] == "64bit":
+        r = iglob(r"C:\Windows\SysWOW64\vc*140.dll")
+    else:
+        r = iglob(r"C:\Windows\System32\vc*140.dll")
+    api = r"C:\Program Files\dotnet\shared\Microsoft.NETCore.App"
+    for x in chain(iglob(pathjoin(api,os.listdir(api)[-1],"api-ms-win*")),[pathjoin(api,os.listdir(api)[-1],"ucrtbase.dll")], r):
+        shutil.copy(x, pathjoin(outdir,"DLLs"))
+
 
 def main(archivedir=archivedir):
     shutil.rmtree(outroot, True)    
@@ -202,10 +213,10 @@ def main(archivedir=archivedir):
     
     buildpython(df[df.nano == True], pathjoin(archivedir, "python_nano64.zip"))
     shutil.make_archive(pathjoin(archivedir,"PortableApp16_nano"), "zip", outroot)
+    dotnetdllcopy(outdir)
     
-    buildpython(df[df.nano == False], pathjoin(archivedir, "python_min64.zip"))
-    shutil.make_archive(pathjoin(archivedir,"PortableApp16_min"), "zip", outroot)
+#    buildpython(df[df.nano == False], pathjoin(archivedir, "python_min64.zip"))
+#    shutil.make_archive(pathjoin(archivedir,"PortableApp16_min"), "zip", outroot)
 
 if __name__ == "__main__":
     main()
-
