@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import re
 import sys
@@ -37,14 +38,14 @@ def repair_exe(infile):
         print("Not Found `{}`".format(infile), file=sys.stderr)
         return
     tmp = infile + ".tmp"
-    pypath = getpypath().encode("utf-8")
-    if pypath is None:
+    pypath = repr(getpypath()).strip("''").encode("ascii")
+    if not pypath:
         print("Not Found environment PYTHONPATH.", file=sys.stderr)
         return
     
     try:
         with open(infile, "rb") as f, open(tmp, "wb") as w:
-            w.write(re.sub(b"#![^\r\n]+(pythonw?(?:.exe)?\r?\n)", b"#!" + pypath + b"\\\\\\1", f.read()))
+            w.write(re.sub(br"(\n?#!)[^\r\n]+([\\/]pythonw?(?:\.exe)?\r?\n)", br"\1" + pypath + br"\2", f.read()))
     except:
         print("Rollback.... " + infile, file=sys.stderr)
         os.remove(tmp)

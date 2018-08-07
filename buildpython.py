@@ -1,10 +1,10 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from os.path import dirname, basename, join as pathjoin, abspath, sep, splitext, split as pathsplit, exists as pathexists
 import shutil
 import os
 import re
 import pathlib
-from zipfile import ZipFile, ZIP_DEFLATED
 from glob import iglob
 import pandas as pd
 import numpy as np
@@ -21,6 +21,19 @@ outdir = outroot + pythondirs
 libdir = pathjoin(outdir, "Lib")
 
 archivedir=r"\\FREENAS\data1\Downloads"
+
+def jppatch():
+    #zipfile.py : cp437 -> cp932
+    zsrc = pathjoin(inpdir, "Lib", "zipfile.py")
+    with open(zsrc, "rb") as r:
+        txt = r.read()
+    if b"cp437" in txt:
+        shutil.copy(zsrc, zsrc+".org")
+        with open(zsrc, "wb") as w:
+            w.write(txt.replace(b"cp437", b"cp932"))
+jppatch()
+
+from zipfile import ZipFile, ZIP_DEFLATED
 
 def lsdir(path):
     dirinclude = ["\\Tools\\", "\\Scripts\\", "\\distutils\\", "\\setuptools\\"]
@@ -84,7 +97,7 @@ def minify(inputpath, outputpath=None):
         return shutil.copy(inputpath, outputpath)
 
 UPX = which("upx.exe") + " --best "
-notupx = re.compile(r"(\\wininst.+.exe|\\libgcc.+\.dll|\\qwindows\.dll|\\platforms\\.*\.dll|PyQt5\\.*\.dll|tk.*.dll|\\pythonwin\\|\\win32\\|\\pywin32_system32\\|\\gui(?:-[36][24])?\.exe)")
+notupx = re.compile(r"(\\vcamp.+dll|\\wininst.+.exe|\\libgcc.+\.dll|\\qwindows\.dll|\\platforms\\.*\.dll|PyQt5\\.*\.dll|tk.*.dll|\\PyInstaller\\|\\pythonwin\\|\\win32\\|\\pywin32_system32\\|\\gui(?:-[36][24])?\.exe)")
 def upx(inputpath, outputpath=None):
     ext = os.path.splitext(inputpath)[-1].lower()
     if ext in [".exe", ".dll", ".pyd"] and not notupx.search(inputpath):
@@ -137,7 +150,8 @@ def maketable(inpdir=inpdir, outdir=outdir):
     df.loc[df.zipok, "zipdir"] = df.dst.apply(lambda x: sep.join(dirname(x).split(sep)[:n_out+2]) if dirname(x) != libdir else np.nan)
     df["python36zip"] = df.zipok
     
-    nanoexclude = ["\\jupyter", "\\pyqt", "\\spyder", "\\notebook\\", "\\qtawesome\\", "\\qtconsole\\", "\\qtpy\\", "\\nuitka"]
+#    nanoexclude = ["\\jupyter", "\\pyqt", "\\spyder", "\\notebook\\", "\\qtawesome\\", "\\qtconsole\\", "\\qtpy\\", "\\nuitka"]
+    nanoexclude = ["\\pyqt", "\\spyder", "\\qtawesome\\", "\\nuitka"]
     df["nano"] = ~df.dst.apply(lambda x: any(ne in x.lower() for ne in nanoexclude))
     return df
 
@@ -212,11 +226,11 @@ def main(archivedir=archivedir):
     df = maketable()
     
     buildpython(df[df.nano == True], pathjoin(archivedir, "python_nano64.zip"))
-    shutil.make_archive(pathjoin(archivedir,"PortableApp16_nano"), "zip", outroot)
-    dotnetdllcopy(outdir)
+#    dotnetdllcopy(outdir)
+    shutil.make_archive(pathjoin(archivedir,"PortableApp17_nano"), "zip", outroot)
     
-#    buildpython(df[df.nano == False], pathjoin(archivedir, "python_min64.zip"))
-#    shutil.make_archive(pathjoin(archivedir,"PortableApp16_min"), "zip", outroot)
+    buildpython(df[df.nano == False], pathjoin(archivedir, "python_min64.zip"))
+    shutil.make_archive(pathjoin(archivedir,"PortableApp17_min"), "zip", outroot)
 
 if __name__ == "__main__":
     main()
