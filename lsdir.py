@@ -11,83 +11,25 @@ from glob import glob
 import zipfile, gzip, bz2, lzma, tarfile
 import fnmatch
 
-dfm = "%Y/%m/%d %H:%M"
-def timestamp2date(x):
-    return dt.fromtimestamp(x).strftime(dfm)
+from util.core import (lsdir, 
+dirstree,
+filestree,
+getsize,
+timestamp2date,
+path_norm,
+in_glob,
+getinfo,
+istar,
+iszip,
+isarc,
+iszlib,
+iscompress,
+compmap,
+filemap,
+HEADER
+)
 
-def lsdir(f:str, recursive:bool=True):
-    p = Path(f)
-    if recursive and p.is_dir():
-        for root, dirs, files in os.walk(p):
-            yield Path(root)
-            for file in files:
-                yield Path(os.path.join(root, file))
-    elif p.is_file() or p.is_dir():
-        yield p
-    else:
-        for x in p.glob("*"):
-            yield x
 
-HEADER = "fullpath,parent,basename,extention,owner,group,permision,cdate,mdate,filesize".split(",") + ["DIR"+str(i) for i in range(1,11)]
-def getinfo(x):
-    st = x.stat()
-    pdir = x.parent
-    return [
-            str(x),                       # fullpath
-            str(pdir),                    # parent dir
-            x.name,                       # basename
-            x.suffix.lower(),             # extention
-            isposix and x.owner() or "-", # owner
-            isposix and x.group() or "-", # group
-            oct(st.st_mode)[-3:],         # permision
-            timestamp2date(st.st_ctime),  # create date
-            timestamp2date(st.st_mtime),  # modified date
-            st.st_size,                   # file size
-            "|",
-            ] + list(pdir.parts)          # directories hieralchy
-
-isposix = os.name == "posix"
-def filestree(f:str, writer, recursive:bool=True, dotfile=False, header=True):
-    if header:
-        writer.writerow(HEADER)
-    for x in lsdir(f, recursive):
-        if dotfile is False and (x.name.startswith(".") or os.path.sep + "." in str(x)):
-            continue
-        if x.is_file():
-            writer.writerow(getinfo(x))
-
-def dirstree(f:str, writer, recursive:bool=True, dotfile=False, header=True):
-    if header:
-        writer.writerow(HEADER)
-    for x in lsdir(f, recursive):
-        if x.is_dir():
-            if dotfile is False and (x.name.startswith(".") or os.path.sep + "." in str(x)):
-                continue
-            writer.writerow(getinfo(x))
-
-def getsize(fp):
-    p = fp.tell()
-    fp.seek(0, os.SEEK_END)
-    size = fp.tell()
-    fp.seek(p)
-    return size
-
-re_tar = re.compile(r"(\.tar|\.tgz|\.tz2)", re.I)
-re_zip = re.compile(r"(\.zip)", re.I)
-re_arc = re.compile(r"(\.tar|\.tgz|\.tz2|\.zip)", re.I)
-re_zlib = re.compile(r"(\.gz|\.gzip|\.bz2|\.xz|\.lzma)", re.I)
-re_zsplit=re.compile(r"(.+(?:{}))[/\\]?(.*)".format(
-                                    r"|".join(r.pattern.strip("()") for r in [re_zlib, re_arc])
-                                    ), re.I)
-
-istar = lambda x: re_tar.search(x)
-iszip = lambda x: re_zip.search(x)
-isarc = lambda x: re_arc.search(x)
-iszlib = lambda x: re_zlib.search(x)
-iscompress = lambda x: re_zsplit.search(x)
-
-compmap = {".gz": "gzip", ".bz2": "bz2", ".xz": "xz", ".lzma": "xz"}
-filemap = {".gz": gzip.GzipFile, ".bz2": bz2.BZ2File, ".xz": lzma.LZMAFile, ".lzma": lzma.LZMAFile}
 def zlibarg(f):
     sfx = Path(f).suffix.lower()
     cls = None
@@ -101,13 +43,6 @@ def zlibarg(f):
         fn = Path(os.path.join(f, os.path.basename(f).strip(sfx)))
         yield [str(fn), fn.parent, fn.name, sfx, "-", "-", "-", "-", z.mtime and timestamp2date(z.mtime) or "-", getsize(z)]
 
-def in_glob(srclst, wc):
-    if not wc:
-        return srclst
-    ret = []
-    for w in wc:
-        ret.extend(fnmatch.filter(srclst, w))
-    return ret
 
 def ziparg(f, target=[]):
     with zipfile.ZipFile(f) as z:
@@ -118,7 +53,7 @@ def ziparg(f, target=[]):
             
             if info.filename in target:
                 fn = Path(os.path.join(f, info.filename))
-                t = dt(*info.date_time).strftime(dfm)
+                t = dt(*info.date_time).strftime("%Y/%m/%d %H:%M")
                 yield [str(fn), fn.parent, fn.name, fn.suffix.lower(),"-", "-", "-", "-" , t, info.file_size]
 
 def tararg(f, target=[]):
@@ -130,14 +65,6 @@ def tararg(f, target=[]):
             if info.name in target:
                 fn = Path(os.path.join(f, info.name))
                 yield [str(fn), fn.parent, fn.name, fn.suffix.lower(), info.uname, info.gname, oct(info.mode)[-3:], "-", timestamp2date(info.mtime), info.size]
-
-def path_norm(f):
-    rm = re_zsplit.search(f)
-    if rm:
-        a, b = rm.groups()
-        return a, b and [b] or []
-    else:
-        return f, []
 
 def lscompress(f:str, writer, recursive:bool=True, dotfile=False, header=True):
     if header:
