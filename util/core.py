@@ -115,7 +115,7 @@ except ModuleNotFoundError:
 
 class UnsupportCompressError(RuntimeError):
     pass
-    
+
 class NonCompressedError(ValueError):
     pass
 
@@ -145,10 +145,10 @@ def geturi(s):
         return "file://" + s.replace("\\", "/")
     else:
         p = pathlib.Path(s)
-        
+
         if not p.is_absolute():
             p = p.resolve()
-        
+
         return p.as_uri().replace("%5C", "/")
 
 def binopen(f, mode="rb", *args, **kw):
@@ -197,9 +197,9 @@ def opener(f, mode="r", *args, **kw):
                 r = StringIO(f.getvalue().decode(e))
                 f.seek(p)
                 return r
-        
+
         m = f.mode
-        
+
         if "b" not in m:
             return f
         else:
@@ -213,8 +213,7 @@ def opener(f, mode="r", *args, **kw):
             r.seek(p)
             return r
     elif isinstance(f, (Path, str)):
-        m = kw.get("mode") or args and args[0] or "r"
-        return codecs.open(f, mode=m.replace("b", ""), *args, **kw)
+        return codecs.open(f, mode=mode.replace("b", ""), *args, **kw)
     else:
         raise ValueError("Unknown Object. filename or filepointer buffer")
 
@@ -268,7 +267,7 @@ def timestamp2date(x, dfm = "%Y/%m/%d %H:%M"):
     return dt.fromtimestamp(x).strftime(dfm)
 
 
-def which(executable):    
+def which(executable):
     env = os.environ['PATH'].split(os.pathsep)
     exc = [".exe", ".bat", ".cmd", ".wsh", ".vbs"]
     for path in env:
@@ -343,7 +342,7 @@ def compute_object_size(o, handlers={}):
                    }
     all_handlers.update(handlers)     # user handlers take precedence
     seen = set()                      # track which object id's have already been seen
-    default_size = sys.getsizeof(0)       # estimate sizeof object without __sizeof__
+    default_size = sys.getsizeof(0)   # estimate sizeof object without __sizeof__
 
     def sizeof(o):
         if id(o) in seen:       # do not double count the same object
@@ -484,7 +483,7 @@ def iterrows(o, start=1):
     """
     Return: 2d generator -> tuple(rownumber, row)
     """
-    
+
     if isdataframe(o):
         if isinstance(start, int):
             rows = (list(x[1:]) for x in o.fillna("").itertuples())
@@ -526,14 +525,14 @@ def listlike(iterator):
             return self._get_value(k)
         def _get_value(self, k):
             cache_len = len(self._cache)
-            
+
             if k < cache_len:
                 return self._cache[k]
 
             self._root, root_copy = tee(self._root)
             ret = None
 
-            for i in range(k - cache_len + 1):
+            for _ in range(k - cache_len + 1):
                 ret = next(root_copy)
                 self._cache.append(ret)
 
@@ -549,7 +548,7 @@ def listlike(iterator):
             return self._length
         def cacheclear(self):
             self._cache = []
-    
+
     return Slice(iterator)
 
 def kwtolist(key, start=1):
@@ -566,14 +565,11 @@ def kwtolist(key, start=1):
             ret.extend([i + (start * -1) for i in range(int(s),int(e)+1)])
         else:
             ret.append(int(x) + (start * -1))
-    
+
     return ret
 
-""" Path Useful Wrapper
-"""
-
 PROP_HEADER = ["fullpath", "parent", "basename", "extention",
-          "owner", "group", "permision", 
+          "owner", "group", "permision",
           "cdate", "mdate", "filesize"] + ["DIR"+str(i) for i in range(1,11)]
 
 dirs = [None] * 10
@@ -629,27 +625,26 @@ class Path(type(pathlib.Path())):
             cls = pathlib.WindowsPath if os.name == 'nt' else pathlib.PosixPath
         self = cls._from_parts(args, init=False)
         if not self._flavour.is_supported:
-            raise NotImplementedError("cannot instantiate %r on your system"
-                                      % (cls.__name__,))
+            raise NotImplementedError("cannot instantiate {} on your system".forrmat(cls.__name__,))
         self._init()
         return self
 
-    
+
     def _init(self, *args, **kw):
         super()._init(*args, **kw)
         self._encoding = None
         self._ext = None
         self._dialect = None
-        
+
         self.org_filename = self.__str__()
         self._str, self.wildcard = path_norm(self.org_filename)
         self._str = back_to_path(self._str)
-   
-    
+
+
     def getinfo(self, sniff=False):
         st = self.stat()
         pdir = self.parent
-        
+
         ret = fifo(
                 self,                             # fullpath
                 pdir,                             # parent dir
@@ -687,13 +682,13 @@ class Path(type(pathlib.Path())):
 
     def lsdir(self, recursive:bool=True):
         subfunc = "rglob" if recursive else "glob"
-        
+
         for f in glob(self.__str__()):
             yield Path(f)
-            
+
             for r in Path(f).__getattribute__(subfunc)("*"):
                 yield r
-    
+
     @property
     def encoding(self):
         if self._encoding is None:
@@ -705,7 +700,7 @@ class Path(type(pathlib.Path())):
         if self._ext is None:
             self._ext = self.gettype()
         return self._ext
-    
+
     @property
     def dialect(self):
         if self._dialect is None:
@@ -741,7 +736,7 @@ class Path(type(pathlib.Path())):
                 word = word.decode(self.encoding)
             elif isinstance(word, (int, float)):
                 word = str(word)
-    
+
             pos = f.tell()
             if pos != 0:
                 f.seek(0)
@@ -752,19 +747,19 @@ class Path(type(pathlib.Path())):
             while buf:
                 words += buf.count(word)
                 buf = read_f(buf_size)
-            
+
             f.seek(pos)
             return words
-   
+
     def linecount(self, buf_size = 1024 ** 2):
         return self.wordcount(word=b"\n", buf_size = buf_size)
 
     def geturi(self):
         return geturi(str(self))
-    
+
     def getsize(self):
         return self.stat().st_size
-    
+
     def gettype(self):
         mime, ex = guess_type(self.name)
         et = self.suffix.lower()
@@ -813,7 +808,7 @@ class Path(type(pathlib.Path())):
              errors=None, newline=None):
         if self._closed:
             self._raise_closed()
-        
+
         if self.is_compress():
             fo = self.org_filename if self.wildcard else self._str
             return zopen(fo, mode)
@@ -823,6 +818,12 @@ class Path(type(pathlib.Path())):
 
 class _baseArchive(object):
     __slots__ = (
+        "parent",
+        "info",
+        "_opened",
+        "_parentname",
+        "_name",
+        "_parentpath",
         "_dialect",
         "_fullpath",
         "_parent",
@@ -841,7 +842,7 @@ class _baseArchive(object):
         "_delimiter",
         "_quotechar"
     )
-    
+
     def __init__(self, archived_object, info=None):
         self.parent = archived_object
         self.info = info
@@ -865,31 +866,31 @@ class _baseArchive(object):
         self._doublequote = None
         self._delimiter = None
         self._quotechar = None
-    
+
     @property
     def opened(self):
         if self._opened is None:
             self._opened = self.parent.open(self.info)
         return self._opened
-    
+
     @property
     def parentname(self):
         if self._parentname is None:
             self._parentname = Path(self.parent.filename)
         return self._parentname
-    
+
     @property
     def name(self):
         if self._name is None:
             self._name = self.info.filename
         return self._name
-    
+
     @property
     def ext(self):
         return self.parentname.suffix.lower()
 
     @property
-    def dialect(self): 
+    def dialect(self):
         if self._dialect is None:
             tell = self.opened.tell()
             if tell != 0:
@@ -897,59 +898,59 @@ class _baseArchive(object):
             self._dialect = getdialect(self.opened.read(91260))
             self.opened.seek(tell)
         return self._dialect
-   
+
     @property
     def fullpath(self):
         if self._fullpath is None:
             self._fullpath = self.parentname.joinpath(self.name)
         return self._fullpath
-    
+
     @property
     def parentpath(self):
         if self._parentpath is None:
             self._parentpath = self.fullpath.parent
         return self._parentpath
-    
+
     @property
     def basename(self):
         if self._basename is None:
             self._basename = self.fullpath.name
         return self._basename
-    
+
     @property
     def extention(self):
         if self._extention is None:
             self._extention = self.fullpath.suffix.lower()
         return self._extention
-    
+
     @property
     def owner(self):
         pass
-    
+
     @property
     def group(self):
         pass
-    
+
     @property
     def permision(self):
         pass
-    
+
     @property
     def cdate(self):
         pass
-    
+
     @property
     def mdate(self):
         if self._mdate is None:
             self._mdate = dt(*self.info.date_time)
         return self._mdate
-    
+
     @property
     def filesize(self):
         if self._filesize is None:
             self._filesize = self.info.file_size
         return self._filesize
-    
+
     @property
     def encoding(self):
         tell = self.opened.tell()
@@ -958,28 +959,28 @@ class _baseArchive(object):
         self._encoding = getencoding(self.opened.read(91260))
         self.opened.seek(tell)
         return self._encoding
-    
+
     @property
     def lineterminator(self):
         return self.dialect.lineterminator
-    
+
     @property
     def quoting(self):
         return self.dialect.quoting
-    
+
     @property
     def doublequote(self):
         return self.dialect.doublequote
-    
+
     @property
     def delimiter(self):
         return self.dialect.delimiter
     sep = delimiter
-    
+
     @property
     def quotechar(self):
         return self.dialect.quotechar
-    
+
     def getinfo(self, sniff=False):
         ret = fifo(
                 self.fullpath,
@@ -1005,7 +1006,7 @@ class _baseArchive(object):
                 self.opened.seek(pos)
 
         return ret
-    
+
     def wordcount(self, word, buf_size = 1024 ** 2):
         read_f = self.read_text # loop optimization
         if isinstance(word, bytes):
@@ -1019,33 +1020,33 @@ class _baseArchive(object):
         buf = read_f(buf_size)
 
         words = 0
-        
+
         while buf:
             words += buf.count(word)
             buf = read_f(buf_size)
 
         self.opened.seek(pos)
         return words
-    
+
     def linecount(self, buf_size = 1024 ** 2):
         return self.wordcount(word=b"\n", buf_size = buf_size)
-    
+
     def geturi(self):
         return geturi(self.fullpath)
-    
+
     def getsize(self):
         return self.filesize
-    
+
     def gettype(self):
         return self.extention[1:]
 
     def read_bytes(self, n=-1):
         return self.opened.read(n)
-    
+
     def read_text(self, size=-1, encoding=None):
         e = encoding or self.encoding
         return self.opened.read(size).decode(e)
-    
+
     def extract(self, path=None, *args, **kw):
         if path is None:
             path = self.parentname.parent
@@ -1053,7 +1054,7 @@ class _baseArchive(object):
 
     def __dir__(self):
         return sorted(set(dir(self.opened) + dir(self.info) + dir(self.parent)))
-    
+
     def __getattr__(self, val):
         if hasattr(self.opened, val):
             return self.opened.__getattribute__(val)
@@ -1065,7 +1066,7 @@ class _baseArchive(object):
 
     def __iter__(self):
         return self.opened.__iter__()
-    
+
     def __repr__(self):
         return "<class ArchiveFile opened={}, info={}, parent={}>".format(
                          self.opened, self.info, self.parent)
@@ -1093,12 +1094,12 @@ class TarArchiveWraper(_baseArchive):
         if self._parentname is None:
             self._parentname = Path(self.parent.name)
         return self._parentname
-    
+
     @property
     def name(self):
         if self._name is None:
             self._name = self.info.name
-        return self._name 
+        return self._name
 
     @property
     def owner(self):
@@ -1158,12 +1159,12 @@ class RarArchiveWraper(_baseArchive):
         if self._parentname is None:
             self._parentname = Path(self.parent._rarfile)
         return self._parentname
-    
+
     @property
     def name(self):
         if self._name is None:
             self._name = self.info.filename
-        return self._name 
+        return self._name
 
 
 class ZLibArchiveWraper(_baseArchive):
@@ -1172,13 +1173,13 @@ class ZLibArchiveWraper(_baseArchive):
         if self._opened is None:
             self._opened = self.parent
         return self._opened
-        
+
     @property
     def parentname(self):
         if self._parentname is None:
             self._parentname = Path(self.info)
         return self._parentname
-    
+
     @property
     def name(self):
         if self._name is None:
@@ -1197,7 +1198,7 @@ class ZLibArchiveWraper(_baseArchive):
         if self._filesize is None:
             self._filesize = getsize(self.opened)
         return self._filesize
-    
+
     def extract(self, path=None, *args, **kw):
         if path is None:
             path = self.parentname.parent.joinpath(self.name)
@@ -1215,15 +1216,15 @@ if int("{}{}{}".format(*sys.version_info[:3])) <= 366:
     class ZipExtFile(zipfile.ZipExtFile):
         def __init__(self, fileobj, mode, zipinfo, decrypter=None,
                      close_fileobj=False):
-            
+
             if not hasattr(fileobj, "seekable"):
                 fileobj = fileobj._file
-            
+
             super().__init__(fileobj, mode, zipinfo, decrypter=None,
                      close_fileobj=False)
-            
+
             self._seekable = False
-            
+
             try:
                 if fileobj.seekable():
                     self._orig_compress_start = fileobj.tell()
@@ -1233,10 +1234,10 @@ if int("{}{}{}".format(*sys.version_info[:3])) <= 366:
                     self._seekable = True
             except AttributeError:
                 pass
-        
+
         def seekable(self):
             return self._seekable
-    
+
         def seek(self, offset, whence=0):
             if not self._seekable:
                 raise io.UnsupportedOperation("underlying stream is not seekable")
@@ -1250,16 +1251,16 @@ if int("{}{}{}".format(*sys.version_info[:3])) <= 366:
             else:
                 raise ValueError("whence must be os.SEEK_SET (0), "
                                  "os.SEEK_CUR (1), or os.SEEK_END (2)")
-    
+
             if new_pos > self._orig_file_size:
                 new_pos = self._orig_file_size
-    
+
             if new_pos < 0:
                 new_pos = 0
-    
+
             read_offset = new_pos - curr_pos
             buff_offset = read_offset + self._offset
-    
+
             if buff_offset >= 0 and buff_offset < len(self._readbuffer):
                 # Just move the _offset index if the new position is in the _readbuffer
                 self._offset = buff_offset
@@ -1275,14 +1276,14 @@ if int("{}{}{}".format(*sys.version_info[:3])) <= 366:
                 self._decompressor = zipfile._get_decompressor(self._compress_type)
                 self._eof = False
                 read_offset = new_pos
-    
+
             while read_offset > 0:
                 read_len = min(self.MAX_SEEK_READ, read_offset)
                 self.read(read_len)
                 read_offset -= read_len
-    
+
             return self.tell()
-    
+
         def tell(self):
             if not self._seekable:
                 raise io.UnsupportedOperation("underlying stream is not seekable")
@@ -1292,10 +1293,10 @@ else:
     class ZipExtFile(zipfile.ZipExtFile):
         def __init__(self, fileobj, mode, zipinfo, decrypter=None,
                      close_fileobj=False):
-            
+
             if not hasattr(fileobj, "seekable"):
                 fileobj = fileobj._file
-            
+
             super().__init__(fileobj, mode, zipinfo, decrypter=None,
                      close_fileobj=False)
 
@@ -1334,11 +1335,11 @@ class ZipFile(zipfile.ZipFile, _baseFile):
         self.wildcard = None
         if isinstance(file, (str, Path)):
             file, self.wildcard = path_norm(str(file))
-        
+
         super().__init__(file, mode=mode,
                 compression=compression,
                 allowZip64=allowZip64)
-                
+
     def __iter__(self):
         for x in self.infolist():
             r = ZipArchiveWraper(self, x)
@@ -1501,7 +1502,7 @@ class ZipFile(zipfile.ZipFile, _baseFile):
 
 class TarFile(tarfile.TarFile, _baseFile):
     def __init__(self, *args, **kw):
-        super().__init__(*args, **kw)    
+        super().__init__(*args, **kw)
         self.infolist = self.getmembers
         self.namelist = self.getnames
 
@@ -1529,17 +1530,17 @@ TarFileOpen = TarFile.open
 
 try:
     import rarfile
-    
+
     rarfile.RarInfo.is_dir = rarfile.RarInfo.isdir
     rarfile.RarInfo.is_file = lambda _self: not _self.isdir()
-    
+
     class RarFile(rarfile.RarFile, _baseFile):
         def __init__(self, file, mode="r", charset=None, info_callback=None,
                      crc_check=True, errors="stop"):
             self.wildcard = None
             if isinstance(file, (str, Path)):
                 file, self.wildcard = path_norm(str(file))
-            
+
             super().__init__(file, mode=mode, charset=charset,
                  info_callback=info_callback, crc_check=crc_check, errors=errors)
 
@@ -1557,17 +1558,17 @@ try:
                     path = Path(self._rarfile).parent
                 else:
                     path = Path(path)
-                
+
                 if hasattr(member, "filename"):
                     path = path.joinpath(member.filename)
                 elif hasattr(member, "name"):
                     path = path.joinpath(member.name)
                 else:
                     path = path.joinpath(member)
-                
+
                 with open(path, "wb") as f:
                     f.write(self.read(member))
-                
+
 except ModuleNotFoundError:
     sys.stderr.write("** No module warning **\nPlease Install command: pip3 install rarfile\n")
     RarFile = ModuleNotFoundError
@@ -1575,11 +1576,11 @@ except ModuleNotFoundError:
 try:
     import lhafile
 
-   
+
     class LhaInfo(lhafile.lhafile.LhaInfo):
         def is_dir(self):
             return self.directory is not None
-        
+
         def is_file(self):
             return self.directory is None
 
@@ -1592,7 +1593,7 @@ try:
             self.wildcard = None
             if isinstance(file, (str, Path)):
                 file, self.wildcard = path_norm(str(file))
-            
+
             super().__init__(file, mode=mode, compression=compression,
                  callback=callback, args=args)
 
@@ -1664,12 +1665,13 @@ class GzipFile(gzip.GzipFile, _baseFile):
         if not isinstance(filename, (str, bytes)):
             fileobj = filename
             filename = None
-        
+
         if isinstance(filename, (str, Path)):
             filename, self.wildcard = path_norm(str(filename))
 
-        return super().__init__(filename=filename, mode=mode,
+        super().__init__(filename=filename, mode=mode,
                     compresslevel=compresslevel, fileobj=fileobj, mtime=mtime)
+
     def __iter__(self):
         yield ZLibArchiveWraper(self, self.name)
 
@@ -1679,12 +1681,12 @@ class LZMAFile(lzma.LZMAFile, _baseFile):
 
         if isinstance(filename, (str, Path)):
             filename, self.wildcard = path_norm(str(filename))
-        
-        super().__init__(filename=filename, mode=mode, 
+
+        super().__init__(filename=filename, mode=mode,
                  format=format, check=check, preset=preset, filters=filters)
-        
+
         self.name = self._fp.name
-        
+
     def __iter__(self):
         yield ZLibArchiveWraper(self, self.name)
 
@@ -1694,9 +1696,9 @@ class BZ2File(bz2.BZ2File, _baseFile):
             filename, self.wildcard = path_norm(str(filename))
 
         super().__init__(filename, mode=mode, buffering=buffering, compresslevel=compresslevel)
-        
+
         self.name = self._fp.name
-        
+
     def __iter__(self):
         yield ZLibArchiveWraper(self, self.name)
 
@@ -1735,14 +1737,14 @@ class _handler_zopen:
         (b"DGCA", ".dgc", ""),
         (b"GCAX", ".gca", ""),
     ]
-    
+
     magic_header = max([265, max(len(x[0]) for x in archived_magic_numbers)])
-    
+
     def __new__(cls, path_or_buffer):
         if isinstance(path_or_buffer, str) and os.path.exists(path_or_buffer):
             if os.path.isdir(path_or_buffer) or os.path.splitext(path_or_buffer)[-1] in [".xlsx", ".docx", ".pptx"]:
                 raise NonCompressedError("`{}` is non Compressed file".format(path_or_buffer))
-    
+
         if isinstance(path_or_buffer, bytes):
             b = BytesIO(path_or_buffer)
         else:
@@ -1751,14 +1753,14 @@ class _handler_zopen:
         pos = b.tell()
         if pos != 0:
             b.seek(0)
-        
+
         dat = b.read(cls.magic_header)
-        
+
         if hasattr(path_or_buffer, "close"):
             b.seek(pos)
         else:
             b.close()
-    
+
         for magic, ext, opn in cls.archived_magic_numbers:
             if dat.startswith(magic):
                 if b".tar\x00" in dat.lower() or b".tgz\x00" in dat.lower():
@@ -1769,10 +1771,10 @@ class _handler_zopen:
                     return opn
             elif ext == ".tar" and dat[257:265].startswith(magic):
                 return opn
-                
+
         raise NonCompressedError("`{}` is non Compressed file".format(str(path_or_buffer)))
 
-def is_compress(path_or_buffer):    
+def is_compress(path_or_buffer):
     try:
         _handler_zopen(path_or_buffer)
         return True
@@ -1782,8 +1784,7 @@ def is_compress(path_or_buffer):
         return True
 
 def zopen(path_or_buffer, *args, **kw):
-    _opener  = _handler_zopen(path_or_buffer)
-    return _opener(path_or_buffer, *args, **kw)
+    return _handler_zopen(path_or_buffer)(path_or_buffer, *args, **kw)
 
 def zopen_recursive(path_or_buffer, *args, **kw):
     for ret in zopen(path_or_buffer, *args, **kw):
@@ -1822,14 +1823,14 @@ def test():
             assert(getencoding(f.read()) == "utf-8")
         with open(tdir+"sample.sqlite3", "rb") as f:
             assert(getencoding(f.read()) is None)
-        
+
 
     def test_getsize():
         with open(tdir+"diff1.csv", "rb") as f:
             dat = f.read()
             f.seek(0)
             assert(getsize(f) == len(dat))
-    
+
     def test_geturi():
         assert(geturi(tdir) == "file://" + (isposix is False and "/" or "") + tdir.replace("\\", "/")[:-1])
         Path(geturi(tdir+"test.zip"))
@@ -1853,7 +1854,7 @@ def test():
                  "file:///usr/share/testdata/test.zip",
                  "http://www/google.com",
                  r"file:\Y:\usr\share\testdata\test.zip"]
-        
+
         assert(list(map(back_to_path, uris)) == [
                 "Y:/usr/share/testdata/test.zip",
                 "Y:/usr/share/testdata/test.zip",
@@ -1879,43 +1880,43 @@ def test():
         assert(list(p.tree_dir()) == [])
         assert(p.is_compress() is False)
         assert(Path(open(p)) == p)
-        
+
         p = Path(tdir)
         assert(p.ext == "")
         assert(len(list(p.lsdir())) > 0)
         assert(p.is_compress() is False)
-        
+
         p = Path(tdir+"test.tar.gz")
         assert(p.is_compress() is True)
         assert(Path(open(p)) == p)
-        
+
         p = Path(tdir+"test.zip/test.csv")
         assert(p.is_compress() == True)
         assert(isinstance(p.open(), ZipFile))
         assert(p.read_bytes())
         assert(isinstance(Path(open(p)), Path))
-        
+
 
     def test_binopen():
         pass
 
     def test_opener():
-       
+
         def tests(func):
             f = tdir + "diff2.csv"
-            
+
             with open(f, "r") as ff:
                 assert(isinstance(func(ff), IOBase))
-            
+
             with open(f, "rb") as ff:
                 assert(isinstance(func(ff), IOBase))
-            
+
             try:
                 w = os.path.join(TMPDIR, "writetest")
-                
+
                 with open(w, "w") as ww:
                     assert(isinstance(func(ww), IOBase))
-                
+
                 with open(w, "wb") as ww:
                     assert(isinstance(func(ww), IOBase))
             except:
@@ -1923,21 +1924,21 @@ def test():
                 raise
             finally:
                 os.remove(w)
-            
+
             with StringIO("aa") as s:
                 assert(isinstance(func(s), IOBase))
-            
+
             with BytesIO(b"aa") as b:
                 assert(isinstance(func(b), IOBase))
-            
+
             try:
                 assert(isinstance(func("/hoge/foo"), IOBase))
             except FileNotFoundError:
                 pass
-    
+
         tests(opener)
         tests(binopen)
-    
+
     def test_flatten():
         assert(flatten([0,1,2]) == [0,1,2])
         assert(flatten([[0,1,2]]) == [0,1,2])
@@ -1973,7 +1974,7 @@ def test():
         r = n(1,2)
         assert(isnamedtuple(r) is True)
         assert(isnamedtuple([1]) is False)
-        
+
     def test_values_at():
         assert(values_at(dict(a=1,b=2,c=3), ["a", "c"]) == {'a': 1, 'c': 3})
         assert(values_at(["a", "b", "c"], ["a", "c"]) == ["a", "c"])
@@ -2030,14 +2031,14 @@ def test():
             log("bar", 3)
             assert(log.getvalue() == "hogefoobar")
         assert(s.closed)
-        
+
     def test_islarge():
         assert(islarge([]) is False)
         global BUF
         BUF = 10
         assert(islarge(_handler_zopen.archived_magic_numbers) is True)
         BUF = 128 * 1024 ** 2
-        
+
 
     def test_in_glob():
         assert(in_glob(["abc.txt", "hoge.csv"], "*.txt") == ["abc.txt"])
@@ -2076,7 +2077,7 @@ def test():
             raise AssertionError
 
     def test_iterhead():
-        a = iter(list("abc"))    
+        a = iter(list("abc"))
         h = iterhead(a)
         assert((h, list(a)) == ("a", ['a', 'b', 'c']))
 
@@ -2102,10 +2103,10 @@ def test():
 
     def test_iterrows():
         from util.dfutil import read_any
-        a = iter(list("abc"))    
+        a = iter(list("abc"))
         h = iterrows(a,None)
         assert(list(h) == ['a', 'b', 'c'])
-    
+
         f = tdir + "diff1.csv"
         a = read_any(f).head(3)
         a.reset_index(inplace=True)
@@ -2170,12 +2171,12 @@ def test():
 
         with LhaFile(tdir+"test.lzh/test.*") as l:
             __test_wrap(l)
-            
+
 
     def test_ZipFile():
         with ZipFile(tdir+"test.zip") as l:
             __test_wrap(l)
-        
+
         with ZipFile(tdir+"test.zip/test.*") as l:
             assert(len(list(l))>0)
             __test_wrap(l)
@@ -2244,7 +2245,7 @@ def test():
         assert(r.wordcount(1) == 2)
         assert(r.wordcount("あ") == 1)
         assert(r.linecount() == 3)
-        assert(r.geturi()) 
+        assert(r.geturi())
         assert(r.getsize())
         assert(r.gettype() == "csv")
         assert(r.read_bytes() == b'n,aa\r\n1,1\r\n2,\x82\xa0\r\n')
@@ -2284,8 +2285,8 @@ def test():
         with LZMAFile(tdir+"test.csv.xz") as l:
             r = ZLibArchiveWraper(l, l.name)
             __test_ArchiveWrapper(r)
-        
-        
+
+
         with BZ2File(tdir+"test.csv.bz2") as l:
             r = ZLibArchiveWraper(l, l.name)
             __test_ArchiveWrapper(r)
@@ -2305,8 +2306,8 @@ def test():
             pass
         else:
             raise AssertionError
-            
-            
+
+
     def test_is_compress():
         assert(is_compress(tdir) is False)
         assert(is_compress(tdir + "test.csv.tar") is True)
@@ -2347,7 +2348,7 @@ def test():
             assert(isinstance(z, LhaFile))
         with zopen(tdir+"test.rar") as z:
             assert(isinstance(z, RarFile))
-        
+
         try:
             with zopen(tdir+"test.csv") as z:
                 assert(isinstance(z, TarFile))
