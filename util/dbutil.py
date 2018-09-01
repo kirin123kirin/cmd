@@ -147,7 +147,7 @@ def test():
         print(list(read_db(f)))
 
 
-    for x, func in list(globals().items()):
+    for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
             func()
 

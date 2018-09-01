@@ -253,63 +253,65 @@ def differ(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
     return chain(header, content)
 
 
-def getrange(key):
-    if not key:
-        return
-    ret = kwtolist(key)
-
-    def columnslice(k):
-        if not k:
-            return
-        try:
-            return tuple(k[x] for x in ret)
-        except IndexError:
-            raise AttributeError(f"Invalid key Index number.\n {ret} Not in {k}")
-
-    return columnslice
 
 def main():
-    import argparse
+    from argparse import ArgumentParser
     import codecs
     import sys
     import csv
     
-    parser = argparse.ArgumentParser(prog="differ", description="2 file diff compare program\n")
-    parser.add_argument('-V','--version', action='version', version='%(prog)s ' + __version__)
-    parser.add_argument('file1', nargs=1, help='diff before file')
-    parser.add_argument('file2', nargs=1, help='diff after file')
+    def getrange(key):
+        if not key:
+            return
+        ret = kwtolist(key)
+        def columnslice(k):
+            if not k:
+                return
+            try:
+                return tuple(k[x] for x in ret)
+            except IndexError:
+                raise AttributeError(f"Invalid key Index number.\n {ret} Not in {k}")
+        return columnslice
     
-    parser.add_argument('-v', '--verbose', action='store_true', default=False,
-                        help='Progress verbose output.')
-    parser.add_argument('-a', '--all', action='store_true', default=False,
-                        help='All Line print(default False)')
-    parser.add_argument('-o', '--outfile', type=str, default=sys.stdout,
-                        help='output filepath (default `stdout`)')
-    parser.add_argument('-e', '--encoding', type=str, default="cp932",
-                        help='output fileencoding (default `cp932`)')
-    parser.add_argument('-s', '--sort', action='store_true', default=False,
-                        help='before diff file Sorted.')
-    parser.add_argument('-H', '--header', action='store_true', default=False,
-                        help='file no header (default `False`) (sorted option)')
-    parser.add_argument('-k', '--key', type=str, default=None,
-                        help='key index of both filename1 and filename2  (ex. 3,2,4-8)')
-    parser.add_argument('-k1', '--key1', type=str, default=None,
-                        help='key index of filename1  (ex. 3,2,4-8)')
-    parser.add_argument('-k2', '--key2', type=str, default=None,
-                        help='key index of filename2  (ex. 3,2,4-8)')
-    parser.add_argument('-u', '--usecols', type=str, default=None,
-                        help='usecolumns of both filename1 and filename2  (ex. 1-8,10)')
-    parser.add_argument('-u1', '--usecols1', type=str, default=None,
-                        help='usecolumns of filename1  (ex. 1-8,10)')
-    parser.add_argument('-u2', '--usecols2', type=str, default=None,
-                        help='usecolumns of filename2  (ex. 1-8,10)')
-    parser.add_argument('-t', '--target', type=str, default=None,
-                        help='target table names or sheetname (ex. Sheet1, Sheet3)')
-    parser.add_argument('-t1', '--target1', type=str, default=None,
-                        help='target table names or sheetname of filename1 (ex. Sheet1, Sheet3)')
-    parser.add_argument('-t2', '--target2', type=str, default=None,
-                        help='target table names or sheetname of filename2 (ex. Sheet1, Sheet3)')
-    args = parser.parse_args()
+    ps = ArgumentParser(prog="differ",
+                        description="2 file diff compare program\n")
+    padd = ps.add_argument
+    
+    padd('-V','--version', action='version', version='%(prog)s ' + __version__)
+    padd('file1', nargs=1, help='diff before file')
+    padd('file2', nargs=1, help='diff after file')
+    
+    padd('-v', '--verbose', action='store_true', default=False,
+         help='Progress verbose output.')
+    padd('-a', '--all', action='store_true', default=False,
+         help='All Line print(default False)')
+    padd('-o', '--outfile', type=str, default=None,
+         help='output filepath (default `stdout`)')
+    padd('-e', '--encoding', type=str, default="cp932",
+         help='output fileencoding (default `cp932`)')
+    padd('-s', '--sort', action='store_true', default=False,
+         help='before diff file Sorted.')
+    padd('-H', '--header', type=int, default=None,
+         help='file no header (default `False`) (sorted option)')
+    padd('-k', '--key', type=str, default=None,
+         help='key index of both filename1 and filename2  (ex. 3,2,4-8)')
+    padd('-k1', '--key1', type=str, default=None,
+         help='key index of filename1  (ex. 3,2,4-8)')
+    padd('-k2', '--key2', type=str, default=None,
+         help='key index of filename2  (ex. 3,2,4-8)')
+    padd('-u', '--usecols', type=str, default=None,
+         help='usecolumns of both filename1 and filename2  (ex. 1-8,10)')
+    padd('-u1', '--usecols1', type=str, default=None,
+         help='usecolumns of filename1  (ex. 1-8,10)')
+    padd('-u2', '--usecols2', type=str, default=None,
+         help='usecolumns of filename2  (ex. 1-8,10)')
+    padd('-t', '--target', type=str, default=None,
+         help='target table names or sheetname (ex. Sheet1, Sheet3)')
+    padd('-t1', '--target1', type=str, default=None,
+         help='target table names or sheetname of filename1 (ex. Sheet1, Sheet3)')
+    padd('-t2', '--target2', type=str, default=None,
+         help='target table names or sheetname of filename2 (ex. Sheet1, Sheet3)')
+    args = ps.parse_args()
 
     usecols1 = kwtolist(args.usecols or args.usecols1)
     usecols2 = kwtolist(args.usecols or args.usecols2)
@@ -337,20 +339,78 @@ def main():
         b = read_any(args.file2[0], target2, header=args.header, usecols2=usecols2)
     else:
         b = read_any(args.file2[0], header=args.header, usecols2=usecols2)
-
-    with codecs.open(args.outfile, mode="w", encoding=args.encoding) as f:
-        writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-        for d in differ(a, b, 
-                keya=getrange(args.key or args.key1),
-                keyb=getrange(args.key or args.key2),
-                sort=args.sort, skipequal=args.all is False):
-            writer.writerow(d)
+    
+    f = codecs.open(args.outfile, mode="w", encoding=args.encoding) if args.outfile else sys.stdout
+    
+    writer = csv.writer(f, quoting=csv.QUOTE_ALL)
+    
+    for d in differ(a, b, 
+                    keya=getrange(args.key or args.key1),
+                    keyb=getrange(args.key or args.key2),
+                    sort=args.sort, skipequal=args.all is False):
+        
+        writer.writerow(d)
 
 """
    TestCase below
 """
 def test():
     from util.core import tdir
+    import sys
+    
+    def test_sanitize():
+        assert(sanitize(None, 1) == "ADD ---> 1")
+        assert(sanitize(1, None) == "1 ---> DEL")
+        assert(sanitize("abc", "acc") == "abc ---> acc")
+        assert(sanitize(list("abc"), list("acc")) == ['a', 'b ---> c', 'c'])
+        assert(sanitize(list("abc"), list("ab")) == ['a', 'b', 'c ---> DEL'])
+        assert(sanitize(list("ab"), list("abc")) == ['a', 'b', 'ADD ---> c'])
+        assert(sanitize([1,2,3], [1,3,3]) == [1, '2 ---> 3', 3])
+        assert(sanitize([1,2,3], [1,2,None]) == [1, 2, '3 ---> DEL'])
+        assert(sanitize([1,None,3], [1,2,3]) == [1, 'ADD ---> 2', 3])
+
+    #TODO
+    def test_iterdiff1D():
+        pass
+
+
+    #TODO
+    def test_iterdiff2D():
+        pass
+
+
+    #TODO
+    def test_compare_build():
+        pass
+
+
+    #TODO
+    def test_helperdiff1D():
+        pass
+
+
+    #TODO
+    def test_helperdiff2D():
+        pass
+    
+    def test_diffauto():
+        from util import read_any
+        f1 = tdir + "diff1.csv"
+        f2 = tdir + "diff2.csv"
+        a = read_any(f1)
+        b = read_any(f2)
+        assert(list(diffauto(a,b)) == [
+            ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'mpg', 'cyl', 'displ', 'hp', 'weight', 'accel', 'yr', 'origin', 'name'],
+            ['replace', 2, 2, 'b ---> 10', '8', '307', '130', '3504', '12', '70', '1', 'chevrolet chevelle malibue'],
+            ['replace', 38, 40, '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'],
+            ['delete', 56, '', '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop'],
+            ['delete', 47, '', '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001'],
+            ['insert', '', 24, '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'],
+            ['insert', '', 49, '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2000'],
+            ['insert', '', 16, '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster']]
+        ) #TODO result sorted
+    
+        assert(list(diffauto(a,b, startidx=0))[1][1:3] == [1,1])
 
     def test_differcsv():
         from util.dfutil import read_any
@@ -363,10 +423,16 @@ def test():
         a = read_any(f1, usecols=kwtolist(usecols1))
         b = read_any(f2, usecols=kwtolist(usecols2))
         
-        for x in differ(a, b):
-            print(x)
+        assert(list(differ(a, b)) == [
+            ['DIFFTAG','LEFTLINE#','RIGHTLINE#','mpg','cyl','displ','hp','weight','accel'],
+            ['replace', 2, 2, 'b ---> 10', '8', '307', '130', '3504', '12'],
+            ['insert', '', 16, '22', '6', '198', '95', '2833', '15.5'],
+            ['insert', '', 24, '26', '4', '121', '113', '2234', '12.5'],
+            ['replace', 38, 40, '14', '9 ---> 8', '351', '153', '4154', '13.5'],
+            ['delete', 56, '', '25', '4', '97.5', '80', '2126', '17']]
+        )
     
-    def test_differxls():
+    def nontest_differxls():
         from util.dfutil import read_any
         f1 = tdir + "diff1.xlsx"
         f2 = tdir + "diff2.xlsx"
@@ -379,34 +445,30 @@ def test():
                 print(sheet, a[sheet].head(2))
             differ(a.keys(),b.keys())
     
-    def test_differlist():
+    def nontest_differlist():
         for x in differ([1,2,3], [1,3,4], skipequal=False):
             print(x)
         for x in differ(list("abc"), list("abd"), skipequal=False):
             print(x)
     
-    def test_differequal():
+    def nontest_differequal():
         from util import read_any
         f = tdir + "diff1.csv"
         df = read_any(f).head(5)
         assert(list(differ(df, df)) == [])
         lst = list(map(list, df.itertuples()))
         print(list(differ(lst, lst, skipequal=False)))
+
     
-    def test_diffauto():
-        from util import read_any
-        f1 = tdir + "diff1.csv"
-        f2 = tdir + "diff2.csv"
-        a = read_any(f1)
-        b = read_any(f2)
-        for x in diffauto(a,b):
-            print(x)
+    def test_main():
+        sys.argv.extend([tdir+"diff1.csv", tdir+"diff2.csv"])
+        main()
     
-        for x, func in list(globals().items()):
-            if x.startswith("test_") and callable(func):
-                func()
+    for x, func in list(locals().items()):
+        if x.startswith("test_") and callable(func):
+            func()
 
 
 if __name__ == "__main__":
     test()
-    main()
+#    main()

@@ -116,38 +116,36 @@ class Profile(object):
 
 
 def main():
-    import argparse
+    from argparse import ArgumentParser
     from glob import glob
     
     usage="""
     Any file Data Profiler
-       Example1: python {0} [-v] [-n 30] [--encoding utf-8] "C:\\hoge\\test.csv"
-       Example2: python {0} *.xlsx
+       Example1: {0} [-v] [-n 30] [--encoding utf-8] "C:\\hoge\\test.csv"
+       Example2: {0} *.xlsx
      
-    """.format(os.path.basename(sys.argv[0]))
+    """.format(os.path.basename(sys.argv[0]).replace(".py", ""))
     
-    parser = argparse.ArgumentParser(usage)
+    ps = ArgumentParser(usage)
+    padd = ps.add_argument
     
-    parser.add_argument("-v", "--verbose",
-                         help="処理中のファイル名を表示する",
-                         action='store_true',
-                         default=False)
-    parser.add_argument("-n", "--numtop",
-                         help="TOPn件のサンプルデータを表示する(デフォルトtop10)",
-                         type=int,
-                         default=10)
-    parser.add_argument("--encoding",
-                         help="input file encoding default auto",
-                         default=None)
-    parser.add_argument("--outputencoding",
-                         help="出力ファイルのエンコーディングを指定する(デフォルトはcp932)\n選択肢cp932 utf-8 eucjp",
-                         default="cp932")
-    parser.add_argument("filename",
-                         metavar="<filename>",
-                         nargs="+",
-                         default=[],
-                         help="target any files(.txt, .csv, .tsv, .xls[x], .accdb, .sqlite3)")
-    args = parser.parse_args()
+    padd("-v", "--verbose",
+         help="処理中のファイル名を表示する",
+         action='store_true', default=False)
+    padd("-n", "--numtop",
+         help="TOPn件のサンプルデータを表示する(デフォルトtop10)",
+         type=int, default=10)
+    padd("--encoding",
+         help="input file encoding default auto",
+         default=None)
+    padd("--outputencoding",
+         help="出力ファイルのエンコーディングを指定する(デフォルトはcp932)\n選択肢cp932 utf-8 eucjp",
+         default="cp932")
+    padd("filename",
+         metavar="<filename>",
+         nargs="+",  default=[],
+         help="target any files(.txt, .csv, .tsv, .xls[x], .accdb, .sqlite3)")
+    args = ps.parse_args()
     
     i = 0
     for arg in args.filename:
@@ -176,19 +174,42 @@ def test():
         print(pr.data.to_csv(index=False))
         print(profiler(f, top=None))
 
+    #TODO
+    def test_Profile():
+        pass
+    
     def test_main():
         sys.argv.extend(["-v", tdir + "sample.accdb"])
         main()
         
 
-    for x, func in list(globals().items()):
+    for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
             func()
+
+
+def make_test_src_print(
+        srctmpl = "\n    #TODO\n    def test_{}():\n        pass\n",
+        exclude = ["make_test_src_print", "make_all_src_print",
+                   "test", "main", "test_main"]):
+    
+    import types
+    
+    for k, v in dict(globals()).items():
+        src = srctmpl.format(k)
+        if k in exclude:
+            continue
+        if isinstance(v, type) and v.__module__ == "__main__":
+            print(src)
+        if isinstance(v, types.FunctionType) and v.__module__ == "__main__":
+            print(src)
 
 
 if __name__ == "__main__":
     test()
     
 #    main()
+    
+    make_test_src_print()
 
 
