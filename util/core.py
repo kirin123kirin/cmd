@@ -441,7 +441,8 @@ def sorter(o, *arg, **kw):
 
 def isposkey(key):
     if not key:
-        raise ValueError("Can not check Empty Value. key is `{}`".format(key))
+        return False
+        # raise ValueError("Can not check Empty Value. key is `{}`".format(key))
     return all(isinstance(k,int) for k in key)
 
 def iterhead(iterator, n=1):
@@ -475,9 +476,11 @@ def sortedrows(o, key=None, start=1):
         return sorter(iterrows(o, start), key=key or (lambda x: x[1]))
     rows      = iterrows(o, start)
     i, header = next(rows)
-    pos       = key if isposkey(key) else [header.index(k) for k in key]
-
-    return chain([(i, header)], sorter(rows, key=lambda x: [x[1][k] for k in pos]))
+    if key:
+        pos = key if isposkey(key) else [header.index(k) for k in key]
+        return chain([(i, header)], sorter(rows, key=lambda x: [x[1][k] for k in pos]))
+    else:
+        return chain([(i, header)], sorter(rows))
 
 def iterrows(o, start=1):
     """
@@ -1050,7 +1053,7 @@ class _baseArchive(object):
     def extract(self, path=None, *args, **kw):
         if path is None:
             path = self.parentname.parent
-        self.parent.extract(self.info, str(path), *args, **kw)
+        return self.parent.extract(self.info, str(path), *args, **kw)
 
     def __dir__(self):
         return sorted(set(dir(self.opened) + dir(self.info) + dir(self.parent)))
@@ -1152,6 +1155,7 @@ class LhaArchiveWraper(_baseArchive):
             path = Path(path).joinpath(self.name)
         with binopen(path, "wb") as w:
             w.write(self.opened.read())
+        return path
 
 class RarArchiveWraper(_baseArchive):
     @property
@@ -1206,6 +1210,8 @@ class ZLibArchiveWraper(_baseArchive):
             path = Path(path).joinpath(self.name)
         with binopen(path, "wb") as w:
             w.write(self.opened.read())
+        return path
+
     def is_dir(self):
         return False
     def is_file(self):
@@ -1568,6 +1574,7 @@ try:
 
                 with open(path, "wb") as f:
                     f.write(self.read(member))
+                return path
 
 except ModuleNotFoundError:
     sys.stderr.write("** No module warning **\nPlease Install command: pip3 install rarfile\n")
@@ -2067,14 +2074,8 @@ def test():
     def test_isposkey():
         assert(isposkey([0,1]) is True)
         assert(isposkey([0,"1"]) is False)
-        try:
-            isposkey([])
-        except ValueError:
-            pass
-        except:
-            raise AssertionError
-        else:
-            raise AssertionError
+        assert(isposkey([]) is False)
+        assert(isposkey(None) is False)
 
     def test_iterhead():
         a = iter(list("abc"))
@@ -2097,6 +2098,8 @@ def test():
         assert(isdataframe(pd.Series()) is False)
 
     def test_sortedrows():
+        assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [(4, [1]), (2, [2]), (1, [3]), (3, [5])])
+        assert(list(sortedrows(iter([[3],[2],[5],[1]]),start=0)) == [(3, [1]), (1, [2]), (0, [3]), (2, [5])])
         assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [(4, [1]), (2, [2]), (1, [3]), (3, [5])])
         assert(list(sortedrows(iter([[1,3],[2,2],[3,5],[4,1]]), lambda x: x[1][1])) == [(4, [4, 1]), (2, [2, 2]), (1, [1, 3]), (3, [3, 5])])
         assert(list(sortedrows(iter([[3],[2],[5],[1]]), start=0)) == [(3, [1]), (1, [2]), (0, [3]), (2, [5])])

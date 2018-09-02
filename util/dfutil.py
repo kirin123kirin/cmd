@@ -17,24 +17,51 @@ from util.core import (
         vmfree,
         geturi,
         isdataframe,
-        Path
+        Path,
+        TMPDIR
         )
 
 import re
 import sys
+from io import TextIOBase, BufferedIOBase, StringIO, BytesIO
 
 # 3rd party modules
 import numpy as np
 import pandas as pd
+import dask
+def read_bytes(urlpath, *args, **kw):
+    if isinstance(urlpath, Path):
+        urlpath = str(urlpath)
+    elif isinstance(urlpath, (TextIOBase, BufferedIOBase)):
+        if hasattr(urlpath, "name"):
+            urlpath = urlpath.name
+        elif isinstance(urlpath, StringIO):
+            pth = TMPDIR + "/StringIO.dat"
+            with open(pth, "w") as f:
+                f.write(urlpath.getvalue())
+            urlpath = pth
+        elif isinstance(urlpath, BytesIO):
+            pth = TMPDIR + "/BytesIO.dat"
+            with open(pth, "wb") as f:
+                f.write(urlpath.getvalue())
+            urlpath = pth
+    elif hasattr(urlpath, "extract"):
+        urlpath = urlpath.extract(path=TMPDIR)
+
+    return dask.bytes.core.read_bytes(urlpath, *args, **kw)
+
+import dask.dataframe
+dask.dataframe.io.csv.read_bytes = read_bytes
 import dask.dataframe as dd
 
 try:
     from xlrd import XLRDError
 except ImportError:
-    pass
+    XLRDError = ImportError
 
 
 __all__ = [
+        "dd",
         "read_csv",
         "read_excel",
         "read_json",
@@ -47,7 +74,7 @@ __all__ = [
 
 class _dfhandler(object):
     re_attr = re.compile("\n([^-\s]+)\s.*:[^\n]+")
-    
+
     def __init__(self, func, path_or_buffer, *args, **kw):
         self.func = func
         self.path_or_buffer = Path(path_or_buffer)
@@ -58,7 +85,7 @@ class _dfhandler(object):
         self.size = 0
         #TODO UnicoDedecodeError => zopen_recursive
         self.guesskw()
-        
+
     def guesskw(self):
         def kwargs(p):
             return dict(
@@ -69,9 +96,9 @@ class _dfhandler(object):
                 doublequote= p.doublequote,
                 quotechar=p.quotechar,
                 )
-        
+
         p = self.path_or_buffer
-        
+
         if p.is_compress():
             for z in p.open():
                 self.size += p.getsize()
@@ -88,7 +115,7 @@ class _dfhandler(object):
             reader = dd.__getattribute__(self.func) #TODO if dask uri path need
             self.concater = dd.concat
             self.kw["blocksize"] = None
-            
+
         funckw = self.re_attr.findall(reader.__doc__.split("Parameters")[1])
         for fn, gkw in self.gk:
             gkw.update(self.kw)
@@ -109,7 +136,7 @@ def read_csv(f, dtype="object", keep_default_na=False, concatenate=True, *args, 
         dfh = _dfhandler("read_csv", f, dtype=dtype,
                             keep_default_na=keep_default_na, *args, **kw)
         return dfh.compute(concatenate)
-        
+
     try:
         return reader(*args, **kw)
     except pd.errors.ParserError:
@@ -202,10 +229,10 @@ def hdf(df, cond):
 
 def read_any(f, *args, **kw):
     ext = Path(f).ext[1:]
-    
+
     if ext in ["txt", "tsv", "csv", "zip", "tar.gz", "gz", "bz2", "xz"]:
         return read_csv(f, *args, **kw)
-        
+
     elif ext.startswith("xls"):
         return read_excel(f, *args, **kw)
 
@@ -214,15 +241,15 @@ def read_any(f, *args, **kw):
             return read_excel(f, *args, **kw)
         except:
             return read_csv(f, *args, **kw)
-    
+
     elif ext in ["mdb", "accdb", "db", "sqlite", "sqlite3"]:
         if "dbutil.read_db" not in sys.modules:
             from dbutil import read_db
         return read_db(f, *args, **kw)
-    
+
     elif ext == "json":
         return read_json(f, *args, **kw)
-    
+
     else:
         raise ValueError("Unknown Format File " + ext)
 
@@ -232,12 +259,28 @@ def read_any(f, *args, **kw):
 """
 def test():
     from util.core import tdir
-    
+
+    def nontest_daskwrapper():
+        #TODO
+        from util.core import zopen
+        rf = r"C:\temp\utf8.csv"
+
+        assert(dd.read_csv(Path(rf)).compute().shape == (392, 9))
+
+        with open(rf) as f:
+            assert(dd.read_csv(f).compute().shape == (392, 9))
+
+        with open(rf, "rb") as f:
+            assert(dd.read_csv(f).compute().shape == (392, 9))
+
+        for f in zopen(r"C:\temp\クエリ1.zip\クエリ1.csv"):
+            print(dd.read_csv(f, encoding=f.encoding).compute())
+
     def test__dfhandler():
         def handler_run(f, concatenate=True):
             ret = _dfhandler("read_csv", f)
             return ret.compute(concatenate)
-    
+
         handler_run(tdir + "test.csv")
         handler_run(tdir + "test.zip")
         handler_run(tdir + "test.tar.gz")
@@ -255,7 +298,7 @@ def test():
         handler_run(tdir + "test.csv.gz/test.*")
         handler_run(tdir + "test.csv.xz/test.*")
         handler_run(tdir + "test.csv.bz2/test.*")
-        
+
         handler_run(tdir + "test.csv", False)
         handler_run(tdir + "test.zip", False)
         handler_run(tdir + "test.tar.gz", False)
@@ -291,7 +334,7 @@ def test():
         handler_run(Path(tdir + "test.csv.gz/test.*").geturi())
         handler_run(Path(tdir + "test.csv.xz/test.*").geturi())
         handler_run(Path(tdir + "test.csv.bz2/test.*").geturi())
-        
+
         handler_run(open(tdir + "test.csv"))
         handler_run(open(tdir + "test.zip"))
         handler_run(open(tdir + "test.tar.gz"))
@@ -322,25 +365,25 @@ def test():
         f = tdir + "test.zip/test.csv"
         ret = _dfhandler("read_csv", f)
         assert(ret.gk[0][1] == anser)
-        
+
     def test_read_csv():
         f = tdir + "diff1.csv"
         assert(read_csv(f).shape == (389, 9))
-    
+
     def test_read_excel():
         f = tdir + "diff1.xlsx"
-        assert(read_excel(f, 0).shape == (392, 9))
-    
+        assert(read_excel(f, 0).shape == (389, 9))
+
     def read_json():
         pass
-    
+
     def test_read_any():
         f = tdir + "diff1.csv"
         assert((read_any(f) == pd.read_csv(f, dtype="object", keep_default_na=False, encoding="cp932")).all().all())
-        
+
         f = tdir + "diff1.xlsx"
         assert((read_any(f,0) == pd.read_excel(f, dtype= "str", keep_default_na=False)).all().all())
-        
+
         f = tdir + "test.zip"
         #print(read_csv(f))
 
@@ -354,13 +397,12 @@ def test():
             pass
         except:
             raise AssertionError
-    
+
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
             func()
 
 
 if __name__ == "__main__":
-    
+
     test()
-    
