@@ -119,6 +119,14 @@ class UnsupportCompressError(RuntimeError):
 class NonCompressedError(ValueError):
     pass
 
+def lsdir(path, recursive=True):
+    subfunc = "rglob" if recursive else "glob"
+    for f in glob(str(path)):
+        p = Path(f)
+        yield p
+        for r in p.__getattribute__(subfunc)("*"):
+            yield r
+
 def getencoding(dat:bytes):
     enc = nkf.guess(dat).lower()
     if enc and enc == "shift_jis":
