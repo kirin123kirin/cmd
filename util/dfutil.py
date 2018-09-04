@@ -29,9 +29,13 @@ from io import TextIOBase, BufferedIOBase, StringIO, BytesIO
 import numpy as np
 import pandas as pd
 import dask
+import pathlib
 def read_bytes(urlpath, *args, **kw):
-    if isinstance(urlpath, Path):
-        urlpath = str(urlpath)
+    if isinstance(urlpath, pathlib.Path):
+        if hasattr(urlpath, "is_compress") and urlpath.is_compress():
+            urlpath = urlpath.open().extract(path=TMPDIR)
+        else:
+            urlpath = str(urlpath)
     elif isinstance(urlpath, (TextIOBase, BufferedIOBase)):
         if hasattr(urlpath, "name"):
             urlpath = urlpath.name
@@ -100,9 +104,9 @@ class _dfhandler(object):
         p = self.path_or_buffer
 
         if p.is_compress():
-            for z in p.open():
-                self.size += p.getsize()
-                self.gk.append([z, kwargs(z)])
+            z = p.open()
+            self.size += p.getsize()
+            self.gk.append([z, kwargs(z)])
         else:
             self.size += p.getsize()
             self.gk.append([p, kwargs(p)])
@@ -385,7 +389,7 @@ def test():
         assert((read_any(f,0) == pd.read_excel(f, dtype= "str", keep_default_na=False)).all().all())
 
         f = tdir + "test.zip"
-        #print(read_csv(f))
+        # print(read_csv(f))
 
     def test_dflines():
         f = Path(tdir+"test.csv")

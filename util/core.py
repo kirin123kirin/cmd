@@ -18,6 +18,8 @@ BUF = 128 * 1024 ** 2
 CHUNKSIZE = int(BUF / (64 * 40))
 
 __all__ = [
+    "TMPDIR",
+    "lsdir",
     "getencoding",
     "getsize",
     "geturi",
@@ -160,12 +162,10 @@ def geturi(s):
         return p.as_uri().replace("%5C", "/")
 
 def binopen(f, mode="rb", *args, **kw):
-    if isinstance(f, ExFileObject):
+    if isinstance(f, (ExFileObject, _baseArchive, BytesIO)):
         return f
     elif isinstance(f, IOBase):
-        if isinstance(f, BytesIO):
-            return f
-        elif isinstance(f, StringIO):
+        if isinstance(f, StringIO):
             e = f.encoding
             if e:
                 return BytesIO(f.getvalue().encode(e))
@@ -186,10 +186,11 @@ def binopen(f, mode="rb", *args, **kw):
             r.seek(p)
             return r
     elif isinstance(f, str):
-        return open(Path(f), mode, *args, **kw)
-    elif isinstance(f, Path):
+        return open(pathlib.Path(f), mode, *args, **kw)
+    elif isinstance(f, pathlib.Path):
         return open(f, mode, *args, **kw)
     else:
+        print()
         raise ValueError("Unknown Object. filename or filepointer buffer")
 
 def opener(f, mode="r", *args, **kw):
@@ -615,42 +616,181 @@ def back_to_path(uri:str):
     except IndexError:
         return uri
 
+class PathList(list):
+    raiseop = ["mkdir", "replace", "rmdir", "write_text","write_bytes", "unlink"]
+    pathop = ["encoding", "ext", "dialect", "lineterminator",
+                       "quoting", "doublequote", "delimiter", "quotechar"]
+
+    def __init__(self, initlist=None):
+        if isinstance(initlist, list):
+            initlist = flatten(initlist)
+        elif isinstance(initlist, Path):
+            initlist = [initlist]
+
+        super().__init__(initlist)
+
+    def __dir__(self):
+        return self.pathop + super().__dir__()
+
+    def samefile(self, other_path):
+        return [x.samefile(other_path) for x in self if x.is_file()]
+
+    def iterdir(self):
+        for x in self:
+            if x.is_dir():
+                for y in x.iterdir():
+                    yield y
+
+    def glob(self, pattern):
+        return flatten(x.glob(pattern) for x in self if x.is_dir())
+
+    def rglob(self, pattern):
+        return flatten(x.rglob(pattern) for x in self if x.is_dir())
+
+    def absolute(self):
+        return [x.absolute() for x in self]
+
+    def resolve(self, strict=False):
+        return [x.resolve(strict) for x in self]
+
+    def stat(self):
+        return [x.stat() for x in self]
+
+    def owner(self):
+        return [x.owner() for x in self]
+
+    def group(self):
+        return [x.group() for x in self]
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+                      errors=None, newline=None):
+        return [x.open(mode=mode, buffering=buffering, encoding=encoding, errors=errors, newline=newline) for x in self if x.is_file()]
+
+    def read_bytes(self, n=-1):
+        return [x.read_bytes(n) for x in self if x.is_file()]
+
+    def read_text(self, n=-1, encoding=None, errors=None):
+        return [x.read_text(n, encoding=encoding, errors=errors) for x in self if x.is_file()]
+    read = read_text
+
+    def lstat(self):
+        return [x.lstat() for x in self]
+
+    def exists(self):
+        return [x.exists() for x in self]
+
+    def is_dir(self):
+        return [x.is_dir() for x in self]
+
+    def is_file(self):
+        return [x.is_file() for x in self]
+
+    def is_symlink(self):
+        return [x.is_symlink() for x in self]
+
+    def is_block_device(self):
+        return [x.is_block_device() for x in self]
+
+    def is_char_device(self):
+        return [x.is_char_device() for x in self]
+
+    def is_fifo(self):
+        return [x.is_fifo() for x in self]
+
+    def is_socket(self):
+        return [x.is_socket() for x in self]
+
+    def expanduser(self):
+        return [x.expanduser() for x in self]
+
+    def lsdir(self, recursive=True):
+        return PathList(flatten(x.lsdir(recursive) for x in self if not x.is_dir()))
+
+    def getinfo(self, sniff=False):
+        return [x.getinfo(sniff) for x in self if x.is_file()]
+
+    def wordcount(self, word, buf_size = 1024 ** 2):
+        return [x.wordcount(word, buf_size) for x in self if x.is_file()]
+
+    def linecount(self, buf_size = 1024 ** 2):
+        return [x.linecount(buf_size) for x in self if x.is_file()]
+
+    def geturi(self):
+        return [x.geturi() for x in self if x.is_file()]
+
+    def getsize(self):
+        return [x.getsize() for x in self if x.is_file()]
+
+    def gettype(self):
+        return [x.gettype() for x in self if x.is_file()]
+
+    def is_compress(self):
+        return [x.is_compress() for x in self if x.is_file()]
+
+    def __getattr__(self, name):
+        if name in self.raiseop:
+            raise RuntimeError("It's Operation is Dangerous. Please each Operation.")
+        else:
+            return [x.__getattribute__(name) for x in self if x.is_file()]
+
 class Path(type(pathlib.Path())):
+    SAMPLE = 92160
+
     __slots__ = (
         '_accessor',
         '_closed',
         '_encoding',
         '_ext',
+        '_str',
         '_dialect',
-        'org_filename',
-        'wildcard',
+        '_fullpath',
+        'content',
     )
 
     def __new__(cls, *args, **kwargs):
         if args:
-            if isinstance(args[0], cls):
+            content = None
+            if isinstance(args[0], (cls, PathList)):
                 return args[0]
             elif hasattr(args[0], "read") and hasattr(args[0], "name"):
                 args = (args[0].name, *args[1:])
+            elif isinstance(args[0], str):
+                entity, content = path_norm(args[0])
+                if re.search("[\*\[\]\?]", entity):
+                    lst = []
+                    for x in lsdir(entity, recursive=False):
+                        x.content = content
+                        lst.append(x)
+                    if len(lst) == 1:
+                        args = (lst[0], *args[1:])
+                    elif len(lst) > 1:
+                        return PathList(lst)
+                    else:
+                        args = (entity, *args[1:])
+                else:
+                    args = (entity, *args[1:])
         if cls is pathlib.Path:
             cls = pathlib.WindowsPath if os.name == 'nt' else pathlib.PosixPath
         self = cls._from_parts(args, init=False)
         if not self._flavour.is_supported:
             raise NotImplementedError("cannot instantiate {} on your system".forrmat(cls.__name__,))
+
+        self.content = content
         self._init()
         return self
-
 
     def _init(self, *args, **kw):
         super()._init(*args, **kw)
         self._encoding = None
         self._ext = None
         self._dialect = None
+        self._fullpath = None
 
-        self.org_filename = self.__str__()
-        self._str, self.wildcard = path_norm(self.org_filename)
-        self._str = back_to_path(self._str)
-
+    @property
+    def fullpath(self):
+        if self._fullpath is None:
+            self._fullpath = self.joinpath(self.__str__(), self.content)
+        return self._fullpath
 
     def getinfo(self, sniff=False):
         st = self.stat()
@@ -691,19 +831,19 @@ class Path(type(pathlib.Path())):
         with io.open(str(self), mode='r', encoding=encoding or self.encoding, errors=errors) as f:
             return f.read(n)
 
-    def lsdir(self, recursive:bool=True):
-        subfunc = "rglob" if recursive else "glob"
+    def lsdir(self, recursive=True):
+        return PathList(lsdir(self, recursive))
 
-        for f in glob(self.__str__()):
-            yield Path(f)
-
-            for r in Path(f).__getattribute__(subfunc)("*"):
-                yield r
+    def exists(self):
+        try:
+            return super().exists()
+        except OSError:
+            return False
 
     @property
     def encoding(self):
         if self._encoding is None:
-            self._encoding = getencoding(self.read_bytes(92160))
+            self._encoding = getencoding(self.read_bytes(self.SAMPLE))
         return self._encoding
 
     @property
@@ -715,7 +855,7 @@ class Path(type(pathlib.Path())):
     @property
     def dialect(self):
         if self._dialect is None:
-            dat = self.read_bytes(92160)
+            dat = self.read_bytes(self.SAMPLE)
             self._dialect = csv.Sniffer().sniff(dat.decode(self.encoding))
         return self._dialect
 
@@ -821,10 +961,15 @@ class Path(type(pathlib.Path())):
             self._raise_closed()
 
         if self.is_compress():
-            fo = self.org_filename if self.wildcard else self._str
-            return zopen(fo, mode)
+            lst = list(zopen_recursive(self._str, mode))
+            if len(lst) == 1:
+                return lst[0]
+            return PathList(lst)
         else:
-            return io.open(str(self), mode, buffering, encoding, errors, newline)
+            if "b" in mode:
+                return io.open(str(self), mode, buffering=buffering, errors=errors, newline=newline)
+            else:
+                return io.open(str(self), mode, buffering, encoding or self.encoding, errors, newline)
 
 
 class _baseArchive(object):
@@ -1802,8 +1947,9 @@ def zopen(path_or_buffer, *args, **kw):
     return _handler_zopen(path_or_buffer)(path_or_buffer, *args, **kw)
 
 def zopen_recursive(path_or_buffer, *args, **kw):
-    for ret in zopen(path_or_buffer, *args, **kw):
-        if is_compress(ret.opened):
+    z = zopen(path_or_buffer, *args, **kw)
+    for ret in z:
+        if is_compress(ret):
             for r in  zopen_recursive(ret.opened, *args, **kw):
                 yield r
         else:
@@ -1828,6 +1974,31 @@ _tmp = _tmpdir()
 TMPDIR = _tmp.name
 
 def test():
+
+    def test_lsdir():
+        def _testargs(func, pathstr, *args):
+            #TODO assert
+            ret = [
+                func(pathstr, *args),
+                func(pathlib.Path(pathstr), *args),
+                func(Path(pathstr), *args),
+            ]
+            try:
+                with open(pathstr) as f:
+                    ret.append(func(f, *args))
+            except Exception as e:
+                ret.append(e)
+            return ret
+        _testargs(lsdir, tdir)
+        _testargs(lsdir, tdir + "diff*")
+        _testargs(lsdir, tdir+"test.csv")
+        _testargs(lsdir, tdir+"*est.csv")
+        _testargs(lsdir, tdir+"ddfghjdtui")
+        _testargs(lsdir, tdir, False)
+        _testargs(lsdir, tdir + "diff*", False)
+        _testargs(lsdir, tdir+"test.csv", False)
+        _testargs(lsdir, tdir+"*est.csv", False)
+        _testargs(lsdir, tdir+"ddfghjdtui", False)
 
     def test_getencoding():
         with open(tdir+"diff1.csv", "rb") as f:
@@ -1907,10 +2078,19 @@ def test():
 
         p = Path(tdir+"test.zip/test.csv")
         assert(p.is_compress() == True)
-        assert(isinstance(p.open(), ZipFile))
+        assert(isinstance(p.open(), ZipArchiveWraper))
         assert(p.read_bytes())
         assert(isinstance(Path(open(p)), Path))
 
+
+        p = Path(tdir+"test.zip/test.csv")
+        assert((p.as_posix(), p.content, p.fullpath.as_posix()) == (tdir+"test.zip", "test.csv", tdir+"test.zip/test.csv"))
+        assert(p.exists() is True)
+        assert(p.is_compress() is True)
+
+        p = Path(tdir+"1test*.zip/test.csv")
+        assert((p.as_posix(), p.content, p.fullpath.as_posix()) == (tdir+"1test*.zip", "test.csv", tdir+"1test*.zip/test.csv"))
+        assert(p.exists() is False)
 
     def test_binopen():
         pass
