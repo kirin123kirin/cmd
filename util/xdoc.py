@@ -9,6 +9,7 @@ MIT License
 
 """
 from collections import namedtuple
+from io import StringIO
 
 #3rd party
 try:
@@ -52,6 +53,28 @@ def docx(docx_path_or_buffer):
         if txt:
             yield pinfo(path, "#TODO", txt)
 
+def xlsx(xlsx_path_or_buffer):
+    path = Path(xlsx_path_or_buffer)
+    with xlrd.open_workbook(path) as wb:
+        for sheet in wb.sheets():
+            nr = sheet.nrows
+            if nr > 0:
+                for i in range(nr):
+                    yield pinfo(path, "{}:{}".format(sheet.name, i+1), sheet.row_values(i))
+
+def pdf(pdf_path_or_buffer):
+    path = Path(pdf_path_or_buffer)
+    
+    caching=True
+    rsrcmgr = PDFResourceManager(caching=caching)
+    pagenos = set()
+    
+    with StringIO() as outfp:
+        with path.open('rb') as fp, TextConverter(rsrcmgr, outfp, laparams=LAParams()) as device:
+            process_pdf(rsrcmgr, device, fp, pagenos, maxpages=0, password="",
+                            caching=caching, check_extractable=True)
+        yield pinfo(path, pagenos, outfp.getvalue())
+
 def test():
     from util.core import tdir
     
@@ -64,7 +87,17 @@ def test():
         doc = tdir+"test.docx"
         for x in docx(doc):
             print(x)
+    
+    def test_xlsx():
+        xlsx = tdir+'diff1.xlsx'
+        for x in xlsx(xlsx):
+            print(x)
 
+    def test_pdf():
+        pdf = tdir + "test.pdf"
+        for x in pdf(pdf):
+            print(x)
+                
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
             func()
