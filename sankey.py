@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import pandas as pd
 import plotly.offline as py
@@ -16,10 +16,10 @@ def render_sankey(df, title="", width = None, height = None,
 
     if "source_group" not in df.columns:
         df["source_group"] = ""
-    
+
     if "target_group" not in df.columns:
         df["target_group"] = ""
-    
+
 
     df.sort_values(["source_group", "target_group"], inplace=True)
     if "value" in df.columns:
@@ -27,18 +27,18 @@ def render_sankey(df, title="", width = None, height = None,
     else:
         df["value"] = 1
         df[["source","target","value"]] = df.groupby(["source", "target"], as_index=False).sum()
-    
+
     if "label" not in df.columns:
         df["label"] = df.source.fillna("") + " -> " + df.target.fillna("")
-    
+
     nc = ["label", "group"]
     df = df[df["source"] != df["target"]]
-    
+
     src = df[["source", "source_group"]]
     tar = df[["target","target_group"]]
     src.columns = nc
     tar.columns = nc
-    
+
     nodes = pd.concat([src, tar])
     nodes.drop_duplicates(inplace=True)
     nodes.dropna(inplace=True)
@@ -90,7 +90,7 @@ def render_sankey(df, title="", width = None, height = None,
 def tsvsankey(txt, sep="\t"):
     sep = re.compile(sep + "+")
     strip = re.compile(sep.pattern + "$")
-    
+
     ret=Counter()
 
     for t in txt.splitlines():
@@ -107,7 +107,7 @@ def tsvsankey(txt, sep="\t"):
     render_sankey(pd.DataFrame({"source":k[0], "target":k[1], "value":v, "label":""} for k,v in ret.items()))
 
 def main():
-    
+
     try:
         render_sankey(pd.read_clipboard(engine="python", dtype="object", keep_default_na=False))
     except:

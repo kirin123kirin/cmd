@@ -206,10 +206,6 @@ def make_test_src_print(
 
 
 if __name__ == "__main__":
-    test()
-    
-#    main()
-    
-    make_test_src_print()
+    main()
 
 
