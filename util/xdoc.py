@@ -32,15 +32,20 @@ except ModuleNotFoundError:
     xlrd = ImportError
 
 try:
-    from pdfminer.pdfinterp import PDFResourceManager, process_pdf
-    from pdfminer.converter import TextConverter
-    from pdfminer.layout import LAParams
+    from pdfminer.pdfparser import PDFParser, PDFDocument
+    from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+    from pdfminer.converter import PDFPageAggregator
+    from pdfminer.layout import LAParams, LTTextBox, LTTextLine
 except ModuleNotFoundError:
-    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install xlrd\n")
+    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install pdfminer3k\n")
+    PDFParser = ImportError
+    PDFDocument = ImportError
     PDFResourceManager = ImportError
-    process_pdf = ImportError
-    TextConverter = ImportError
+    PDFPageInterpreter = ImportError
+    PDFPageAggregator = ImportError
     LAParams = ImportError
+    LTTextBox = ImportError
+    LTTextLine = ImportError
 
 #my library
 from util.core import Path
@@ -80,28 +85,32 @@ def xlsx(xlsx_path_or_buffer):
                 for i in range(nr):
                     yield pinfo(path, "{}:{}".format(sheet.name, i+1), sheet.row_values(i))
 
-def pdf(pdf_path_or_buffer):
-    path = Path(pdf_path_or_buffer)
+def pdf(path_or_buffer):
+    path = Path(path_or_buffer)
 
-    caching=True
-    rsrcmgr = PDFResourceManager(caching=caching)
-    pagenos = set()
+    with path.open('rb') as fp:
+        parser = PDFParser(fp)
+        doc = PDFDocument()
+        parser.set_document(doc)
+        doc.set_parser(parser)
+        doc.initialize('')
 
-    with StringIO() as outfp:
-        device = TextConverter(rsrcmgr, outfp, laparams=LAParams())
-        with path.open('rb') as fp:
-            process_pdf(rsrcmgr, device, fp, pagenos, maxpages=0, password="",
-                        caching=caching, check_extractable=True)
+        rsrcmgr = PDFResourceManager(caching=True)
+        device = PDFPageAggregator(rsrcmgr, laparams=LAParams())
+        interpreter = PDFPageInterpreter(rsrcmgr, device)
+
+        for i, page in enumerate(doc.get_pages(), 1):
+            interpreter.process_page(page)
+            text = "".join(x.get_text() for x in device.get_result() if isinstance(x, (LTTextBox, LTTextLine)))
+            yield pinfo(path, i, text.rstrip("{}\n".format(i)))
 
         device.close()
-
-        yield pinfo(path, "#TODO", outfp.getvalue())
 
 def txt(path_or_buffer):
     path = Path(path_or_buffer)
     with path.open() as r:
         for i, line in enumerate(r, 1):
-            yield path, i, line.rstrip()
+            yield pinfo(path, i, line.rstrip())
 
 def test():
     from util.core import tdir
@@ -124,6 +133,11 @@ def test():
     def test_pdf():
         f = tdir + "test.pdf"
         for x in pdf(f):
+            assert(type(x) == pinfo)
+
+    def test_txt():
+        f = tdir + "test.csv"
+        for x in txt(f):
             assert(type(x) == pinfo)
 
     for x, func in list(locals().items()):
