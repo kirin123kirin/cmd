@@ -703,6 +703,12 @@ class PathList(list):
     def expanduser(self):
         return [x.expanduser() for x in self]
 
+    def unlink(self):
+        return [x.unlink() for x in self]
+
+    def delete(self):
+        return [x.delete() for x in self]
+    
     def lsdir(self, recursive=True):
         return PathList(flatten(x.lsdir(recursive) for x in self if not x.is_dir()))
 
@@ -830,6 +836,9 @@ class Path(type(pathlib.Path())):
         """
         with io.open(str(self), mode='r', encoding=encoding or self.encoding, errors=errors) as f:
             return f.read(n)
+
+    def delete(self):
+        return self.unlink()
 
     def lsdir(self, recursive=True):
         return PathList(lsdir(self, recursive))
@@ -2066,7 +2075,7 @@ def test():
         assert(list(p.tree_dir()) == [])
         assert(p.is_compress() is False)
         assert(Path(open(p)) == p)
-
+        
         p = Path(tdir)
         assert(p.ext == "")
         assert(len(list(p.lsdir())) > 0)
@@ -2091,6 +2100,49 @@ def test():
         p = Path(tdir+"1test*.zip/test.csv")
         assert((p.as_posix(), p.content, p.fullpath.as_posix()) == (tdir+"1test*.zip", "test.csv", tdir+"1test*.zip/test.csv"))
         assert(p.exists() is False)
+        
+        p = Path(tdir+"test*.zip/test.csv")
+        assert(p.is_compress() is True)
+
+    def test_PathList():
+        p = Path(tdir+"diff*")
+        assert(len(p) == 4)
+        assert(all(isinstance(x, Path) for x in p))
+        p = Path(tdir+"diff*.csv")
+        assert(p.sep == [",", ","])
+
+        try:
+            p.mkdir
+        except RuntimeError:
+            pass
+        except:
+            raise AssertionError
+        
+        try:
+            p.replace
+        except RuntimeError:
+            pass
+        except:
+            raise AssertionError
+
+        try:
+            p.rmdir
+        except RuntimeError:
+            pass
+        except:
+            raise AssertionError
+        
+        assert(p.encoding == ["cp932", "cp932"])
+        assert(p.ext == [".csv", ".csv"])
+        assert(p.lineterminator == ["\r\n", "\r\n"])
+        assert(p.quoting == [0,0])
+        assert(p.doublequote == [False, False])
+        assert(p.delimiter == [",", ","])
+        assert(p.quotechar == ['"', '"'])
+        
+        p = Path(tdir+"test.zip/*")
+        assert(isinstance(p, Path))
+        
 
     def test_binopen():
         pass

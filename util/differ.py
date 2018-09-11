@@ -217,6 +217,20 @@ def diffauto(a, b, skipequal=True, startidx=1):
         for x in retb[1:]:
             yield ["insert", "", x[0], *x[1:]]
 
+#TODO excel differ
+def dictdiffer(a, b, skipequal=True, startidx=1):
+    r = differ(list(a), list(b), skipequal=skipequal, startidx=startidx)
+    next(r)
+    for tag, ll, rl, val in r:
+        if tag == "equal":
+            _a, _b = a[val], b[val]
+        elif tag == "replace":
+            va, vb = val.split(" ---> ")
+            _a, _b = a[va], b[vb]
+        elif tag == "insert":
+            b[val]
+        elif tag == "delete":
+            a[val]
 
 def differ(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
     """
@@ -245,6 +259,8 @@ def differ(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
 
     if is1darray(A) and is1darray(B):
         ret = helperdiff1D(A, B, sort=sort, skipequal=skipequal, startidx=startidx)
+    elif isinstance(A, dict) and isinstance(B, dict):
+        ret = dictdiffer(A, B, skipequal=skipequal, startidx=startidx)
     elif not keya and not keyb:
         ret = diffauto(A, B, skipequal=skipequal, startidx=startidx)
     else:
@@ -538,5 +554,5 @@ def test():
 
 
 if __name__ == "__main__":
-    test()
-#    main()
+    #test()
+    main()
