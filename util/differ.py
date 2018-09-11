@@ -217,10 +217,11 @@ def diffauto(a, b, skipequal=True, startidx=1):
         for x in retb[1:]:
             yield ["insert", "", x[0], *x[1:]]
 
-#TODO excel differ
-def dictdiffer(a, b, skipequal=True, startidx=1):
-    r = differ(list(a), list(b), skipequal=skipequal, startidx=startidx)
+def dictdiffer(a, b, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
+    r = differ(list(a), list(b), sort=False, skipequal=False, startidx=startidx)
     next(r)
+    i = 0
+
     for tag, ll, rl, val in r:
         if tag == "equal":
             _a, _b = a[val], b[val]
@@ -228,9 +229,21 @@ def dictdiffer(a, b, skipequal=True, startidx=1):
             va, vb = val.split(" ---> ")
             _a, _b = a[va], b[vb]
         elif tag == "insert":
-            b[val]
+            _a, _b = [], b[val]
         elif tag == "delete":
-            a[val]
+            _a, _b = a[val], []
+        
+        rr = differ(_a, _b, keya=keya, keyb=keyb, sort=sort, skipequal=skipequal, startidx=startidx)
+        header = next(rr)
+        header.insert(3, "TARGET")
+
+        for d in rr:
+            if i == 0:
+                yield header
+            else:
+                d.insert(3, val)
+                yield d
+            i += 1
 
 def differ(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
     """
@@ -516,18 +529,20 @@ def test():
         f1 = tdir + "diff1.xlsx"
         f2 = tdir + "diff2.xlsx"
 
-        a = read_any(f1,0)
-        b = read_any(f2,0)
+        a = read_any(f1)
+        b = read_any(f2)
+        anser = [
+            ['DIFFTAG','LEFTLINE#','RIGHTLINE#','TARGET', 'mpg', 'cyl', 'displ', 'hp', 'weight', 'accel', 'yr', 'origin', 'name'],
+            ['replace', 2, 2, 'diff1 ---> diff2', 'b ---> 10', '8', '307', '130', '3504', '12', '70', '1', 'chevrolet chevelle malibue'],
+            ['insert', '', 16, 'diff1 ---> diff2', '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster'],
+            ['insert', '', 24, 'diff1 ---> diff2', '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'],
+            ['replace', 38, 40, 'diff1 ---> diff2', '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'],
+            ['replace', 47, 49, 'diff1 ---> diff2', '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'], #TODO bug
+            ['delete', 56, '', 'diff1 ---> diff2', '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop']]
 
-        print("exists bugs:", list(differ(a,b)) == [
-            ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'mpg', 'cyl', 'displ', 'hp', 'weight', 'accel', 'yr', 'origin', 'name'],
-            ['replace', 2, 2, 'b ---> 10', '8', '307', '130', '3504', '12', '70', '1', 'chevrolet chevelle malibue'],
-            ['insert', '', 16, '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster'],
-            ['insert', '', 24, '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'],
-            ['replace', 38, 40, '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'],
-            ['replace', 47, 49, '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'], #TODO bug
-            ['delete', 56, '', '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop']]
-        )
+        print("exists bugs:", list(differ(a,b)) == anser)
+#        print(sorted(differ(a,b))) #TODO
+#        print(sorted(anser))
 
     def nontest_differlist():
         for x in differ([1,2,3], [1,3,4], skipequal=False):
