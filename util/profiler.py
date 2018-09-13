@@ -106,7 +106,7 @@ class Profile(object):
                     pt.append(skew)
             kg.sort(reverse=True)
             percentile = np.percentile(pt, self.percentile)
-            self._diffkey = dict(("diff{:02d}".format(i+1),k) for i, (s, k) in enumerate(kg) if s > percentile or len(k) == len(key.cols))
+            self._diffkey = dict(("diff{:02d}".format(i+1),k) for i, (s, k) in enumerate(kg) if s > percentile or len(k) == len(key.cols) - 1)
         return self._diffkey
     def __getitem__(self, name):
         k = "diff{:02d}".format(int(name.split("diff")[-1]))
