@@ -483,9 +483,12 @@ def sortedrows(o, key=None, start=1):
     """
     if is1darray(o):
         return sorter(iterrows(o, start), key=key or (lambda x: x[1]))
-    rows      = iterrows(o, start)
+
+    rows = iterrows(o, start)
     i, header = next(rows)
+
     if key:
+        print(key, header)
         pos = key if isposkey(key) else [header.index(k) for k in key]
         return chain([(i, header)], sorter(rows, key=lambda x: [x[1][k] for k in pos]))
     else:
@@ -708,7 +711,7 @@ class PathList(list):
 
     def delete(self):
         return [x.delete() for x in self]
-    
+
     def lsdir(self, recursive=True):
         return PathList(flatten(x.lsdir(recursive) for x in self if not x.is_dir()))
 
@@ -2075,7 +2078,7 @@ def test():
         assert(list(p.tree_dir()) == [])
         assert(p.is_compress() is False)
         assert(Path(open(p)) == p)
-        
+
         p = Path(tdir)
         assert(p.ext == "")
         assert(len(list(p.lsdir())) > 0)
@@ -2100,7 +2103,7 @@ def test():
         p = Path(tdir+"1test*.zip/test.csv")
         assert((p.as_posix(), p.content, p.fullpath.as_posix()) == (tdir+"1test*.zip", "test.csv", tdir+"1test*.zip/test.csv"))
         assert(p.exists() is False)
-        
+
         p = Path(tdir+"test*.zip/test.csv")
         assert(p.is_compress() is True)
 
@@ -2117,7 +2120,7 @@ def test():
             pass
         except:
             raise AssertionError
-        
+
         try:
             p.replace
         except RuntimeError:
@@ -2131,7 +2134,7 @@ def test():
             pass
         except:
             raise AssertionError
-        
+
         assert(p.encoding == ["cp932", "cp932"])
         assert(p.ext == [".csv", ".csv"])
         assert(p.lineterminator == ["\r\n", "\r\n"])
@@ -2139,10 +2142,10 @@ def test():
         assert(p.doublequote == [False, False])
         assert(p.delimiter == [",", ","])
         assert(p.quotechar == ['"', '"'])
-        
+
         p = Path(tdir+"test.zip/*")
         assert(isinstance(p, Path))
-        
+
 
     def test_binopen():
         pass

@@ -248,7 +248,7 @@ def read_any(f, *args, **kw):
 
     elif ext in ["mdb", "accdb", "db", "sqlite", "sqlite3"]:
         if "dbutil.read_db" not in sys.modules:
-            from dbutil import read_db
+            from util.dbutil import read_db
         return read_db(f, *args, **kw)
 
     elif ext == "json":
