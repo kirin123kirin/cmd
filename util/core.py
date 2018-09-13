@@ -190,7 +190,6 @@ def binopen(f, mode="rb", *args, **kw):
     elif isinstance(f, pathlib.Path):
         return open(f, mode, *args, **kw)
     else:
-        print()
         raise ValueError("Unknown Object. filename or filepointer buffer")
 
 def opener(f, mode="r", *args, **kw):
@@ -488,7 +487,6 @@ def sortedrows(o, key=None, start=1):
     i, header = next(rows)
 
     if key:
-        print(key, header)
         pos = key if isposkey(key) else [header.index(k) for k in key]
         return chain([(i, header)], sorter(rows, key=lambda x: [x[1][k] for k in pos]))
     else:
