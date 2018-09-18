@@ -125,14 +125,20 @@ def iterdiff2D(A, B, compare, skipequal=True, na_value=""):
         if isfirst:
             isfirst = False
 
-def compare_build(A, B, keya, keyb):
+def compare_build(A, B, keya, keyb, startidx=1):
     def getfunc(o, key):
         if is1darray(o):
             return str
+        elif callable(key):
+            return key
         elif isposkey(key):
             return lambda x: [x[i] for i in key]
         elif is2darray(o):
-            return lambda x: [x[i] for i in [o[0].index(k) for k in key]]
+            if startidx == "infer":
+                r = [o[0].index(k) - 1 for k in key]
+            else:
+                r = [o[0].index(k) for k in key]
+            return lambda x: [x[i] for i in r]
         elif isdataframe(o):
             return lambda x: [x[i] for i in [o.columns.tolist().index(k) for k in key]]
         else:
@@ -171,7 +177,7 @@ def helperdiff2D(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
 
     keyb = keyb or keya
 
-    compare = compare_build(A, B, keya, keyb)
+    compare = compare_build(A, B, keya, keyb, startidx)
     # compute diff run
     if sort is False:
         ret = iterdiff2D(iterrows(A, startidx),
@@ -191,34 +197,36 @@ def helperdiff2D(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
         yield flatten(r)
 
 def diffauto(a, b, skipequal=True, startidx=1):
-    diffkey = Profile(a[a.columns[3:]], top=None).diffkey
-    for key in [[]] + list(diffkey.values()):
-        if key == []:
+    dka = {tuple(v):k for k, v in Profile(a.head(10), top=None).diffkey.items()}
+    dkb = {tuple(v):k for k, v in Profile(b.head(10), top=None).diffkey.items()}
+    diffkeys=sorted((dka[x], x) for x in set(dka.keys()) & set(dkb.keys()))
+
+    for i, (_, key) in enumerate([(None, None)] + diffkeys):
+        if i == 0:
             r = helperdiff2D(a, b, skipequal=skipequal, startidx=startidx)
             header = next(r)
             yield header
-            reta, retb = [header[3:]], [header[3:]]
+            _h = ["line"] + header[3:]
+            reta, retb = [_h], [_h]
         else:
             r = helperdiff2D(reta.copy(), retb.copy(), keya=key, keyb=key, skipequal=skipequal, startidx="infer")
-            reta, retb = [header[3:]], [header[3:]]
-
-        for tag ,ia, ib, *content in r:
-            if tag == "equal":
-                yield [tag , ia, ib] + content
-            elif tag == "replace":
-                yield [tag , ia, ib] + content
-            elif tag == "delete":
-                reta.append([ia] + content)
-            elif tag == "insert":
-                retb.append([ib] + content)
+            reta, retb = [_h], [_h]
+        for x in r:
+            if x[0] in ["equal", "replace"]:
+                yield x
+            elif x[0] == "delete":
+                reta.append([x[1], *x[3:]])
+            elif x[0] == "insert":
+                retb.append([x[2], *x[3:]])
     else:
-        for x in reta[1:]:
-            yield ["delete", x[0], "", *x[1:]]
-        for x in retb[1:]:
-            yield ["insert", "", x[0], *x[1:]]
+        #Last Loop
+        for y in reta[1:]:
+            yield ["delete", y[0], "", *y[1:]]
+        for y in retb[1:]:
+            yield ["insert", "", y[0], *y[1:]]
 
 def dictdiffer(a, b, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
-    r = differ(list(a), list(b), sort=False, skipequal=False, startidx=startidx)
+    r = helperdiff1D(list(a), list(b), sort=False, skipequal=False, startidx=startidx)
     next(r)
     i = 0
 
@@ -232,17 +240,16 @@ def dictdiffer(a, b, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
             _a, _b = [], b[val]
         elif tag == "delete":
             _a, _b = a[val], []
-        
+
         rr = differ(_a, _b, keya=keya, keyb=keyb, sort=sort, skipequal=skipequal, startidx=startidx)
+
         header = next(rr)
         header.insert(3, "TARGET")
-
+        if i == 0:
+            yield header
         for d in rr:
-            if i == 0:
-                yield header
-            else:
-                d.insert(3, val)
-                yield d
+            d.insert(3, val)
+            yield d
             i += 1
 
 def differ(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
@@ -273,7 +280,7 @@ def differ(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
     if is1darray(A) and is1darray(B):
         ret = helperdiff1D(A, B, sort=sort, skipequal=skipequal, startidx=startidx)
     elif isinstance(A, dict) and isinstance(B, dict):
-        ret = dictdiffer(A, B, skipequal=skipequal, startidx=startidx)
+        ret = dictdiffer(A, B, keya=keya, keyb=keyb, skipequal=skipequal, startidx=startidx)
     elif not keya and not keyb:
         ret = diffauto(A, B, skipequal=skipequal, startidx=startidx)
     else:
@@ -294,19 +301,6 @@ def main():
     import sys
     import csv
 
-    def getrange(key):
-        if not key:
-            return
-        ret = kwtolist(key)
-        def columnslice(k):
-            if not k:
-                return
-            try:
-                return tuple(k[x] for x in ret)
-            except IndexError:
-                raise AttributeError(f"Invalid key Index number.\n {ret} Not in {k}")
-        return columnslice
-
     ps = ArgumentParser(prog="differ",
                         description="2 file diff compare program\n")
     padd = ps.add_argument
@@ -326,7 +320,7 @@ def main():
     padd('-s', '--sort', action='store_true', default=False,
          help='before diff file Sorted.')
     padd('-H', '--header', type=int, default=None,
-         help='file no header (default `False`) (sorted option)')
+         help='file no header (default `None`) (start sequence `0`)')
     padd('-k', '--key', type=str, default=None,
          help='key index of both filename1 and filename2  (ex. 3,2,4-8)')
     padd('-k1', '--key1', type=str, default=None,
@@ -379,8 +373,8 @@ def main():
     writer = csv.writer(f, quoting=csv.QUOTE_ALL)
 
     for d in differ(a, b,
-                    keya=getrange(args.key or args.key1),
-                    keyb=getrange(args.key or args.key2),
+                    keya=kwtolist(args.key or args.key1),
+                    keyb=kwtolist(args.key or args.key2),
                     sort=args.sort, skipequal=args.all is False):
 
         writer.writerow(d)
@@ -391,6 +385,8 @@ def main():
 def test():
     from util.core import tdir
     import sys
+    from io import StringIO
+    from collections import Counter
 
     def test_sanitize():
         assert(sanitize(None, 1) == "ADD ---> 1")
@@ -484,6 +480,18 @@ def test():
                 ['insert', '', 2, 'd', 'd', 'f'],
                 ['delete', 2, '', 'd', 'e', 'f']]
             )
+        h = [["col1", "col2", "col3"]]
+        r = helperdiff2D(h + a, h + b, keya=[0], skipequal=False)
+        assert(list(r)[1:] == [["equal",2,2,"a","b","c"],["replace",3,3,"d","e ---> d","f"]])
+
+        r = helperdiff2D(h + a, h + b, keya=[1], skipequal=False)
+        assert(list(r)[1:] == [["equal",2,2,"a","b","c"],["insert","",3, "d","d","f"],["delete",3,"","d","e","f"]])
+
+        r = helperdiff2D(h + a, h + b, keya=["col1"], skipequal=False)
+        assert(list(r)[1:] == [["equal",2,2,"a","b","c"],["replace",3,3,"d","e ---> d","f"]])
+
+        r = helperdiff2D(h + a, h + b, keya=["col2"], skipequal=False)
+        assert(list(r)[1:] == [["equal",2,2,"a","b","c"],["insert","",3, "d","d","f"],["delete",3,"","d","e","f"]])
 
     def test_diffauto():
         from util import read_any
@@ -491,18 +499,17 @@ def test():
         f2 = tdir + "diff2.csv"
         a = read_any(f1)
         b = read_any(f2)
-        assert(list(diffauto(a,b)) == [
+
+        anser = [
             ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'mpg', 'cyl', 'displ', 'hp', 'weight', 'accel', 'yr', 'origin', 'name'],
             ['replace', 2, 2, 'b ---> 10', '8', '307', '130', '3504', '12', '70', '1', 'chevrolet chevelle malibue'],
-            ['replace', 38, 40, '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'],
-            ['delete', 56, '', '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop'],
-            ['delete', 47, '', '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001'],
+            ['insert', '', 16, '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster'],
             ['insert', '', 24, '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'],
-            ['insert', '', 49, '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2000'],
-            ['insert', '', 16, '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster']]
-        ) #TODO result sorted
-
-        assert(list(diffauto(a,b, startidx=0))[1][1:3] == [1,1])
+            ['replace', 38, 40, '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'],
+            ['replace', 47, 49, '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'],
+            ['delete', 56, '', '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop'],
+            ]
+        assert(sorted(diffauto(a, b), key=str) == sorted(anser, key=str))
 
     def test_differcsv():
         from util.dfutil import read_any
@@ -537,37 +544,76 @@ def test():
             ['insert', '', 16, 'diff1 ---> diff2', '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster'],
             ['insert', '', 24, 'diff1 ---> diff2', '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'],
             ['replace', 38, 40, 'diff1 ---> diff2', '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'],
-            ['replace', 47, 49, 'diff1 ---> diff2', '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'], #TODO bug
+            ['replace', 47, 49, 'diff1 ---> diff2', '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'],
             ['delete', 56, '', 'diff1 ---> diff2', '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop']]
 
-        print("exists bugs:", list(differ(a,b)) == anser)
-#        print(sorted(differ(a,b))) #TODO
-#        print(sorted(anser))
+        assert(list(differ(a,b)) == anser)
 
-    def nontest_differlist():
-        for x in differ([1,2,3], [1,3,4], skipequal=False):
-            print(x)
-        for x in differ(list("abc"), list("abd"), skipequal=False):
-            print(x)
+    def test_differlist():
+        anser = [['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'VALUE'],
+        ['equal', 1, 1, 1],
+        ['replace', 2, 2, '2 ---> 3'],
+        ['replace', 3, 3, '3 ---> 4']]
+        assert(list(differ([1,2,3], [1,3,4], skipequal=False)) == anser)
 
-    def nontest_differequal():
+        anser = [['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'VALUE'], ['equal', 1, 1, 'a'], ['equal', 2, 2, 'b'], ['replace', 3, 3, 'c ---> d']]
+        assert(list(differ(list("abc"), list("abd"), skipequal=False)) == anser)
+
+    def test_differequal():
         from util import read_any
         f = tdir + "diff1.csv"
         df = read_any(f).head(5)
         assert(list(differ(df, df)) == [])
         lst = list(map(list, df.itertuples()))
-        print(list(differ(lst, lst, skipequal=False)))
+        assert(all(tag == "equal" for i, (tag, *x) in enumerate(differ(lst, lst, skipequal=False)) if i > 0))
 
-
-    def nontest_main():
-        sys.argv.extend([tdir+"diff1.csv", tdir+"diff2.csv"])
+    def stdoutcapture(*args):
+        sio = StringIO()
+        sys.stdout = sio
+        del sys.argv[1:]
+        sys.argv.extend(args)
         main()
+        sio.seek(0)
+        sys.stdout = sys.__stdout__
+        return sio
+
+    def test_default_main():
+        sio = stdoutcapture(tdir+"diff1.csv", tdir+"diff2.csv")
+        assert(Counter(x.split(",")[0] for x in sio) == Counter({'"replace"': 3, '"insert"': 2, '"DIFFTAG"': 1, '"delete"': 1}))
+
+    def test_all_main():
+        sio = stdoutcapture("-a", tdir+"diff1.csv", tdir+"diff2.csv")
+        assert(Counter(x.split(",")[0] for x in sio.readlines()) == Counter({'"equal"': 386, '"replace"': 3, '"insert"': 2, '"DIFFTAG"': 1, '"delete"': 1}))
+
+    def test_encoding_main():
+        sio = stdoutcapture("-e", "cp932", tdir+"diff1.csv", tdir+"diff2.csv")
+        assert(Counter(x.split(",")[0] for x in sio) == Counter({'"replace"': 3, '"insert"': 2, '"DIFFTAG"': 1, '"delete"': 1}))
+
+    def test_sort_main():
+        sio = stdoutcapture("-s", tdir+"diff1.csv", tdir+"diff2.csv")
+        sio.read()
+
+    def test_target_main():
+        sio = stdoutcapture("-t1", "diff1", "-t2", "diff2", tdir+"diff1.xlsx", tdir+"diff2.xlsx")
+        assert(len(sio.readlines()) == 7)
+
+    def test_header_main():
+        sio = stdoutcapture("-H", "0" ,tdir+"diff1.csv", tdir+"diff2.csv")
+        header = next(sio).strip().replace('"', "").split(",")
+        assert(header == ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'mpg', 'cyl', 'displ', 'hp', 'weight', 'accel', 'yr', 'origin', 'name'])
+        assert(Counter(x.split(",")[0] for x in sio) == Counter({'"replace"': 3, '"insert"': 2, '"delete"': 1}))
+
+    def test_key_main():
+        sio = stdoutcapture("-k", "1" ,tdir+"diff1.csv", tdir+"diff2.csv")
+        assert(sio.readlines()[1] == '"insert","","3","10","8","307","130","3504","12","70","1","chevrolet chevelle malibue"\r\n')
+
+        sio = stdoutcapture("-H", "0", "-k", "mpg" ,tdir+"diff1.csv", tdir+"diff2.csv")
+        assert(sio.readlines()[1] == '"insert","","2","10","8","307","130","3504","12","70","1","chevrolet chevelle malibue"\r\n')
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
             func()
 
-
 if __name__ == "__main__":
-    #test()
-    main()
+    test()
+    # main()
