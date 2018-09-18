@@ -1475,8 +1475,10 @@ zipfile.ZipExtFile = ZipExtFile
 
 class _baseFile:
     def lsdir(self, recursive=True):
-        for r in self.__iter__(): #TODO recursive option
+        for r in self.__iter__():
             yield r
+            if recursive is False and "/" in r.name: #TODO test no recursive option
+                raise StopIteration
 
     def tree_file(self, recursive:bool=True, dotfile:bool=False):
         if dotfile:
