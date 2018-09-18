@@ -774,6 +774,8 @@ class Path(type(pathlib.Path())):
                         return PathList(lst)
                     else:
                         args = (entity, *args[1:])
+                elif re.match("^file:/+", entity):
+                    args = (re.sub("^file:/+", "", entity), *args[1:])
                 else:
                     args = (entity, *args[1:])
         if cls is pathlib.Path:
@@ -2104,6 +2106,9 @@ def test():
 
         p = Path(tdir+"test*.zip/test.csv")
         assert(p.is_compress() is True)
+
+        p = Path(geturi(tdir+"test.csv"))
+        assert(p.is_file() is True)
 
     def test_PathList():
         p = Path(tdir+"diff*")

@@ -615,5 +615,5 @@ def test():
             func()
 
 if __name__ == "__main__":
-    test()
-    # main()
+    # test()
+    main()
