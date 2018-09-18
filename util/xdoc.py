@@ -111,6 +111,21 @@ def txt(path_or_buffer):
         for i, line in enumerate(r, 1):
             yield pinfo(path, i, line.rstrip())
 
+
+_handler = {
+    ".ppt" : pptx,
+    ".doc" : docx,
+    ".xls" : xlsx,
+    ".pdf" : pdf,
+    ".txt" : txt,
+}
+def any(path_or_buffer):
+    path = Path(path_or_buffer)
+    ext = path.ext.lower()[:4]
+    func = _handler.get(ext, txt)
+    return func(path_or_buffer)
+    
+
 def test():
     from util.core import tdir
 
@@ -139,6 +154,27 @@ def test():
         for x in txt(f):
             assert(type(x) == pinfo)
 
+    def test_any():
+        f = tdir+"test.pptx"
+        for x in any(f):
+            assert(type(x) == pinfo)
+
+        f = tdir+"test.docx"
+        for x in any(f):
+            assert(type(x) == pinfo)
+
+        f = tdir+'diff1.xlsx'
+        for x in any(f):
+            assert(type(x) == pinfo)
+            
+        f = tdir + "test.pdf"
+        for x in any(f):
+            assert(type(x) == pinfo)
+
+        f = tdir + "test.csv"
+        for x in any(f):
+            assert(type(x) == pinfo)
+    
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
             func()

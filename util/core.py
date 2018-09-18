@@ -762,7 +762,14 @@ class Path(type(pathlib.Path())):
             elif hasattr(args[0], "read") and hasattr(args[0], "name"):
                 args = (args[0].name, *args[1:])
             elif isinstance(args[0], str):
+                r = unuri.match(args[0])
+                if r:
+                    if r.group(1):
+                        args = (r.group(1) + ":" + r.group(2), *args[1:])
+                    else:
+                        args = (r.group(2), *args[1:])
                 entity, content = path_norm(args[0])
+                
                 if re.search("[\*\[\]\?]", entity):
                     lst = []
                     for x in lsdir(entity, recursive=False):
@@ -774,8 +781,6 @@ class Path(type(pathlib.Path())):
                         return PathList(lst)
                     else:
                         args = (entity, *args[1:])
-                elif re.match("^file:/+", entity):
-                    args = (re.sub("^file:/+", "", entity), *args[1:])
                 else:
                     args = (entity, *args[1:])
         if cls is pathlib.Path:
