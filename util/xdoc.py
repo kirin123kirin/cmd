@@ -9,7 +9,6 @@ MIT License
 
 """
 from collections import namedtuple
-from io import StringIO
 import sys
 
 #3rd party
