@@ -22,11 +22,13 @@ from util.core import (
         flatten,
         sorter,
         kwtolist,
+        values_not,
         )
 
 from util.profiler import Profile
 
 import os
+import sys
 from itertools import chain, zip_longest
 from difflib import SequenceMatcher
 from collections import namedtuple
@@ -262,7 +264,7 @@ def differ(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
             if hasattr(ck, "compute"):
                 ck = ck.compute()
             if ck and not skipequal:
-                header = ["DIFFTAG","LEFTLINE#", "RIGHTLINE#"] + [A.columns.tolist()]
+                header = [["DIFFTAG","LEFTLINE#", "RIGHTLINE#"]] + [A.columns.tolist()]
                 return chain(header, (["equal", i, i] + list(x) for i, x in enumerate(A.itertuples(),startidx+1)))
         else:
             ck = (A is B) or (A == B)
@@ -298,7 +300,6 @@ def main():
     from util.dfutil import read_any
     from argparse import ArgumentParser
     import codecs
-    import sys
     import csv
 
     ps = ArgumentParser(prog="differ",
@@ -317,8 +318,8 @@ def main():
          help='output filepath (default `stdout`)')
     padd('-e', '--encoding', type=str, default="cp932",
          help='output fileencoding (default `cp932`)')
-    padd('-s', '--sort', action='store_true', default=False,
-         help='before diff file Sorted.')
+    padd('-s', '--sort', action='store_false', default=True,
+         help='Need Sort?')
     padd('-H', '--header', type=int, default=None,
          help='file no header (default `None`) (start sequence `0`)')
     padd('-k', '--key', type=str, default=None,
@@ -368,6 +369,19 @@ def main():
     else:
         b = read_any(args.file2[0], header=args.header, usecols2=usecols2)
 
+    # TODO elegant
+    if args.key1 and args.key2 and args.key1 != args.key2:
+        ka = kwtolist(args.key1)
+        kb = kwtolist(args.key2)
+        a = a[ka + values_not(a.columns.tolist(), ka)]
+        b = b[kb + values_not(b.columns.tolist(), kb)]
+        if all(isinstance(k, int) for k in ka):
+            a.columns = [str(x) for x in range(len(a.columns))]
+            args.key1 = [str(x) for x in range(len(ka))]
+        if all(isinstance(k, int) for k in kb):
+            b.columns = [str(x) for x in range(len(b.columns))]
+            args.key2 = [str(x) for x in range(len(kb))]
+
     f = codecs.open(args.outfile, mode="w", encoding=args.encoding) if args.outfile else sys.stdout
 
     writer = csv.writer(f, quoting=csv.QUOTE_ALL)
@@ -384,7 +398,6 @@ def main():
 """
 def test():
     from util.core import tdir
-    import sys
     from io import StringIO
     from collections import Counter
 
@@ -605,15 +618,22 @@ def test():
 
     def test_key_main():
         sio = stdoutcapture("-k", "1" ,tdir+"diff1.csv", tdir+"diff2.csv")
-        assert(sio.readlines()[1] == '"insert","","3","10","8","307","130","3504","12","70","1","chevrolet chevelle malibue"\r\n')
+        assert(sio.readlines()[2] == '"delete","3","","b","8","307","130","3504","12","70","1","chevrolet chevelle malibue"\r\n')
 
         sio = stdoutcapture("-H", "0", "-k", "mpg" ,tdir+"diff1.csv", tdir+"diff2.csv")
-        assert(sio.readlines()[1] == '"insert","","2","10","8","307","130","3504","12","70","1","chevrolet chevelle malibue"\r\n')
+        assert(sio.readlines()[2] == '"delete","2","","b","8","307","130","3504","12","70","1","chevrolet chevelle malibue"\r\n')
+
+    def test_key1_2_main():
+        sio = stdoutcapture("-k1", "3" ,"-k2", "4" ,tdir+"diff1.csv", tdir+"diff2.csv")
+        for x in sio:
+            if "replace" in x:
+                assert(x == '"replace","205","3","130","20 ---> 10","4 ---> 8","102 ---> 307","3150 ---> 3504","15.7 ---> 12","76 ---> 70","2 ---> 1","volvo 245 ---> chevrolet chevelle malibue"\r\n')
+                break
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
             func()
 
 if __name__ == "__main__":
-    # test()
-    main()
+    test()
+    # main()
