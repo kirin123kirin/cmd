@@ -97,7 +97,7 @@ def minify(inputpath, outputpath=None):
         return shutil.copy(inputpath, outputpath)
 
 UPX = which("upx.exe") + " --best "
-notupx = re.compile(r"(\\vcamp.+dll|\\wininst.+.exe|\\libgcc.+\.dll|\\qwindows\.dll|\\platforms\\.*\.dll|PyQt5\\.*\.dll|tk.*.dll|\\PyInstaller\\|\\pythonwin\\|\\win32\\|\\pywin32_system32\\|\\gui(?:-[36][24])?\.exe)")
+notupx = re.compile(r"(indexing.+\.pyd|\\utils.+\.pyd|\\vcamp.+dll|\\wininst.+.exe|\\libgcc.+\.dll|\\qwindows\.dll|\\platforms\\.*\.dll|PyQt5\\.*\.dll|tk.*.dll|\\PyInstaller\\|\\pythonwin\\|\\win32\\|\\pywin32_system32\\|\\gui(?:-[36][24])?\.exe)")
 def upx(inputpath, outputpath=None):
     ext = os.path.splitext(inputpath)[-1].lower()
     if ext in [".exe", ".dll", ".pyd"] and not notupx.search(inputpath):

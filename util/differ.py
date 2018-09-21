@@ -199,9 +199,11 @@ def helperdiff2D(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
         yield flatten(r)
 
 def diffauto(a, b, skipequal=True, startidx=1):
-    dka = {tuple(v):k for k, v in Profile(a.head(10), top=None).diffkey.items()}
-    dkb = {tuple(v):k for k, v in Profile(b.head(10), top=None).diffkey.items()}
-    diffkeys=sorted((dka[x], x) for x in set(dka.keys()) & set(dkb.keys()))
+    cola = a.columns.tolist()
+    colb = b.columns.tolist()
+    dka = {tuple(cola.index(z) for z in v):k for k, v in Profile(a.head(10), top=None).diffkey.items()}
+    dkb = {tuple(colb.index(z) for z in v) for v in Profile(b.head(10), top=None).diffkey.values()}
+    diffkeys=sorted((dka[x], x) for x in set(dka) & dkb)
 
     for i, (_, key) in enumerate([(None, None)] + diffkeys):
         if i == 0:
@@ -360,21 +362,32 @@ def main():
             sys.exit(1)
 
     if target1:
-        a = read_any(args.file1[0], target1, header=args.header, usecols1=usecols1)
+        a = read_any(args.file1[0], target1, header=args.header, usecols=usecols1)
     else:
-        a = read_any(args.file1[0], header=args.header, usecols1=usecols1)
+        a = read_any(args.file1[0], header=args.header, usecols=usecols1)
 
     if target2:
-        b = read_any(args.file2[0], target2, header=args.header, usecols2=usecols2)
+        b = read_any(args.file2[0], target2, header=args.header, usecols=usecols2)
     else:
-        b = read_any(args.file2[0], header=args.header, usecols2=usecols2)
+        b = read_any(args.file2[0], header=args.header, usecols=usecols2)
 
     # TODO elegant
     if args.key1 and args.key2 and args.key1 != args.key2:
+        cola = a.columns.tolist()
+        colb = b.columns.tolist()
         ka = kwtolist(args.key1)
         kb = kwtolist(args.key2)
-        a = a[ka + values_not(a.columns.tolist(), ka)]
-        b = b[kb + values_not(b.columns.tolist(), kb)]
+        ea = ka + values_not(cola, ka)
+        eb = kb + values_not(colb, kb)
+        if isposkey(ka) is False:
+            ka = [cola.index(x) for x in ka]
+            ea = ka + [cola.index(x) for x in values_not(cola, ka)]
+        if isposkey(kb) is False:
+            kb = [colb.index(x) for x in kb]
+            eb = kb + [colb.index(x) for x in values_not(colb, kb)]
+
+        a = a.iloc[:, ea]
+        b = b.iloc[:, eb]
         if all(isinstance(k, int) for k in ka):
             a.columns = [str(x) for x in range(len(a.columns))]
             args.key1 = [str(x) for x in range(len(ka))]
@@ -386,12 +399,22 @@ def main():
 
     writer = csv.writer(f, quoting=csv.QUOTE_ALL)
 
+    if "ka" in locals():
+        def render(val):
+            ret = val[3:]
+            for i, j, x in zip(ka, range(len(ka)), val[3:]):
+                ret[j] = ret[i]
+                ret[i] = x
+            writer.writerow(val[:3] + ret)
+    else:
+        render = writer.writerow
+
     for d in differ(a, b,
                     keya=kwtolist(args.key or args.key1),
                     keyb=kwtolist(args.key or args.key2),
                     sort=args.sort, skipequal=args.all is False):
 
-        writer.writerow(d)
+        render(d)
 
 """
    TestCase below
@@ -627,13 +650,27 @@ def test():
         sio = stdoutcapture("-k1", "3" ,"-k2", "4" ,tdir+"diff1.csv", tdir+"diff2.csv")
         for x in sio:
             if "replace" in x:
-                assert(x == '"replace","205","3","130","20 ---> 10","4 ---> 8","102 ---> 307","3150 ---> 3504","15.7 ---> 12","76 ---> 70","2 ---> 1","volvo 245 ---> chevrolet chevelle malibue"\r\n')
+                assert(x == '"replace","205","3","4 ---> 8","20 ---> 10","130","102 ---> 307","3150 ---> 3504","15.7 ---> 12","76 ---> 70","2 ---> 1","volvo 245 ---> chevrolet chevelle malibue"\r\n')
                 break
+
+    def test_key1_2_name_main():
+        sio = stdoutcapture("-H", "0" ,"-k1", "displ" ,"-k2", "hp" ,tdir+"diff1.csv", tdir+"diff2.csv")
+        for x in sio:
+            if "replace" in x:
+                assert(x == '"replace","204","2","4 ---> 8","20 ---> 10","130","102 ---> 307","3150 ---> 3504","15.7 ---> 12","76 ---> 70","2 ---> 1","volvo 245 ---> chevrolet chevelle malibue"\r\n')
+                break
+
+    def test_usecol_main():
+        sio = stdoutcapture("-u", "1,9" ,tdir+"diff1.csv", tdir+"diff2.csv")
+        next(sio)
+        for x in sio:
+            assert(x == '"replace","3","3","b ---> 10","chevrolet chevelle malibue"\r\n')
+            break
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
             func()
 
 if __name__ == "__main__":
-    test()
-    # main()
+    # test()
+    main()
