@@ -13,6 +13,7 @@ __author__ = "m.yama"
 
 from util.core import (
         listlike,
+        iterhead,
         is1darray,
         isposkey,
         is2darray,
@@ -33,6 +34,7 @@ from itertools import chain, zip_longest
 from difflib import SequenceMatcher
 from collections import namedtuple
 
+from numpy import int64
 
 __all__ = ["differ"]
 
@@ -101,7 +103,6 @@ def iterdiff2D(A, B, compare, skipequal=True, na_value=""):
             na, a = next(A, [-1,None])
         if ib:
             nb, b = next(B, [-1,None])
-
         if b is None:
             if a is None:
                 break
@@ -114,37 +115,48 @@ def iterdiff2D(A, B, compare, skipequal=True, na_value=""):
             if isfirst or skipequal is False:
                 yield dinfo("equal", na, nb, a)
             ia, ib = True, True
-        elif compare(a, b) < 0:
-            yield dinfo("delete", na, na_value, a)
-            ia, ib = True, False
-        elif compare(a, b) > 0:
-            yield dinfo("insert", na_value, nb, b)
-            ia, ib = False, True
         else:
-            assert compare(a, b) == 0
-            yield dinfo("replace", na, nb, sanitize(a, b))
-            ia, ib = True, True
+            retc = compare(a, b)
+            if retc < 0:
+                yield dinfo("delete", na, na_value, a)
+                ia, ib = True, False
+            elif retc > 0:
+                yield dinfo("insert", na_value, nb, b)
+                ia, ib = False, True
+            else:
+                assert retc == 0
+                yield dinfo("replace", na, nb, sanitize(a, b))
+                ia, ib = True, True
         if isfirst:
             isfirst = False
 
 def compare_build(A, B, keya, keyb, startidx=1):
     def getfunc(o, key):
+        #TODO newer function but bug
         if is1darray(o):
-            return str
-        elif callable(key):
+            return lambda x: x
+        if callable(key):
             return key
-        elif isposkey(key):
-            return lambda x: [x[i] for i in key]
-        elif is2darray(o):
-            if startidx == "infer":
-                r = [o[0].index(k) - 1 for k in key]
-            else:
-                r = [o[0].index(k) for k in key]
-            return lambda x: [x[i] for i in r]
-        elif isdataframe(o):
-            return lambda x: [x[i] for i in [o.columns.tolist().index(k) for k in key]]
+
+        if isdataframe(o):
+            if isposkey(key):
+                return lambda x: [x[i] for i in key]
+            ocol = o.columns.tolist()
+            return lambda x: [x[i] for i in [ocol.index(k) for k in key]]
+
+        if isposkey(key):
+            return lambda x: [x[k] for k in key]
+
+        if hasattr(o, "__next__"):
+            header = iterhead(o)
         else:
-            raise ValueError("Unknown values o is `{}`  key is `{}`".format(type(o), key))
+            header = o[0]
+
+        if startidx == "infer":
+            return lambda x: [x[header.index(k) - 1] for k in key]
+        else:
+            return lambda x: [x[header.index(k)] for k in key]
+
 
     # compare function initialize
     func_a = getfunc(A, keya)
@@ -170,7 +182,6 @@ def helperdiff1D(A, B, sort=True, skipequal=True, startidx=1):
         yield list(r)
 
 def helperdiff2D(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
-
     # parameter initialize
     try:
         keya = keya or range(len(isdataframe(A) and A.columns.tolist() or A[0]))
@@ -397,6 +408,11 @@ def main():
 
     f = codecs.open(args.outfile, mode="w", encoding=args.encoding) if args.outfile else sys.stdout
 
+    if hasattr(a, "columns") and a.columns.dtype == int64:
+        a.columns = a.columns.astype(str)
+    if hasattr(b, "columns") and b.columns.dtype == int64:
+        b.columns = b.columns.astype(str)
+
     writer = csv.writer(f, quoting=csv.QUOTE_ALL)
 
     if "ka" in locals():
@@ -466,16 +482,16 @@ def test():
         a = iterrows([list("abc"), list("def")])
         b = iterrows([list("abc"), list("ddf")])
         c = compare_build(a,b, [0], [0])
-        r = list(iterdiff2D(a, b, c))[0]
+        r = list(iterdiff2D(a, b, c,False))[1]
         assert(r.tag == "replace")
         assert(r.value == ['d', 'e ---> d', 'f'])
 
         a = iterrows([list("abc"), list("def")])
         b = iterrows([list("abc"), list("ddf")])
         c = compare_build(a,b, [1], [1])
-        r = list(iterdiff2D(a, b, c))
-        assert(len(r) == 2)
-        assert(set([r[0].tag, r[1].tag]) == set(["insert", "delete"]))
+        r = list(iterdiff2D(a, b, c,False))
+        assert(len(r) == 3)
+        assert(set([r[1].tag, r[2].tag]) == set(["insert", "delete"]))
 
     def test_helperdiff1D():
         a, b = list("bac"), list("abb")
@@ -667,10 +683,17 @@ def test():
             assert(x == '"replace","3","3","b ---> 10","chevrolet chevelle malibue"\r\n')
             break
 
+    def test_usecol1_2_main():
+        sio = stdoutcapture("-u1", "1,9", "-u2", "1,9" ,tdir+"diff1.csv", tdir+"diff2.csv")
+        next(sio)
+        assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 2, '"insert"': 2, '"delete"': 1}))
+
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
+            print(x,file=sys.stderr,end="")
             func()
+            print("... ok.",file=sys.stderr)
 
 if __name__ == "__main__":
-    # test()
-    main()
+    test()
+    # main()

@@ -43,7 +43,7 @@ __all__ = [
 __mdberrmsg = """
 Not Found ODBC Driver Microsoft Access Driver...
  Please download -> https://www.microsoft.com/ja-jp/download/details.aspx?id=13255
- 
+
  How to windows 64bit OS but 32bit Office..
 
     ########################################
@@ -54,7 +54,7 @@ Not Found ODBC Driver Microsoft Access Driver...
     #           "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Office\14.0\Common\FilesPaths\mso.dll"
     # STEP2 64bit ODBCdriver install:
     #            64 bit Access driver 2010download
-    #              ref. http://www.microsoft.com/en-us/download/details.aspx?displaylang=en&id=13255 
+    #              ref. http://www.microsoft.com/en-us/download/details.aspx?displaylang=en&id=13255
     # STEP3 run command
     #            AccessDatabaseEngine_x64.exe /passive
     # STEP4 delete registry
@@ -124,7 +124,7 @@ def read_sql(sql_or_table, con, *args, **kw):
 
 def read_db(f, sql_or_table=None, uid="", passwd="", *args, **kw):
     sw = {".mdb": con_mdb, ".accdb": con_mdb,
-          ".db": con_sqlite, ".sqlite": con_sqlite, ".sqlite3": con_sqlite}    
+          ".db": con_sqlite, ".sqlite": con_sqlite, ".sqlite3": con_sqlite}
     con, tables = sw[Path(f).ext](f, uid=uid, passwd=passwd)
     return read_sql(sql_or_table or tables, con, *args, **kw)
 
@@ -154,4 +154,3 @@ def test():
 
 if __name__ == "__main__":
     test()
-    

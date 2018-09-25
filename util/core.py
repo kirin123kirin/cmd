@@ -88,7 +88,7 @@ from mimetypes import guess_type, guess_extension, guess_all_extensions
 from collections import deque
 from io import IOBase, StringIO, BytesIO
 from itertools import tee
-from copy import copy
+from copy import deepcopy
 from six import string_types
 
 import pathlib
@@ -455,7 +455,7 @@ def isposkey(key):
 
 def iterhead(iterator, n=1):
     if hasattr(iterator, "__next__") and n > 0 and isinstance(n, int):
-        it = copy(iterator)
+        it = deepcopy(iterator)
         if n == 1:
             head = next(it)
         elif n > 1:
@@ -769,7 +769,7 @@ class Path(type(pathlib.Path())):
                     else:
                         args = (r.group(2), *args[1:])
                 entity, content = path_norm(args[0])
-                
+
                 if re.search("[\*\[\]\?]", entity):
                     lst = []
                     for x in lsdir(entity, recursive=False):
