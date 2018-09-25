@@ -556,7 +556,7 @@ def listlike(iterator):
         def __len__(self):
             if self._length is None:
                 self._iter, root_copy = tee(self._iter)
-                self._length = sum(1 for _ in root_copy)
+                self._length = len(self._cache) + sum(1 for _ in root_copy)
                 del root_copy
             return self._length
         def cacheclear(self):
@@ -2119,7 +2119,7 @@ def test():
 
     def test_PathList():
         p = Path(tdir+"diff*")
-        assert(len(p) == 4)
+        assert(len(p) == 6)
         assert(all(isinstance(x, Path) for x in p))
         p = Path(tdir+"diff*.csv")
         assert(p.sep == [",", ","])

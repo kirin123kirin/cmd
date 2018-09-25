@@ -69,8 +69,8 @@ def iterdiff1D(A, B, skipequal=True, na_value=""):
     _A, _B = listlike(A), listlike(B)
     seq = SequenceMatcher(None, _A, _B , autojunk=False)
     nul = [None, None]
-    i = 0
-    for group in seq.get_grouped_opcodes():
+
+    def seqm(group):
         for tag, i1, i2, j1, j2 in group:
             lon = zip_longest(_A[i1:i2], _B[j1:j2], fillvalue=nul)
             for (i, a), (j, b) in lon:
@@ -84,12 +84,17 @@ def iterdiff1D(A, B, skipequal=True, na_value=""):
                     yield dinfo("delete", i, na_value, a)
                 else:
                     yield dinfo("replace", i, j, sanitize(a, b))
-
-                i += 1
+    
+    i = 0
+    for group in seq.get_grouped_opcodes():
+        for g in seqm(group):
+            yield g
+            i += 1
+    # for allmatch case
     if i == 0 and skipequal is False:
-        if list(_A) == list(_B):
-            for i, _a in _A:
-                yield dinfo("equal",i,i,_a)
+        seq = SequenceMatcher(None, _A, _B , autojunk=False)
+        for g in seqm(seq.get_opcodes()):
+            yield g
 
 
 def iterdiff2D(A, B, compare, skipequal=True, na_value=""):
@@ -697,7 +702,7 @@ def test():
         next(sio)
         assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 2, '"insert"': 2, '"delete"': 1}))
 
-    def debug_test_target_main():
+    def test_target_main():
         sio = stdoutcapture("-t", "Sheet1",tdir+"diff3.xlsx", tdir+"diff4.xlsx")
         next(sio)
         assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 3, '"insert"': 2, '"delete"': 1}))
@@ -708,11 +713,11 @@ def test():
         assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 3, '"insert"': 2, '"delete"': 1}))
 
     for x, func in list(locals().items()):
-        if x.startswith("debug_") and callable(func):
+        if x.startswith("test_") and callable(func):
             print(x,file=sys.stderr,end="")
             func()
             print("... ok.",file=sys.stderr)
 
 if __name__ == "__main__":
-    test()
-    # main()
+    #test()
+    main()
