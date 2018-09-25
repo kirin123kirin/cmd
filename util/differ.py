@@ -69,6 +69,7 @@ def iterdiff1D(A, B, skipequal=True, na_value=""):
     _A, _B = listlike(A), listlike(B)
     seq = SequenceMatcher(None, _A, _B , autojunk=False)
     nul = [None, None]
+    i = 0
     for group in seq.get_grouped_opcodes():
         for tag, i1, i2, j1, j2 in group:
             lon = zip_longest(_A[i1:i2], _B[j1:j2], fillvalue=nul)
@@ -83,6 +84,12 @@ def iterdiff1D(A, B, skipequal=True, na_value=""):
                     yield dinfo("delete", i, na_value, a)
                 else:
                     yield dinfo("replace", i, j, sanitize(a, b))
+
+                i += 1
+    if i == 0 and skipequal is False:
+        if list(_A) == list(_B):
+            for i, _a in _A:
+                yield dinfo("equal",i,i,_a)
 
 
 def iterdiff2D(A, B, compare, skipequal=True, na_value=""):
@@ -132,7 +139,6 @@ def iterdiff2D(A, B, compare, skipequal=True, na_value=""):
 
 def compare_build(A, B, keya, keyb, startidx=1):
     def getfunc(o, key):
-        #TODO newer function but bug
         if is1darray(o):
             return lambda x: x
         if callable(key):
@@ -477,6 +483,9 @@ def test():
         assert(len(r) == 1)
         assert(r[0].tag == "delete" and r[0].indexb == "--")
 
+        r = list(iterdiff1D(enumerate(list("a")), enumerate(list("a")),False))
+        assert(r == [dinfo(tag='equal', indexa=0, indexb=0, value='a')])
+
 
     def test_iterdiff2D():
         a = iterrows([list("abc"), list("def")])
@@ -688,8 +697,18 @@ def test():
         next(sio)
         assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 2, '"insert"': 2, '"delete"': 1}))
 
+    def debug_test_target_main():
+        sio = stdoutcapture("-t", "Sheet1",tdir+"diff3.xlsx", tdir+"diff4.xlsx")
+        next(sio)
+        assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 3, '"insert"': 2, '"delete"': 1}))
+
+    def test_target1_2_main():
+        sio = stdoutcapture("-t1", "diff1", "-t2", "diff2" ,tdir+"diff3.xlsx", tdir+"diff4.xlsx")
+        next(sio)
+        assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 3, '"insert"': 2, '"delete"': 1}))
+
     for x, func in list(locals().items()):
-        if x.startswith("test_") and callable(func):
+        if x.startswith("debug_") and callable(func):
             print(x,file=sys.stderr,end="")
             func()
             print("... ok.",file=sys.stderr)
