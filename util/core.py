@@ -526,43 +526,79 @@ def iterrows(o, start=1):
             return iter(o)
 
 
-def listlike(iterator):
+def listlike(iterator, callback=None):
     class Slice(object):
-        def __init__(self, iter):
-            self._iter, self._root = tee(iter)
+        def __init__(self, iterator, callback=None):
+            if callback is None:
+                self._iter = iterator
+            else:
+                self._iter = map(callback, iterator)
+            self.__root = None
             self._length = None
             self._cache = []
+        
+        @property
+        def _root(self):
+            if self.__root is None:
+                self.__root = deepcopy(self._iter)
+            return self.__root
+            
         def __getitem__(self, k):
             if isinstance(k, slice):
-                return [self._get_value(i) for i in range(k.start, k.stop, k.step or 1)]
+                if (k.start or 0) < 0 or (k.stop or -1) < 0:
+                    self._get_value(-1)
+                    return self._cache[k.start: k.stop: k.step or 1]
+                try:
+                    return [self._get_value(i) for i in range(k.start or 0, k.stop, k.step or 1)]
+                except StopIteration:
+                    return self._cache[k.start: k.stop: k.step or 1]
+            
             return self._get_value(k)
+        
         def _get_value(self, k):
             cache_len = len(self._cache)
 
-            if k < cache_len:
+            if k >= 0 and k < cache_len:
                 return self._cache[k]
 
-            self._root, root_copy = tee(self._root)
             ret = None
-
-            for _ in range(k - cache_len + 1):
-                ret = next(root_copy)
-                self._cache.append(ret)
-
-            self._root = root_copy
+            
+            if k < 0:
+                self._cache.extend(list(self._root))
+                ret = self._cache[k]
+            else:
+                for _ in range(k - cache_len + 1):
+                    ret = next(self._root)
+                    self._cache.append(ret)
             return ret
+
         def __next__(self):
             return next(self._iter)
+        
         def __len__(self):
             if self._length is None:
-                self._iter, root_copy = tee(self._iter)
+                root_copy = deepcopy(self._root)
                 self._length = len(self._cache) + sum(1 for _ in root_copy)
                 del root_copy
             return self._length
+        
         def cacheclear(self):
             self._cache = []
+            self.__root = []
+        
+        def __del__(self):
+            self.cacheclear()
+            
+    if isinstance(iterator, (tuple, list)):
+        if callback is None:
+            return iterator
+        else:
+            return type(iterator)(callback(x) for x in iterator)
+    elif hasattr(iterator, "__next__"):
+        return Slice(iterator, callback)
+    else:
+        raise ValueError("Unknown type is {}".format(iterator))
 
-    return Slice(iterator)
 
 def kwtolist(key, start=1):
     if not key:
@@ -2382,6 +2418,18 @@ def test():
         assert(len(b) == 3)
         assert(b[0] == 1)
         assert(list(b) == [1,2,3])
+
+        a = iter(list("abcd"))
+        r = listlike(a)
+        assert(r[0] == "a")
+        assert(r[0] == "a")
+        assert(len(r) == 4)
+        assert(r[1:] == list("bcd"))
+        assert(r[:-1] == list("abc"))
+        assert(r[-1:] == ["d"])
+        assert(r[:3] == list("abc"))
+        assert(list(a) == list("abcd"))
+        assert(list(a) == [])
 
     def test_kwtolist():
         assert(kwtolist("a,b,c") == list("abc"))

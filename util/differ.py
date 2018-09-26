@@ -31,7 +31,12 @@ from util.profiler import Profile
 import os
 import sys
 from itertools import chain, zip_longest
-from difflib import SequenceMatcher
+try:
+    from cdifflib import CSequenceMatcher as SequenceMatcher
+except ModuleNotFoundError:
+    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install cdifflib\n")
+    from difflib import SequenceMatcher
+
 from collections import namedtuple
 
 from numpy import int64
@@ -49,7 +54,7 @@ def sanitize(a, b):
             return "ADD ---> {}".format(y)
         else:
             return "{} ---> {}".format(x, y)
-    if isinstance(a, list) and isinstance(b, list):
+    if isinstance(a, (tuple, list)) and isinstance(b, (tuple, list)):
         return [comp(*x) for x in zip_longest(a, b, fillvalue="")]
     else:
         return comp(a, b)
@@ -84,7 +89,7 @@ def iterdiff1D(A, B, skipequal=True, na_value=""):
                     yield dinfo("delete", i, na_value, a)
                 else:
                     yield dinfo("replace", i, j, sanitize(a, b))
-    
+
     i = 0
     for group in seq.get_grouped_opcodes():
         for g in seqm(group):
@@ -702,7 +707,7 @@ def test():
         next(sio)
         assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 2, '"insert"': 2, '"delete"': 1}))
 
-    def test_target_main():
+    def test_target_common_main():
         sio = stdoutcapture("-t", "Sheet1",tdir+"diff3.xlsx", tdir+"diff4.xlsx")
         next(sio)
         assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 3, '"insert"': 2, '"delete"': 1}))
@@ -719,5 +724,5 @@ def test():
             print("... ok.",file=sys.stderr)
 
 if __name__ == "__main__":
-    #test()
-    main()
+    test()
+    # main()
