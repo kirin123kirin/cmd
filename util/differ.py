@@ -782,5 +782,5 @@ def test():
             print("... ok.",file=sys.stderr)
 
 if __name__ == "__main__":
-    test()
-    # main()
+    #test()
+    main()
