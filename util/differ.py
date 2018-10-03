@@ -31,11 +31,7 @@ from util.profiler import Profile
 import os
 import sys
 from itertools import chain, zip_longest
-try:
-    from cdifflib import CSequenceMatcher as SequenceMatcher
-except ModuleNotFoundError:
-    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install cdifflib\n")
-    from difflib import SequenceMatcher
+from difflib import SequenceMatcher
 
 from collections import namedtuple
 
@@ -60,6 +56,68 @@ def sanitize(a, b):
         return comp(a, b)
 
 dinfo = namedtuple("DiffInfo", ("tag", "indexa", "indexb", "value"))
+
+def smopcodes(s):
+    i = 0
+    for go in s.get_grouped_opcodes():
+        for g in go:
+            yield g
+            i += 1
+    if i == 0:
+        for g in s.get_opcodes():
+            yield g
+
+def iterdiff(A, B, keya=None, keyb=None,
+            skipequal=True, compare=sanitize, na_value=None):
+    if keya:
+        a = listlike(sortedrows(A, keya), lambda x: keya(x[1]))
+    else:
+        a = listlike(iterrows(A))
+
+    if keyb:
+        b = listlike(sortedrows(B, keyb), lambda x: keyb(x[1]))
+    else:
+        b = listlike(iterrows(B))
+
+    s = SequenceMatcher(None , a, b, False)
+
+    if keya or keyb:
+        if keya:
+            a = a._cache
+        if keyb:
+            b = b._cache
+
+        for tag, i1, i2, j1, j2 in smopcodes(s):
+            for (i, _a), (j, _b) in zip_longest(a[i1:i2], b[j1:j2], fillvalue=na_value):
+                if tag == "equal" and _a == _b:
+                    if skipequal:
+                        continue
+                    yield dinfo("equal", i, j, _a)
+                elif tag in "delete":
+                    yield dinfo(tag, i, na_value, _a)
+                elif tag == "insert":
+                    yield dinfo(tag, na_value, j, _b)
+                elif tag == "replace":
+                    yield dinfo("delete", i, na_value, _a)
+                    yield dinfo("insert", na_value, j, _b)
+                else:
+                    yield dinfo("replace", i, j, compare(_a, _b))
+    else:
+        for tag, i1, i2, j1, j2 in smopcodes(s):
+            if tag == "equal" and skipequal == True:
+                continue
+            elif tag in ["equal", "delete"]:
+                for i in range(i1, i2):
+                    n = a[i][0]
+                    yield dinfo(tag, n, na_value if tag == "delete" else n, a[i][1:])
+            elif tag == "insert":
+                for i in range(j1, j2):
+                    yield dinfo(tag, na_value, b[i][0], b[i][1:])
+            else:
+                for i, j in zip(range(i1,i2), range(j1, j2)):
+                    yield dinfo(tag, a[i][0], b[j][0], compare(a[i][1:], b[j][1:]))
+
+
 
 def iterdiff1D(A, B, skipequal=True, na_value=""):
     """ 1D data list diffs function

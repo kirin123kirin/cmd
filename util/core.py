@@ -307,26 +307,20 @@ def isnamedtuple(s):
 def values_at(item:iter, k:list):
     if isinstance(item, dict):
         return {x: item[x] for x in set(item) & set(k)}
-    elif isinstance(item, list):
-        if isposkey(k):
-            return [item[x] for x in k]
-        else:
-            return [x for x in item if x in k]
     elif isnamedtuple(item):
         if isposkey(k):
             return [item[x] for x in k]
         else:
             return [item.__getattribute__(x) for x in k]
+    elif isinstance(item, (list, tuple)):
+        if isposkey(k):
+            return [item[x] for x in k]
+        else:
+            return [x for x in item if x in k]
 
 def values_not(item:iter, k:list):
     if isinstance(item, dict):
         return {x: item[x] for x in set(item) - set(k)}
-    elif isinstance(item, list):
-        if isposkey(k):
-            not_idx = set(range(len(item))) - set(k)
-            return [item[x] for x in not_idx]
-        else:
-            return [x for x in item if x not in k]
     elif isnamedtuple(item):
         if isposkey(k):
             not_idx = set(range(len(item))) - set(k)
@@ -334,6 +328,12 @@ def values_not(item:iter, k:list):
         else:
             not_idx = set(item._fields) - set(k)
             return [item.__getattribute__(x) for x in not_idx]
+    elif isinstance(item, (list, tuple)):
+        if isposkey(k):
+            not_idx = set(range(len(item))) - set(k)
+            return [item[x] for x in not_idx]
+        else:
+            return [x for x in item if x not in k]
 
 def vmfree():
     """ Virtual memory free size"""
@@ -467,53 +467,73 @@ def iterhead(iterator, n=1):
 
 def is1darray(o):
     t = iterhead(o) if hasattr(o, "__next__") else o
-    return "Series" in str(type(t)) or isinstance(t, list) and not isinstance(t[0], list)
+    return "Series" in str(type(t)) or isinstance(t, (list, tuple)) and not isinstance(t[0], (list, tuple))
 
 def is2darray(o):
     t = iterhead(o) if hasattr(o, "__next__") else o
-    return isinstance(t, list) and isinstance(t[0], list)
+    return isinstance(t, (list, tuple)) and isinstance(t[0], (list, tuple))
 
 def isdataframe(o):
     return "DataFrame" in str(type(o))
 
-def sortedrows(o, key=None, start=1):
+def sortedrows(o, key=None, start=1, callback=list, header=True):
     """
     Return: sorted 2d generator -> tuple(rownumber, row)
     """
     if is1darray(o):
         return sorter(iterrows(o, start), key=key or (lambda x: x[1]))
 
-    rows = iterrows(o, start)
-    i, header = next(rows)
+    rows = iterrows(o, start, callback=callback)
+    if header:
+        i, head = next(rows)
 
-    if key:
-        pos = key if isposkey(key) else [header.index(k) for k in key]
-        return chain([(i, header)], sorter(rows, key=lambda x: [x[1][k] for k in pos]))
+        if key:
+            if callable(key):
+                return chain([[i, head]], sorter(rows, key=lambda x: key(x[1])))
+            pos = key if isposkey(key) else [head.index(k) for k in key]
+            return chain([[i, head]], sorter(rows, key=lambda x: [x[1][k] for k in pos]))
+        else:
+            return chain([[i, head]], sorter(rows, key=lambda x: x[1]))
     else:
-        return chain([(i, header)], sorter(rows))
+        if key:
+            if callable(key):
+                return sorter(rows, key=lambda x: key(x[1]))
+            return sorter(rows, key=lambda x: [x[1][k] for k in key])
+        else:
+            return sorter(rows, key=lambda x: x[1])
 
-def iterrows(o, start=1):
+def iterrows(o, start=1, callback=list):
     """
     Return: 2d generator -> tuple(rownumber, row)
     """
 
     if isdataframe(o):
         if isinstance(start, int):
-            rows = (list(x[1:]) for x in o.fillna("").itertuples())
+            rows = (callback(x[1:]) for x in o.fillna("").itertuples())
             header = ([start, list(o.columns)],)
-            return chain(header, enumerate(rows, start+1))
+            return chain(header, iter([i, callback(x)] for i,x in enumerate(rows, start+1)))
         elif start == "infer":
-            rows = ([x[0], list(x[1:])] for x in o.fillna("").itertuples(False))
-            header = ([1, list(o.columns)],)
+            rows = ([x[0], callback(x[1:])] for x in o.fillna("").itertuples(False))
+            header = ([1, callback(o.columns)],)
             return chain(header, rows)
         elif hasattr(start, "__iter__"):
-            rows = (list(x[1:]) for x in o.fillna("").itertuples())
-            header = ([1, list(o.columns)],)
+            rows = (callback(x[1:]) for x in o.fillna("").itertuples())
+            header = ([1, callback(o.columns)],)
             return chain(header, zip_longest(start, rows))
         else:
-            rows = (list(x) for x in o.fillna("").itertuples(False, None))
-            header = [list(o.columns)]
+            rows = (callback(x) for x in o.fillna("").itertuples(False, None))
+            header = [callback(o.columns)]
             return chain(header, rows)
+    elif is2darray(o):
+        if isinstance(start, int):
+            return iter([i, callback(x)] for i, x in enumerate(o, start))
+        elif start == "infer":
+            header = [[1, callback(o[0][1:])]]
+            return chain(header, ([x[0], callback(x[1:])] for x in o[1:]))
+        elif hasattr(start, "__iter__"):
+            return zip_longest(start, map(callback,o))
+        else:
+            return iter(callback(x) for x in o)
     else:
         if isinstance(start, int):
             return enumerate(o, start)
@@ -529,20 +549,18 @@ def iterrows(o, start=1):
 def listlike(iterator, callback=None):
     class Slice(object):
         def __init__(self, iterator, callback=None):
-            if callback is None:
-                self._iter = iterator
-            else:
-                self._iter = map(callback, iterator)
+            self._iter = iterator
+            self.callback = callback or (lambda x: x)
             self.__root = None
             self._length = None
             self._cache = []
-        
+
         @property
         def _root(self):
             if self.__root is None:
                 self.__root = deepcopy(self._iter)
             return self.__root
-            
+
         def __getitem__(self, k):
             if isinstance(k, slice):
                 if (k.start or 0) < 0 or (k.stop or -1) < 0:
@@ -552,17 +570,17 @@ def listlike(iterator, callback=None):
                     return [self._get_value(i) for i in range(k.start or 0, k.stop, k.step or 1)]
                 except StopIteration:
                     return self._cache[k.start: k.stop: k.step or 1]
-            
+
             return self._get_value(k)
-        
+
         def _get_value(self, k):
             cache_len = len(self._cache)
 
             if k >= 0 and k < cache_len:
-                return self._cache[k]
+                return self.callback(self._cache[k])
 
             ret = None
-            
+
             if k < 0:
                 self._cache.extend(list(self._root))
                 ret = self._cache[k]
@@ -570,26 +588,28 @@ def listlike(iterator, callback=None):
                 for _ in range(k - cache_len + 1):
                     ret = next(self._root)
                     self._cache.append(ret)
-            return ret
+            return self.callback(ret)
 
         def __next__(self):
-            return next(self._iter)
-        
+            return self.callback(next(self._iter))
+
         def __len__(self):
             if self._length is None:
                 root_copy = deepcopy(self._root)
                 self._length = len(self._cache) + sum(1 for _ in root_copy)
                 del root_copy
             return self._length
-        
+
         def cacheclear(self):
             self._cache = []
             self.__root = []
-        
+
         def __del__(self):
             self.cacheclear()
-            
-    if isinstance(iterator, (tuple, list)):
+
+    if isinstance(iterator, Slice):
+        return iterator
+    elif isinstance(iterator, (tuple, list)):
         if callback is None:
             return iterator
         else:
@@ -603,7 +623,7 @@ def listlike(iterator, callback=None):
 def kwtolist(key, start=1):
     if not key:
         return
-    if isinstance(key, list):
+    if isinstance(key, (list, tuple)):
         return key
     elif re.search("[^0-9,\-]", key):
         return key.split(",")
@@ -659,7 +679,7 @@ class PathList(list):
                        "quoting", "doublequote", "delimiter", "quotechar"]
 
     def __init__(self, initlist=None):
-        if isinstance(initlist, list):
+        if isinstance(initlist, (list, tuple)):
             initlist = flatten(initlist)
         elif isinstance(initlist, Path):
             initlist = [initlist]
@@ -2378,6 +2398,8 @@ def test():
     def test_is2darray():
         assert(is2darray([1,2]) is False)
         assert(is2darray([[1],[2]]))
+        assert(is2darray([tuple("abc"), tuple("def")]))
+        assert(is2darray((tuple("abc"), tuple("def"))))
 
     def test_isdataframe():
         import pandas as pd
@@ -2392,12 +2414,19 @@ def test():
         assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [(4, [1]), (2, [2]), (1, [3]), (3, [5])])
         assert(list(sortedrows(iter([[1,3],[2,2],[3,5],[4,1]]), lambda x: x[1][1])) == [(4, [4, 1]), (2, [2, 2]), (1, [1, 3]), (3, [3, 5])])
         assert(list(sortedrows(iter([[3],[2],[5],[1]]), start=0)) == [(3, [1]), (1, [2]), (0, [3]), (2, [5])])
+        assert(list(sortedrows([[3,3],[2,2],[1,1]], header=False)) == [[3, [1, 1]], [2, [2, 2]], [1, [3, 3]]])
+        assert(list(sortedrows([[3,3],[2,2],[1,1]], header=True)) == [[1, [3, 3]], [3, [1, 1]], [2, [2, 2]]])
+        assert(list(sortedrows([[3,"b"],[2,"a"],[1,"c"]], header=False, key=lambda x: x[1])) == [[2, [2, 'a']], [1, [3, 'b']], [3, [1, 'c']]])
+        assert(list(sortedrows([[3,"b"],[2,"c"],[1,"a"]], header=True, key=lambda x: x[1])) == [[1, [3, 'b']], [3, [1, 'a']], [2, [2, 'c']]])
+
 
     def test_iterrows():
         from util.dfutil import read_any
         a = iter(list("abc"))
         h = iterrows(a,None)
         assert(list(h) == ['a', 'b', 'c'])
+        assert(list(iterrows([tuple("abc"), tuple("def")])) == [[1, ['a', 'b', 'c']], [2, ['d', 'e', 'f']]])
+        assert(list(iterrows([tuple("abc"), tuple("def")])) == [[1, ['a', 'b', 'c']], [2, ['d', 'e', 'f']]])
 
         f = tdir + "diff1.csv"
         a = read_any(f).head(3)
