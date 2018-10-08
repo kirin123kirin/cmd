@@ -87,8 +87,7 @@ import fnmatch
 from mimetypes import guess_type, guess_extension, guess_all_extensions
 from collections import deque
 from io import IOBase, StringIO, BytesIO
-from itertools import tee
-from copy import deepcopy,copy
+from copy import deepcopy
 from six import string_types
 
 import pathlib
@@ -479,7 +478,7 @@ def isdataframe(o):
 def sortedrows(o, key=None, start=1, callback=list, header=False):
     """
     Return: sorted 2d generator -> tuple(rownumber, row)
-    """    
+    """
     rows = iterrows(o, start, callback=callback)
     if header:
         i, head = next(rows)
@@ -526,7 +525,7 @@ def iterrows(o, start=1, callback=flatten):
         o = chain(head, o)
     else:
         head = [o[0]]
-    
+
     if is2darray(head):
         if isinstance(start, int):
             return iter([i, callback(x)] for i, x in enumerate(o, start))

@@ -112,7 +112,7 @@ class Differ(object):
         self.existsusecol = (usecola or usecolb) is not None
         self._usecola_func = self._usecolb_func = None
 
-        self.unmatch_count_allow=1
+        self.unmatch_count_allow = 1
         self._compute = None
 
     @property
@@ -211,7 +211,7 @@ class Differ(object):
                     pass
                 else:
                     if use_a == use_b or \
-                        len(a) + len(b) > 2 and \
+                        len(a) + len(b) > self.unmatch_count_allow * 2 and \
                         sum(1 for x in zip_longest(a, b) if x[0] != x[1]) <= self.unmatch_count_allow:
                         yield dinfo("replace", na, nb, a, b)
                         ia, ib = True, True
@@ -271,6 +271,7 @@ def diffauto(a, b, sorted=False, skipequal=True, startidx=1, header=True, usecol
     for i, (_, key) in enumerate([(None, None)] + diffkeys):
         if i == 0:
             r = Differ(a, b, sorted=sorted, skipequal=skipequal, startidx=startidx, header=True, usecola=usecola, usecolb=usecolb)
+            r.unmatch_count_allow = 0
             reta, retb = [[dummy, *cola]], [[dummy, *colb]]
         else:
             r = Differ(reta.copy(), retb.copy(), keya=key, keyb=key, skipequal=skipequal, startidx="infer", header=True, usecola=usecola, usecolb=usecolb)
@@ -503,14 +504,14 @@ def test():
         r = list(Differ(a,b,keya=[0,2], keyb=[0,2],usecola=[0,2],usecolb=[0,1,2], header=False))
         pe(r)
 
-    def debug_test_usecol_main():
-        sio = stdoutcapture("-u", "9,1" ,tdir+"diff1.csv", tdir+"diff2.csv")
+    def test_usecol_main():
+        sio = stdoutcapture("-u", "1,9" ,tdir+"diff1.csv", tdir+"diff2.csv")
         next(sio)
         for x in sio:
             assert(x == '"replace","3","3","b ---> 10","chevrolet chevelle malibue"\r\n')
             break
 
-    def debug_test_usecol1_2_main():
+    def test_usecol1_2_main():
         sio = stdoutcapture("-u1", "1,9", "-u2", "1,9" ,tdir+"diff1.csv", tdir+"diff2.csv")
         next(sio)
         assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 2, '"insert"': 2, '"delete"': 1}))
@@ -655,7 +656,8 @@ def test():
         b = read_any(tdir + "diff2.xlsx")
 
         r = list(dictdiffer(a, b))
-        assert(r == [
+
+        assert(sorted(r) == sorted([
                 ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'TARGET', 'mpg', 'cyl', 'displ', 'hp', 'weight', 'accel', 'yr', 'origin', 'name'],
                 ['replace', 47, 49, 'diff1 ---> diff2', '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'],
                 ['replace', 38, 40, 'diff1 ---> diff2', '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'],
@@ -663,7 +665,7 @@ def test():
                 ['delete', 56, '', 'diff1 ---> diff2', '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop'],
                 ['insert', '', 24, 'diff1 ---> diff2', '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'],
                 ['insert', '', 16, 'diff1 ---> diff2', '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster']
-                ]
+                ])
             )
 
     def test_differcsv():
