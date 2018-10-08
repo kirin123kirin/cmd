@@ -36,6 +36,7 @@ from numpy import int64
 __all__ = ["differ"]
 
 
+
 def sanitize(a, b):
     def comp(x, y):
         if x == y:
@@ -73,7 +74,10 @@ def tokey(key=None, default=lambda x: x, columns=None):
         if pos:
             def values_at_key(x):
                 if x:
-                    return values_at(x, pos)
+                    try:
+                        return values_at(x, pos)
+                    except ValueError:
+                        raise ValueError("Unknown column is `{}`.\n            But key not in `{}`.".format(columns, key))
 
             return values_at_key
 
@@ -386,6 +390,8 @@ def main():
          help='output filepath (default `stdout`)')
     padd('-e', '--encoding', type=str, default="cp932",
          help='output fileencoding (default `cp932`)')
+    padd('--sep', type=str, default=",",
+         help='output separator (default ,)')
     padd('-s', '--sorted', action='store_true', default=False,
          help='Input data sorted?')
     padd('-H', '--header', type=int, default=None,
@@ -443,6 +449,7 @@ def main():
         colb = b.columns.tolist()
         ka = kwtolist(args.key1)
         kb = kwtolist(args.key2)
+
         ea = ka + values_not(cola, ka)
         eb = kb + values_not(colb, kb)
         if isposkey(ka) is False:
@@ -454,21 +461,16 @@ def main():
 
         a = a.iloc[:, ea]
         b = b.iloc[:, eb]
-        if all(isinstance(k, int) for k in ka):
+        if any(isinstance(k, int) for k in ka):
             a.columns = [str(x) for x in range(len(a.columns))]
             args.key1 = [str(x) for x in range(len(ka))]
-        if all(isinstance(k, int) for k in kb):
+        if any(isinstance(k, int) for k in kb):
             b.columns = [str(x) for x in range(len(b.columns))]
             args.key2 = [str(x) for x in range(len(kb))]
 
     f = codecs.open(args.outfile, mode="w", encoding=args.encoding) if args.outfile else sys.stdout
 
-    if hasattr(a, "columns") and a.columns.dtype == int64:
-        a.columns = a.columns.astype(str)
-    if hasattr(b, "columns") and b.columns.dtype == int64:
-        b.columns = b.columns.astype(str)
-
-    writer = csv.writer(f, quoting=csv.QUOTE_ALL)
+    writer = csv.writer(f, delimiter=args.sep, quoting=csv.QUOTE_ALL)
 
     if "ka" in locals():
         def render(val):
@@ -494,14 +496,15 @@ def test():
     from io import StringIO
     from collections import Counter
     from util.dfutil import read_any
-
+    
     pe = lambda *x: print("\n", *x, file=sys.stderr)
-
-
+    
     def debug_test_Differ_usecol():
-        a = [list("abc"), list("123"), list("456")]
-        b = [list("abc"), list("123"), list("446")]
-        r = list(Differ(a,b,keya=[0,2], keyb=[0,2],usecola=[0,2],usecolb=[0,1,2], header=False))
+        import pandas as pd
+        a = [list("ac"), list("13"), list("46")]
+        b = [list("ac"), list("13"), list("56")]
+        a = pd.DataFrame(a[1:], columns=a[0])
+        r = list(differ(a,b,usecola=["a","c"],usecolb=["a","c"], header=True))
         pe(r)
 
     def test_usecol_main():
@@ -765,7 +768,6 @@ def test():
         assert(sio.readlines()[2] == '"delete","3","","b","8","307","130","3504","12","70","1","chevrolet chevelle malibue"\r\n')
 
         sio = stdoutcapture("-H", "0", "-k", "mpg" ,tdir+"diff1.csv", tdir+"diff2.csv")
-        #print(sio.getvalue(),file=sys.stderr)
         assert(sio.readlines()[2] == '"delete","2","","b","8","307","130","3504","12","70","1","chevrolet chevelle malibue"\r\n')
 
     def test_key1_2_main():
