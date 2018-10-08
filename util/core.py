@@ -88,7 +88,7 @@ from mimetypes import guess_type, guess_extension, guess_all_extensions
 from collections import deque
 from io import IOBase, StringIO, BytesIO
 from itertools import tee
-from copy import deepcopy
+from copy import deepcopy,copy
 from six import string_types
 
 import pathlib
@@ -476,13 +476,10 @@ def is2darray(o):
 def isdataframe(o):
     return "DataFrame" in str(type(o))
 
-def sortedrows(o, key=None, start=1, callback=list, header=True):
+def sortedrows(o, key=None, start=1, callback=list, header=False):
     """
     Return: sorted 2d generator -> tuple(rownumber, row)
-    """
-    if is1darray(o):
-        return sorter(iterrows(o, start), key=key or (lambda x: x[1]))
-
+    """    
     rows = iterrows(o, start, callback=callback)
     if header:
         i, head = next(rows)
@@ -502,7 +499,7 @@ def sortedrows(o, key=None, start=1, callback=list, header=True):
         else:
             return sorter(rows, key=lambda x: x[1])
 
-def iterrows(o, start=1, callback=list):
+def iterrows(o, start=1, callback=flatten):
     """
     Return: 2d generator -> tuple(rownumber, row)
     """
@@ -511,7 +508,7 @@ def iterrows(o, start=1, callback=list):
         if isinstance(start, int):
             rows = (callback(x[1:]) for x in o.fillna("").itertuples())
             header = ([start, list(o.columns)],)
-            return chain(header, iter([i, callback(x)] for i,x in enumerate(rows, start+1)))
+            return chain(header, ([i, callback(x)] for i,x in enumerate(rows, start+1)))
         elif start == "infer":
             rows = ([x[0], callback(x[1:])] for x in o.fillna("").itertuples(False))
             header = ([1, callback(o.columns)],)
@@ -524,12 +521,18 @@ def iterrows(o, start=1, callback=list):
             rows = (callback(x) for x in o.fillna("").itertuples(False, None))
             header = [callback(o.columns)]
             return chain(header, rows)
-    elif is2darray(o):
+    if hasattr(o, "__next__"):
+        head = [next(o)]
+        o = chain(head, o)
+    else:
+        head = [o[0]]
+    
+    if is2darray(head):
         if isinstance(start, int):
             return iter([i, callback(x)] for i, x in enumerate(o, start))
+            # return map(lambda i,*x: [i, callback(x)], enumerate(o, start))
         elif start == "infer":
-            header = [[1, callback(o[0][1:])]]
-            return chain(header, ([x[0], callback(x[1:])] for x in o[1:]))
+            return ([x[0], callback(x[1:])] for x in o)
         elif hasattr(start, "__iter__"):
             return zip_longest(start, map(callback,o))
         else:
@@ -538,8 +541,7 @@ def iterrows(o, start=1, callback=list):
         if isinstance(start, int):
             return enumerate(o, start)
         elif start == "infer":
-            header = [[1, o[0][1:]]]
-            return chain(header, ([x[0], x[1:]] for x in o[1:]))
+            return ([x[0], x[1:]] for x in o)
         elif hasattr(start, "__iter__"):
             return zip_longest(start, o)
         else:
@@ -618,6 +620,7 @@ def listlike(iterator, callback=None):
         return Slice(iterator, callback)
     else:
         raise ValueError("Unknown type is {}".format(iterator))
+
 
 
 def kwtolist(key, start=1):
@@ -2409,15 +2412,16 @@ def test():
         assert(isdataframe(pd.Series()) is False)
 
     def test_sortedrows():
-        assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [(4, [1]), (2, [2]), (1, [3]), (3, [5])])
-        assert(list(sortedrows(iter([[3],[2],[5],[1]]),start=0)) == [(3, [1]), (1, [2]), (0, [3]), (2, [5])])
-        assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [(4, [1]), (2, [2]), (1, [3]), (3, [5])])
-        assert(list(sortedrows(iter([[1,3],[2,2],[3,5],[4,1]]), lambda x: x[1][1])) == [(4, [4, 1]), (2, [2, 2]), (1, [1, 3]), (3, [3, 5])])
-        assert(list(sortedrows(iter([[3],[2],[5],[1]]), start=0)) == [(3, [1]), (1, [2]), (0, [3]), (2, [5])])
+        assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [[4, [1]], [2, [2]], [1, [3]], [3, [5]]])
+        assert(list(sortedrows(iter([[3],[2],[5],[1]]),start=0)) == [[3, [1]], [1, [2]], [0, [3]], [2, [5]]])
+        assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [[4, [1]], [2, [2]], [1, [3]], [3, [5]]])
+        assert(list(sortedrows(iter([[1,3],[2,2],[3,5],[4,1]]), lambda x: x[1])) == [[4, [4, 1]], [2, [2, 2]], [1, [1, 3]], [3, [3, 5]]])
+        assert(list(sortedrows(iter([[3],[2],[5],[1]]), start=0)) == [[3, [1]], [1, [2]], [0, [3]], [2, [5]]])
         assert(list(sortedrows([[3,3],[2,2],[1,1]], header=False)) == [[3, [1, 1]], [2, [2, 2]], [1, [3, 3]]])
         assert(list(sortedrows([[3,3],[2,2],[1,1]], header=True)) == [[1, [3, 3]], [3, [1, 1]], [2, [2, 2]]])
         assert(list(sortedrows([[3,"b"],[2,"a"],[1,"c"]], header=False, key=lambda x: x[1])) == [[2, [2, 'a']], [1, [3, 'b']], [3, [1, 'c']]])
         assert(list(sortedrows([[3,"b"],[2,"c"],[1,"a"]], header=True, key=lambda x: x[1])) == [[1, [3, 'b']], [3, [1, 'a']], [2, [2, 'c']]])
+
 
 
     def test_iterrows():
@@ -2427,6 +2431,7 @@ def test():
         assert(list(h) == ['a', 'b', 'c'])
         assert(list(iterrows([tuple("abc"), tuple("def")])) == [[1, ['a', 'b', 'c']], [2, ['d', 'e', 'f']]])
         assert(list(iterrows([tuple("abc"), tuple("def")])) == [[1, ['a', 'b', 'c']], [2, ['d', 'e', 'f']]])
+        assert(list(iterrows([[3,*list("abc")],[9,*list("abc")]],start="infer")) == [[3, ["a", "b", "c"]], [9, ["a", "b", "c"]]])
 
         f = tdir + "diff1.csv"
         a = read_any(f).head(3)
@@ -2436,6 +2441,7 @@ def test():
         for i, hh in enumerate(h):
             assert(len(hh) == 2)
             assert(hh[0] == idxcheck[i])
+
 
     def test_listlike():
         a = iter([1,2,3])

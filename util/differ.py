@@ -12,18 +12,16 @@ __version__ = "0.2.0"
 __author__ = "m.yama"
 
 from util.core import (
-        listlike,
-        iterhead,
-        is1darray,
         isposkey,
-        is2darray,
         isdataframe,
         sortedrows,
         iterrows,
         flatten,
         sorter,
         kwtolist,
+        values_at,
         values_not,
+
         )
 
 from util.profiler import Profile
@@ -31,8 +29,6 @@ from util.profiler import Profile
 import os
 import sys
 from itertools import chain, zip_longest
-from difflib import SequenceMatcher
-
 from collections import namedtuple
 
 from numpy import int64
@@ -55,253 +51,237 @@ def sanitize(a, b):
     else:
         return comp(a, b)
 
-dinfo = namedtuple("DiffInfo", ("tag", "indexa", "indexb", "value"))
+def tokey(key=None, default=lambda x: x, columns=None):
+    """
+    Return: sorted 2d generator -> tuple(rownumber, row)
+    """
+    if not key:
+        return default
 
-def smopcodes(s):
-    i = 0
-    for go in s.get_grouped_opcodes():
-        for g in go:
-            yield g
-            i += 1
-    if i == 0:
-        for g in s.get_opcodes():
-            yield g
+    if callable(key):
+        return key
 
-def iterdiff(A, B, keya=None, keyb=None,
-            skipequal=True, compare=sanitize, na_value=None):
-    if keya:
-        a = listlike(sortedrows(A, keya), lambda x: keya(x[1]))
-    else:
-        a = listlike(iterrows(A))
+    if columns:
+        try:
+            pos = [columns.index(x) for x in key]
+        except ValueError:
+            try:
+                pos = [columns.index(str(x)) for x in key]
+            except ValueError:
+                pos = None
 
-    if keyb:
-        b = listlike(sortedrows(B, keyb), lambda x: keyb(x[1]))
-    else:
-        b = listlike(iterrows(B))
+        if pos:
+            def values_at_key(x):
+                if x:
+                    return values_at(x, pos)
 
-    s = SequenceMatcher(None , a, b, False)
+            return values_at_key
 
-    if keya or keyb:
-        if keya:
-            a = a._cache
-        if keyb:
-            b = b._cache
+    def itemkey(x):
+        if x:
+            return [x[k] for k in key]
 
-        for tag, i1, i2, j1, j2 in smopcodes(s):
-            for (i, _a), (j, _b) in zip_longest(a[i1:i2], b[j1:j2], fillvalue=na_value):
-                if tag == "equal" and _a == _b:
-                    if skipequal:
-                        continue
-                    yield dinfo("equal", i, j, _a)
-                elif tag in "delete":
-                    yield dinfo(tag, i, na_value, _a)
-                elif tag == "insert":
-                    yield dinfo(tag, na_value, j, _b)
-                elif tag == "replace":
-                    yield dinfo("delete", i, na_value, _a)
-                    yield dinfo("insert", na_value, j, _b)
-                else:
-                    yield dinfo("replace", i, j, compare(_a, _b))
-    else:
-        for tag, i1, i2, j1, j2 in smopcodes(s):
-            if tag == "equal" and skipequal == True:
-                continue
-            elif tag in ["equal", "delete"]:
-                for i in range(i1, i2):
-                    n = a[i][0]
-                    yield dinfo(tag, n, na_value if tag == "delete" else n, a[i][1:])
-            elif tag == "insert":
-                for i in range(j1, j2):
-                    yield dinfo(tag, na_value, b[i][0], b[i][1:])
+    return itemkey
+
+dinfo = namedtuple("DiffInfo", ("tag", "indexa", "indexb", "valuea", "valueb"))
+
+class Differ(object):
+    render_header = ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#']
+
+    def __init__(self, a, b, skipequal=True, sorted=False, keya=None, keyb=None,
+                 startidx=1, header=None, usecola=None, usecolb=None,
+                 na_value="", callback=flatten):
+        self.org_a = a
+        self._a = None
+        self.org_b  = b
+        self._b = None
+        self.skipequal = skipequal
+        self.sorted = sorted
+        self._keya = keya
+        self._keyb = keyb
+        self.startidx = startidx
+        self.header = header
+        self._usecola = usecola
+        self._usecolb = usecolb
+        self.na_value= na_value
+        self.callback = callback
+
+        self.existskey = (keya or keyb) is not None
+        self._keya_func = self._keyb_func = None
+        self._header_a = self._header_b = None
+        self.existsusecol = (usecola or usecolb) is not None
+        self._usecola_func = self._usecolb_func = None
+
+        self.unmatch_count_allow=1
+        self._compute = None
+
+    @property
+    def a(self):
+        if self._a is None:
+            if self.sorted:
+                self._a = iterrows(self.org_a, start=self.startidx)
             else:
-                for i, j in zip(range(i1,i2), range(j1, j2)):
-                    yield dinfo(tag, a[i][0], b[j][0], compare(a[i][1:], b[j][1:]))
+                self._a = sortedrows(self.org_a, key=self._keya, start=self.startidx, header=self.header)
 
+            if self.header:
+                self.header_a
 
+        return self._a
 
-def iterdiff1D(A, B, skipequal=True, na_value=""):
-    """ 1D data list diffs function
-    Parameter:
-        A        : iterable 2D data (need sorted)
-        B        : iterable 2D data (need sorted)
-        skipequal: True is equal non output
-        na_value : line number output value if delete or insert
-    Returns:
-        tuple (tags, rownum_of_A, rownum_of_B, value)
-    """
-    _A, _B = listlike(A), listlike(B)
-    seq = SequenceMatcher(None, _A, _B , autojunk=False)
-    nul = [None, None]
+    @property
+    def b(self):
+        if self._b is None:
+            if self.sorted:
+                self._b = iterrows(self.org_b, start=self.startidx)
+            else:
+                self._b = sortedrows(self.org_b, key=self._keyb, start=self.startidx, header=self.header)
 
-    def seqm(group):
-        for tag, i1, i2, j1, j2 in group:
-            lon = zip_longest(_A[i1:i2], _B[j1:j2], fillvalue=nul)
-            for (i, a), (j, b) in lon:
-                if a == b:
-                    if skipequal:
-                        continue
-                    yield dinfo("equal", i, j, a)
-                elif not a:
-                    yield dinfo("insert", na_value, j, b)
-                elif not b:
-                    yield dinfo("delete", i, na_value, a)
-                else:
-                    yield dinfo("replace", i, j, sanitize(a, b))
+            if self.header:
+                self.header_b
 
-    i = 0
-    for group in seq.get_grouped_opcodes():
-        for g in seqm(group):
-            yield g
-            i += 1
-    # for allmatch case
-    if i == 0 and skipequal is False:
-        seq = SequenceMatcher(None, _A, _B , autojunk=False)
-        for g in seqm(seq.get_opcodes()):
-            yield g
+        return self._b
 
+    @property
+    def header_a(self):
+        if self._header_a is None and self.header:
+            self._header_a = next(self.a)[1]
+        return self._header_a
 
-def iterdiff2D(A, B, compare, skipequal=True, na_value=""):
-    """ 2D data list diffs function
-    Parameter:
-        A        : iterable 2D data (need sorted)
-        B        : iterable 2D data (need sorted)
-        compare  : takes an A item and a B item and returns <0, 0 or >0
-        skipequal: True is equal non output
-        na_value : line number output value if delete or insert
-    Returns:
-        tuple (tags, rownum_of_A, rownum_of_B, diff_result_columns )
-    """
-    ia, ib = True, True
-    isfirst = True
-    while True:
-        if ia:
-            na, a = next(A, [-1,None])
-        if ib:
-            nb, b = next(B, [-1,None])
-        if b is None:
-            if a is None:
+    @property
+    def header_b(self):
+        if self._header_b is None and self.header:
+            self._header_b = next(self.b)[1]
+        return self._header_b
+
+    @property
+    def keya(self):
+        if self._keya_func is None:
+            self._keya_func = tokey(self._keya, columns=self.header_a)
+        return self._keya_func
+
+    @property
+    def keyb(self):
+        if self._keyb_func is None:
+            self._keyb_func = tokey(self._keyb, columns=self.header_b)
+        return self._keyb_func
+
+    @property
+    def usecola(self):
+        if self._usecola_func is None:
+            self._usecola_func = tokey(self._usecola, columns=self.header_a)
+        return self._usecola_func
+
+    @property
+    def usecolb(self):
+        if self._usecolb_func is None:
+            self._usecolb_func = tokey(self._usecolb, columns=self.header_b)
+        return self._usecolb_func
+
+    def itertuples(self):
+        ia, ib = True, True
+
+        while True:
+            if ia:
+                na, a = next(self.a, [None, None])
+                use_a = self.usecola(a)
+            if ib:
+                nb, b = next(self.b, [None, None])
+                use_b = self.usecolb(b)
+            if a is None and b is None:
                 break
-            yield dinfo("delete", na, na_value, a)
-            ia, ib = True, False
-        elif a is None:
-            yield ("insert", na_value, nb, b)
-            ia, ib = False, True
-        elif a == b:
-            if isfirst or skipequal is False:
-                yield dinfo("equal", na, nb, a)
-            ia, ib = True, True
-        else:
-            retc = compare(a, b)
-            if retc < 0:
-                yield dinfo("delete", na, na_value, a)
+            if b is None:
+                yield dinfo("delete", na, self.na_value, a, b)
                 ia, ib = True, False
-            elif retc > 0:
-                yield dinfo("insert", na_value, nb, b)
+            elif a is None:
+                yield dinfo("insert", self.na_value, nb, a, b)
                 ia, ib = False, True
-            else:
-                assert retc == 0
-                yield dinfo("replace", na, nb, sanitize(a, b))
+            elif a == b:
+                yield dinfo("equal", na, nb, a, b)
                 ia, ib = True, True
-        if isfirst:
-            isfirst = False
+            else:
+                fx = self.keya(a)
+                fy = self.keyb(b)
 
-def compare_build(A, B, keya, keyb, startidx=1):
-    def getfunc(o, key):
-        if is1darray(o):
-            return lambda x: x
-        if callable(key):
-            return key
+                if self.existskey:
+                    if fx == fy:
+                        yield dinfo("replace", na, nb, a, b)
+                        ia, ib = True, True
+                        continue
+                elif isinstance(a, int) or isinstance(b, int):
+                    pass
+                else:
+                    if use_a == use_b or \
+                        len(a) + len(b) > 2 and \
+                        sum(1 for x in zip_longest(a, b) if x[0] != x[1]) <= self.unmatch_count_allow:
+                        yield dinfo("replace", na, nb, a, b)
+                        ia, ib = True, True
+                        continue
 
-        if isdataframe(o):
-            if isposkey(key):
-                return lambda x: [x[i] for i in key]
-            ocol = o.columns.tolist()
-            return lambda x: [x[i] for i in [ocol.index(k) for k in key]]
+                if fx < fy:
+                    yield dinfo("delete", na, self.na_value, a, b)
+                    ia, ib = True, False
+                elif fx > fy:
+                    yield dinfo("insert", self.na_value, nb, a, b)
+                    ia, ib = False, True
+                else:
+                    yield dinfo("replace", na, nb, a, b)
+                    ia, ib = True, True
 
-        if isposkey(key):
-            return lambda x: [x[k] for k in key]
+    def compute(self, callback=None):
+        callback = callback or self.callback
 
-        if hasattr(o, "__next__"):
-            header = iterhead(o)
-        else:
-            header = o[0]
+        for i, t in enumerate(self.itertuples()):
+            if i == 0 and self.header:
+                r = sanitize(self.usecola(self.header_a),
+                        self.usecolb(self.header_b))
+                yield callback([self.render_header, r])
 
-        if startidx == "infer":
-            return lambda x: [x[header.index(k) - 1] for k in key]
-        else:
-            return lambda x: [x[header.index(k)] for k in key]
+            if self.skipequal and t.tag == "equal":
+                continue
 
+            if t.tag in ["equal", "delete"]:
+                r = self.usecola(t.valuea)
+            elif t.tag == "insert":
+                r = self.usecolb(t.valueb)
+            else:
+                r = sanitize(self.usecola(t.valuea),
+                    self.usecolb(t.valueb))
 
-    # compare function initialize
-    func_a = getfunc(A, keya)
-    func_b = getfunc(B, keyb)
+            yield callback([t[:3], r])
 
-    def compare(a,b):
-        if func_a(a) < func_b(b):
-            return -1
-        elif func_a(a) > func_b(b):
-            return 1
-        else:
-            return 0
+    def __next__(self):
+        if self._compute is None:
+            self._compute = self.compute()
+        return next(self._compute)
 
-    return compare
+    def __iter__(self):
+        if self._compute is None:
+            self._compute = self.compute()
+        return self._compute
 
-def helperdiff1D(A, B, sort=True, skipequal=True, startidx=1):
-    func = sortedrows if sort else iterrows
-    # header out
-    yield ["DIFFTAG","LEFTLINE#", "RIGHTLINE#", "VALUE"]
-    for r in iterdiff1D(func(A, start=startidx),
-                     func(B, start=startidx),
-                     skipequal=skipequal):
-        yield list(r)
-
-def helperdiff2D(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
-    # parameter initialize
-    try:
-        keya = keya or range(len(isdataframe(A) and A.columns.tolist() or A[0]))
-    except:
-        pass
-
-    keyb = keyb or keya
-
-    compare = compare_build(A, B, keya, keyb, startidx)
-    # compute diff run
-    if sort is False:
-        ret = iterdiff2D(iterrows(A, startidx),
-                         iterrows(B, startidx),
-                         compare = compare,
-                         skipequal=skipequal)
-    else:
-        ret = iterdiff2D(sortedrows(A, keya, startidx),
-                         sortedrows(B, keyb, startidx),
-                         compare = compare,
-                         skipequal=skipequal)
-
-    # header out
-    yield flatten(["DIFFTAG","LEFTLINE#", "RIGHTLINE#", list(next(ret)[3:])])
-
-    for r in ret:
-        yield flatten(r)
-
-def diffauto(a, b, skipequal=True, startidx=1):
+def diffauto(a, b, sorted=False, skipequal=True, startidx=1, header=True, usecola=None, usecolb=None):
     cola = a.columns.tolist()
     colb = b.columns.tolist()
     dka = {tuple(cola.index(z) for z in v):k for k, v in Profile(a.head(10), top=None).diffkey.items()}
     dkb = {tuple(colb.index(z) for z in v) for v in Profile(b.head(10), top=None).diffkey.values()}
-    diffkeys=sorted((dka[x], x) for x in set(dka) & dkb)
+    diffkeys=[(dka[x], x) for x in set(dka) & dkb]
+    diffkeys.sort()
+    dummy = -1
 
     for i, (_, key) in enumerate([(None, None)] + diffkeys):
         if i == 0:
-            r = helperdiff2D(a, b, skipequal=skipequal, startidx=startidx)
-            header = next(r)
-            yield header
-            _h = ["line"] + header[3:]
-            reta, retb = [_h], [_h]
+            r = Differ(a, b, sorted=sorted, skipequal=skipequal, startidx=startidx, header=True, usecola=usecola, usecolb=usecolb)
+            reta, retb = [[dummy, *cola]], [[dummy, *colb]]
         else:
-            r = helperdiff2D(reta.copy(), retb.copy(), keya=key, keyb=key, skipequal=skipequal, startidx="infer")
-            reta, retb = [_h], [_h]
-        for x in r:
-            if x[0] in ["equal", "replace"]:
+            r = Differ(reta.copy(), retb.copy(), keya=key, keyb=key, skipequal=skipequal, startidx="infer", header=True, usecola=usecola, usecolb=usecolb)
+            reta, retb = [[dummy, *cola]], [[dummy, *colb]]
+        for j, x in enumerate(r):
+            if i + j == 0 and header:
+                yield x
+
+            if dummy in [x[1], x[2]]:
+                continue
+            elif x[0] in ["equal", "replace"]:
                 yield x
             elif x[0] == "delete":
                 reta.append([x[1], *x[3:]])
@@ -309,14 +289,15 @@ def diffauto(a, b, skipequal=True, startidx=1):
                 retb.append([x[2], *x[3:]])
     else:
         #Last Loop
-        for y in reta[1:]:
-            yield ["delete", y[0], "", *y[1:]]
-        for y in retb[1:]:
-            yield ["insert", "", y[0], *y[1:]]
+        for y in reta:
+            if y[0] != dummy:
+                yield ["delete", y[0], "", *y[1:]]
+        for y in retb:
+            if y[0] != dummy:
+                yield ["insert", "", y[0], *y[1:]]
 
-def dictdiffer(a, b, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
-    r = helperdiff1D(list(a), list(b), sort=False, skipequal=False, startidx=startidx)
-    next(r)
+def dictdiffer(a, b, keya=None, keyb=None, sorted=False, skipequal=True, startidx=1, header=True, usecola=None, usecolb=None):
+    r = Differ(list(a), list(b), sorted=True, skipequal=False)
     i = 0
 
     for tag, ll, rl, val in r:
@@ -330,18 +311,14 @@ def dictdiffer(a, b, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
         elif tag == "delete":
             _a, _b = a[val], []
 
-        rr = differ(_a, _b, keya=keya, keyb=keyb, sort=sort, skipequal=skipequal, startidx=startidx)
+        rr = diffauto(_a, _b, sorted=sorted, skipequal=skipequal, startidx=startidx, header=header, usecola=usecola, usecolb=usecolb)
 
-        header = next(rr)
-        header.insert(3, "TARGET")
-        if i == 0:
-            yield header
         for d in rr:
-            d.insert(3, val)
+            d.insert(3, "TARGET" if i == 0 and header else val)
             yield d
             i += 1
 
-def differ(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
+def differ(A, B, keya=None, keyb=None, sorted=False, skipequal=True, startidx=1, header=True, usecola=None, usecolb=None):
     """
     """
     # inital check
@@ -355,33 +332,36 @@ def differ(A, B, keya=[], keyb=[], sort=True, skipequal=True, startidx=1):
                 return chain(header, (["equal", i, i] + list(x) for i, x in enumerate(A.itertuples(),startidx+1)))
         else:
             ck = (A is B) or (A == B)
-            if ck:
-                if not skipequal and is1darray(A):
-                    return (["equal", i, i] + x for i, x in enumerate(A))
-                elif not skipequal and is2darray(A):
-                    header = [["DIFFTAG","LEFTLINE#", "RIGHTLINE#"] + A[0]]
-                    return chain(header, (["equal", i, i] + list(x) for i, x in enumerate(A)))
+            if ck and not skipequal:
+                header = [["DIFFTAG","LEFTLINE#", "RIGHTLINE#"] + A[0]]
+                return chain(header, (flatten(["equal", i, i, x]) for i, x in enumerate(A)))
+
         if ck and skipequal:
             return []
     except:
         pass
-
-    if is1darray(A) and is1darray(B):
-        ret = helperdiff1D(A, B, sort=sort, skipequal=skipequal, startidx=startidx)
-    elif isinstance(A, dict) and isinstance(B, dict):
-        ret = dictdiffer(A, B, keya=keya, keyb=keyb, skipequal=skipequal, startidx=startidx)
-    elif not keya and not keyb:
-        ret = diffauto(A, B, skipequal=skipequal, startidx=startidx)
+    if isinstance(A, dict) and isinstance(B, dict):
+        ret = dictdiffer(A, B, keya=keya, keyb=keyb, skipequal=skipequal, startidx=startidx, header=header, usecola=usecola, usecolb=usecolb)
+    elif isdataframe(A) and isdataframe(B) and not keya and not keyb:
+        ret = diffauto(A, B, skipequal=skipequal, startidx=startidx, header=header, usecola=usecola, usecolb=usecolb)
     else:
-        ret = helperdiff2D(A, B, keya=keya, keyb=keyb, sort=sort, skipequal=skipequal, startidx=startidx)
+        ret = Differ(A, B, keya=keya, keyb=keyb, sorted=sorted, skipequal=skipequal, startidx=startidx, header=header, usecola=usecola, usecolb=usecolb)
 
-    # header out
-    header = [next(ret)]
-    content = (flatten(r) for r in sorter(ret, key=lambda x: (x[2] or x[1] or -1)))
-    # output sorted
-    return chain(header, content)
+    if sorted is False:
+        def sortout(x):
+            if x[1] and x[2]:
+                r = min(x[1:3])
+            else:
+                r = x[1] or x[2]
+            return r
 
-
+        if header:
+            head = [next(ret)]
+            return chain(head, sorter(ret, key=sortout))
+        else:
+            return sorter(ret, key=sortout)
+    else:
+        return ret
 
 def main():
     from util.dfutil import read_any
@@ -405,8 +385,8 @@ def main():
          help='output filepath (default `stdout`)')
     padd('-e', '--encoding', type=str, default="cp932",
          help='output fileencoding (default `cp932`)')
-    padd('-s', '--sort', action='store_false', default=True,
-         help='Need Sort?')
+    padd('-s', '--sorted', action='store_true', default=False,
+         help='Input data sorted?')
     padd('-H', '--header', type=int, default=None,
          help='file no header (default `None`) (start sequence `0`)')
     padd('-k', '--key', type=str, default=None,
@@ -502,17 +482,38 @@ def main():
     for d in differ(a, b,
                     keya=kwtolist(args.key or args.key1),
                     keyb=kwtolist(args.key or args.key2),
-                    sort=args.sort, skipequal=args.all is False):
+                    sorted=args.sorted, skipequal=args.all is False,
+                    usecola=usecols1, usecolb=usecols2,
+                    ):
 
         render(d)
 
-"""
-   TestCase below
-"""
 def test():
     from util.core import tdir
     from io import StringIO
     from collections import Counter
+    from util.dfutil import read_any
+
+    pe = lambda *x: print("\n", *x, file=sys.stderr)
+
+
+    def debug_test_Differ_usecol():
+        a = [list("abc"), list("123"), list("456")]
+        b = [list("abc"), list("123"), list("446")]
+        r = list(Differ(a,b,keya=[0,2], keyb=[0,2],usecola=[0,2],usecolb=[0,1,2], header=False))
+        pe(r)
+
+    def debug_test_usecol_main():
+        sio = stdoutcapture("-u", "9,1" ,tdir+"diff1.csv", tdir+"diff2.csv")
+        next(sio)
+        for x in sio:
+            assert(x == '"replace","3","3","b ---> 10","chevrolet chevelle malibue"\r\n')
+            break
+
+    def debug_test_usecol1_2_main():
+        sio = stdoutcapture("-u1", "1,9", "-u2", "1,9" ,tdir+"diff1.csv", tdir+"diff2.csv")
+        next(sio)
+        assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 2, '"insert"': 2, '"delete"': 1}))
 
     def test_sanitize():
         assert(sanitize(None, 1) == "ADD ---> 1")
@@ -525,109 +526,118 @@ def test():
         assert(sanitize([1,2,3], [1,2,None]) == [1, 2, '3 ---> DEL'])
         assert(sanitize([1,None,3], [1,2,3]) == [1, 'ADD ---> 2', 3])
 
-    def test_compare_build():
-        a, b = [list("abc"), list("def")], [list("abc"), list("def")]
-        c = compare_build(a, b, [0], [0])
-        assert(c(a[0],b[0]) == 0)
+    def test_tokey():
+        assert(tokey([0,1,2]).__name__ == "itemkey")
+        assert(tokey(list("abc")).__name__ == "itemkey")
+        assert(tokey(list("abc"),columns=list("abc")).__name__ == "values_at_key")
+        assert(tokey().__name__ == "<lambda>")
 
-        a, b = list("abc"), list("aac")
-        assert(c(a,b) == 0)
+    def test_Differ():
+        a = list("abc")
+        b = list("abb")
 
-        a, b = list("bbc"), list("abc")
-        assert(c(a,b) == 1)
+        r = list(Differ(a, b))
+        assert(r == [["insert", "", 3, "b"], ["delete", 3, "", "c"]])
+        r = list(Differ(iter(a), iter(b)))
+        assert(r == [["insert", "", 3, "b"], ["delete", 3, "", "c"]])
+        r = list(Differ((x for x in a), (x for x in b)))
+        assert(r == [["insert", "", 3, "b"], ["delete", 3, "", "c"]])
+        r = list(Differ(a, b,keya=lambda x: True, keyb=lambda x:True))
+        assert(r == [["replace",3,3,"c ---> b"]])
 
-        a, b = list("abc"), list("bbc")
-        assert(c(a,b) == -1)
+    def test_Differ_1D():
+        a = list("cba")
+        b = list("bba")
+        r = list(Differ(a, b, sorted=False))
+        assert(r == [["insert", "", 2, "b"], ["delete", 1, "", "c"]])
+        r = list(Differ(a, b, sorted=True))
+        assert(r != [["insert", "", 2, "b"], ["delete", 1, "", "c"]])
+        assert(len(r) == 6)
 
-    def test_iterdiff1D():
-        r = list(iterdiff1D(enumerate(list("abc")), enumerate(list("abb"))))[0]
-        assert(list(r) == ["replace", 2,2, "c ---> b"])
+        r = list(Differ(iter(a), iter(b), sorted=False))
+        assert(r == [["insert", "", 2, "b"], ["delete", 1, "", "c"]])
+        r = list(Differ(iter(a), iter(b), sorted=True))
+        assert(r != [["insert", "", 2, "b"], ["delete", 1, "", "c"]])
+        assert(len(r) == 6)
 
-        r = list(iterdiff1D(enumerate(list("abc")), enumerate(list("abb")), skipequal=False))
-        assert(len(r) == 3)
-        assert("equal" in [rr.tag for rr in r])
+    def test_Differ_2D_list():
+        a = [list("abc"), list("def"), list("ghi")]
+        b = [list("abc"), list("dff"), list("xyz")]
 
-        r = list(iterdiff1D(enumerate(list("abc")), enumerate(list("ab")), na_value="--"))
-        assert(len(r) == 1)
-        assert(r[0].tag == "delete" and r[0].indexb == "--")
-
-        r = list(iterdiff1D(enumerate(list("a")), enumerate(list("a")),False))
-        assert(r == [dinfo(tag='equal', indexa=0, indexb=0, value='a')])
-
-
-    def test_iterdiff2D():
-        a = iterrows([list("abc"), list("def")])
-        b = iterrows([list("abc"), list("ddf")])
-        c = compare_build(a,b, [0], [0])
-        r = list(iterdiff2D(a, b, c,False))[1]
-        assert(r.tag == "replace")
-        assert(r.value == ['d', 'e ---> d', 'f'])
-
-        a = iterrows([list("abc"), list("def")])
-        b = iterrows([list("abc"), list("ddf")])
-        c = compare_build(a,b, [1], [1])
-        r = list(iterdiff2D(a, b, c,False))
-        assert(len(r) == 3)
-        assert(set([r[1].tag, r[2].tag]) == set(["insert", "delete"]))
-
-    def test_helperdiff1D():
-        a, b = list("bac"), list("abb")
-        assert(list(helperdiff1D(a, b)) == [
-                ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'VALUE'],
-                ['replace', 3, 3, 'c ---> b']]
-            )
-        assert(list(helperdiff1D(a, b, sort=False)) == [
-                ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'VALUE'],
-                ['replace', 1, 1, 'b ---> a'],
-                ['replace', 2, 2, 'a ---> b'],
-                ['replace', 3, 3, 'c ---> b']]
-            )
-        assert(list(helperdiff1D(a, b, skipequal=False)) == [
-                ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'VALUE'],
-                ['equal', 2, 1, 'a'],
-                ['equal', 1, 2, 'b'],
-                ['replace', 3, 3, 'c ---> b']]
-            )
-        assert(list(helperdiff1D(a, b, skipequal=False, startidx=0)) == [
-                ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'VALUE'],
-                ['equal', 1, 0, 'a'],
-                ['equal', 0, 1, 'b'],
-                ['replace', 2, 2, 'c ---> b']]
+        r = list(Differ(a, b))
+        assert(r == [
+                ['replace', 2, 2, 'd', 'e ---> f', 'f'],
+                ['delete', 3, '', 'g', 'h', 'i'],
+                ['insert', '', 3, 'x', 'y', 'z']
+                ]
             )
 
-    def test_helperdiff2D():
-        a = [list("abc"), list("def")]
-        b = [list("abc"), list("ddf")]
-        assert(list(helperdiff2D(a, b)) == [
-                ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'a', 'b', 'c'],
-                ['insert', '', 2, 'd', 'd', 'f'],
-                ['delete', 2, '', 'd', 'e', 'f']]
+    def test_Differ_2D_iter():
+        a = [list("abc"), list("def"), list("ghi")]
+        b = [list("abc"), list("dff"), list("xyz")]
+        r = list(Differ(iter(a), iter(b)))
+        assert(r == [
+                ['replace', 2, 2, 'd', 'e ---> f', 'f'],
+                ['delete', 3, '', 'g', 'h', 'i'],
+                ['insert', '', 3, 'x', 'y', 'z']
+                ]
             )
 
-        assert(list(helperdiff2D(a, b, skipequal=False)) == [
-                ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'a', 'b', 'c'],  # not equal
-                ['insert', '', 2, 'd', 'd', 'f'],
-                ['delete', 2, '', 'd', 'e', 'f']]
+    def test_Differ_2D_enum():
+        a = [list("abc"), list("def"), list("ghi")]
+        b = [list("abc"), list("dff"), list("xyz")]
+        r = list(Differ(enumerate(a), enumerate(b)))
+        assert(r == [['replace', 2, 2, 1, "['d', 'e', 'f'] ---> ['d', 'f', 'f']"],
+                      ['replace', 3, 3, 2, "['g', 'h', 'i'] ---> ['x', 'y', 'z']"]
+                      ])
+
+    def test_Differ_2D_key():
+        a = [list("abc"), list("def"), list("ghi")]
+        b = [list("abc"), list("dff"), list("xyz")]
+
+        r = list(Differ(a, b, keya=lambda x: x[1], keyb=lambda x:x[1]))
+        assert(r == [['delete', 2, '', 'd', 'e', 'f'],
+                    ['insert', '', 2, 'd', 'f', 'f'],
+                    ['delete', 3, '', 'g', 'h', 'i'],
+                    ['insert', '', 3, 'x', 'y', 'z']
+                    ])
+
+    def test_Differ_df():
+        import pandas as pd
+        df1 = pd.DataFrame([
+            dict(a=1,c=1),
+            dict(a=1,c=4),
+            dict(a=1,c=4),
+            dict(a=3,c=2),
+            ]
             )
-        h = [["col1", "col2", "col3"]]
-        r = helperdiff2D(h + a, h + b, keya=[0], skipequal=False)
-        assert(list(r)[1:] == [["equal",2,2,"a","b","c"],["replace",3,3,"d","e ---> d","f"]])
-
-        r = helperdiff2D(h + a, h + b, keya=[1], skipequal=False)
-        assert(list(r)[1:] == [["equal",2,2,"a","b","c"],["insert","",3, "d","d","f"],["delete",3,"","d","e","f"]])
-
-        r = helperdiff2D(h + a, h + b, keya=["col1"], skipequal=False)
-        assert(list(r)[1:] == [["equal",2,2,"a","b","c"],["replace",3,3,"d","e ---> d","f"]])
-
-        r = helperdiff2D(h + a, h + b, keya=["col2"], skipequal=False)
-        assert(list(r)[1:] == [["equal",2,2,"a","b","c"],["insert","",3, "d","d","f"],["delete",3,"","d","e","f"]])
+        df2 = pd.DataFrame([
+            dict(a=1,c=3),
+            dict(a=1,c=4),
+            dict(a=1,c=4),
+            dict(a=2,c=1),
+            dict(a=4,c=2),
+            ]
+            )
+        r = list(Differ(df1, df2, skipequal=False, sorted=True, keya=[0], keyb=[0], header=True))
+        assert(r == [
+            ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'a', 'c'],
+            ['replace', 2, 2, 1, '1 ---> 3'],
+            ['equal', 3, 3, 1, 4],
+            ['equal', 4, 4, 1, 4],
+            ['insert', '', 5, 2, 1],
+            ['delete', 5, '', 3, 2],
+            ['insert', '', 6, 4, 2]
+            ]
+            )
 
     def test_diffauto():
-        from util import read_any
         f1 = tdir + "diff1.csv"
         f2 = tdir + "diff2.csv"
         a = read_any(f1)
         b = read_any(f2)
+
+        r = diffauto(a, b)
 
         anser = [
             ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'mpg', 'cyl', 'displ', 'hp', 'weight', 'accel', 'yr', 'origin', 'name'],
@@ -638,11 +648,26 @@ def test():
             ['replace', 47, 49, '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'],
             ['delete', 56, '', '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop'],
             ]
-        assert(sorted(diffauto(a, b), key=str) == sorted(anser, key=str))
+        assert(sorted(r, key=str) == sorted(anser, key=str))
+
+    def test_dictdiffer():
+        a = read_any(tdir + "diff1.xlsx")
+        b = read_any(tdir + "diff2.xlsx")
+
+        r = list(dictdiffer(a, b))
+        assert(r == [
+                ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'TARGET', 'mpg', 'cyl', 'displ', 'hp', 'weight', 'accel', 'yr', 'origin', 'name'],
+                ['replace', 47, 49, 'diff1 ---> diff2', '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'],
+                ['replace', 38, 40, 'diff1 ---> diff2', '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'],
+                ['replace', 2, 2, 'diff1 ---> diff2', 'b ---> 10', '8', '307', '130', '3504', '12', '70', '1', 'chevrolet chevelle malibue'],
+                ['delete', 56, '', 'diff1 ---> diff2', '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop'],
+                ['insert', '', 24, 'diff1 ---> diff2', '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'],
+                ['insert', '', 16, 'diff1 ---> diff2', '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster']
+                ]
+            )
 
     def test_differcsv():
-        from util.dfutil import read_any
-        from util.core import kwtolist
+
         f1 = tdir + "diff1.csv"
         f2 = tdir + "diff2.csv"
         usecols1 = [0,1,2,3,4,5]
@@ -650,8 +675,9 @@ def test():
 
         a = read_any(f1, usecols=kwtolist(usecols1))
         b = read_any(f2, usecols=kwtolist(usecols2))
+        r = list(differ(a, b, header=True))
 
-        assert(list(differ(a, b)) == [
+        assert(r == [
             ['DIFFTAG','LEFTLINE#','RIGHTLINE#','mpg','cyl','displ','hp','weight','accel'],
             ['replace', 2, 2, 'b ---> 10', '8', '307', '130', '3504', '12'],
             ['insert', '', 16, '22', '6', '198', '95', '2833', '15.5'],
@@ -661,7 +687,6 @@ def test():
         )
 
     def test_differxls():
-        from util.dfutil import read_any
         f1 = tdir + "diff1.xlsx"
         f2 = tdir + "diff2.xlsx"
 
@@ -679,14 +704,15 @@ def test():
         assert(list(differ(a,b)) == anser)
 
     def test_differlist():
-        anser = [['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'VALUE'],
-        ['equal', 1, 1, 1],
+        anser = [['equal', 1, 1, 1],
         ['replace', 2, 2, '2 ---> 3'],
         ['replace', 3, 3, '3 ---> 4']]
-        assert(list(differ([1,2,3], [1,3,4], skipequal=False)) == anser)
+        r = list(differ([1,2,3], [1,3,4], header=None, skipequal=False,keya=lambda x:True, keyb=lambda x:True))
+        assert(r == anser)
 
-        anser = [['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'VALUE'], ['equal', 1, 1, 'a'], ['equal', 2, 2, 'b'], ['replace', 3, 3, 'c ---> d']]
-        assert(list(differ(list("abc"), list("abd"), skipequal=False)) == anser)
+        anser = [['equal', 1, 1, 'a'], ['equal', 2, 2, 'b'], ['replace', 3, 3, 'c ---> d']]
+        r = list(differ(list("abc"), list("abd"), header=None, skipequal=False,keya=lambda x:True, keyb=lambda x:True))
+        assert(r == anser)
 
     def test_differequal():
         from util import read_any
@@ -737,6 +763,7 @@ def test():
         assert(sio.readlines()[2] == '"delete","3","","b","8","307","130","3504","12","70","1","chevrolet chevelle malibue"\r\n')
 
         sio = stdoutcapture("-H", "0", "-k", "mpg" ,tdir+"diff1.csv", tdir+"diff2.csv")
+        #print(sio.getvalue(),file=sys.stderr)
         assert(sio.readlines()[2] == '"delete","2","","b","8","307","130","3504","12","70","1","chevrolet chevelle malibue"\r\n')
 
     def test_key1_2_main():
@@ -752,18 +779,6 @@ def test():
             if "replace" in x:
                 assert(x == '"replace","204","2","4 ---> 8","20 ---> 10","130","102 ---> 307","3150 ---> 3504","15.7 ---> 12","76 ---> 70","2 ---> 1","volvo 245 ---> chevrolet chevelle malibue"\r\n')
                 break
-
-    def test_usecol_main():
-        sio = stdoutcapture("-u", "1,9" ,tdir+"diff1.csv", tdir+"diff2.csv")
-        next(sio)
-        for x in sio:
-            assert(x == '"replace","3","3","b ---> 10","chevrolet chevelle malibue"\r\n')
-            break
-
-    def test_usecol1_2_main():
-        sio = stdoutcapture("-u1", "1,9", "-u2", "1,9" ,tdir+"diff1.csv", tdir+"diff2.csv")
-        next(sio)
-        assert(Counter([x.split(",")[0] for x in sio.readlines()]) == Counter({'"replace"': 2, '"insert"': 2, '"delete"': 1}))
 
     def test_target_common_main():
         sio = stdoutcapture("-t", "Sheet1",tdir+"diff3.xlsx", tdir+"diff4.xlsx")
@@ -782,5 +797,5 @@ def test():
             print("... ok.",file=sys.stderr)
 
 if __name__ == "__main__":
-    #test()
+    # test()
     main()
