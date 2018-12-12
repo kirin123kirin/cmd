@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 from os.path import dirname, basename, join as pathjoin, abspath, sep, splitext, split as pathsplit, exists as pathexists
 import shutil
-import os
+import os, sys
 import re
 import pathlib
 from glob import iglob
@@ -21,6 +21,8 @@ outdir = outroot + pythondirs
 libdir = pathjoin(outdir, "Lib")
 
 archivedir=r"\\FREENAS\data1\Downloads"
+
+pyver = "{}{}".format(*sys.version_info[:2])
 
 def jppatch():
     #zipfile.py : cp437 -> cp932
@@ -65,7 +67,7 @@ def all_exept_python(path):
 
 ENV = os.environ['PATH'].split(os.pathsep)
 EXEC = [".exe", ".bat", ".cmd", ".wsh", ".vbs"]
-def which(executable):    
+def which(executable):
     for path in ENV:
         path = path.strip('"')
 
@@ -97,24 +99,24 @@ def minify(inputpath, outputpath=None):
         return shutil.copy(inputpath, outputpath)
 
 UPX = which("upx.exe") + " --best "
-notupx = re.compile(r"(indexing.+\.pyd|\\utils.+\.pyd|\\vcamp.+dll|\\wininst.+.exe|\\libgcc.+\.dll|\\qwindows\.dll|\\platforms\\.*\.dll|PyQt5\\.*\.dll|tk.*.dll|\\PyInstaller\\|\\pythonwin\\|\\win32\\|\\pywin32_system32\\|\\gui(?:-[36][24])?\.exe)")
+notupx = re.compile(r"(constants.+\.pyd|_cytest.+\.pyd|indexing.+\.pyd|\\utils.+\.pyd|\\vcamp.+dll|\\wininst.+.exe|\\libgcc.+\.dll|\\qwindows\.dll|\\platforms\\.*\.dll|PyQt5\\.*\.dll|tk.*.dll|\\PyInstaller\\|\\pythonwin\\|\\win32\\|\\pywin32_system32\\|\\gui(?:-[36][24])?\.exe)")
 def upx(inputpath, outputpath=None):
-    ext = os.path.splitext(inputpath)[-1].lower()
-    if ext in [".exe", ".dll", ".pyd"] and not notupx.search(inputpath):
-        cmd = UPX + inputpath
-        if outputpath is not None:
-            cmd += " -o " + outputpath
-        try:
-            return check_call(cmd, shell=True)
-        except:
-            pass
+#    ext = os.path.splitext(inputpath)[-1].lower()
+#    if ext in [".exe", ".dll", ".pyd"] and not notupx.search(inputpath):
+#        cmd = UPX + inputpath
+#        if outputpath is not None:
+#            cmd += " -o " + outputpath
+#        try:
+#            return check_call(cmd, shell=True)
+#        except:
+#            pass
     if outputpath is not None:
         return shutil.copy(inputpath, outputpath)
 
 def getdst(src):
     dst = src.replace(inpdir, outdir)
     if dst.lower().endswith(".pyc"):
-        dst = dst.replace(".cpython-36.pyc","") + ".pyc"
+        dst = dst.replace(".cpython-{}.pyc".format(pyver),"") + ".pyc"
         dst = dst.replace(".pyc.pyc", ".pyc")
     dst = dst.replace("\__pycache__","")
 #    dst = dst.replace(r"\site-packages","")
@@ -134,7 +136,7 @@ def maketable(inpdir=inpdir, outdir=outdir):
     df["dst"] = df.src.apply(getdst)
     df.drop_duplicates("dst", keep="last",inplace=True)
     df.reset_index(drop=True, inplace=True)
-    
+
     n_out = len(outdir.split(sep))
     df["zipidx"] = df.dst.apply(lambda x: splitext(sep.join(x.split(sep)[:n_out+2]))[0])
 
@@ -148,8 +150,8 @@ def maketable(inpdir=inpdir, outdir=outdir):
     df["zipok"] = df.zipidx.isin(zipok.index)
     df.loc[df.zipok == False, "zipidx"] = np.nan
     df.loc[df.zipok, "zipdir"] = df.dst.apply(lambda x: sep.join(dirname(x).split(sep)[:n_out+2]) if dirname(x) != libdir else np.nan)
-    df["python36zip"] = df.zipok
-    
+    df["python_zip"] = df.zipok
+
 #    nanoexclude = ["\\jupyter", "\\pyqt", "\\spyder", "\\notebook\\", "\\qtawesome\\", "\\qtconsole\\", "\\qtpy\\", "\\nuitka"]
     nanoexclude = ["\\pyqt", "\\spyder", "\\qtawesome\\", "\\nuitka"]
     df["nano"] = ~df.dst.apply(lambda x: any(ne in x.lower() for ne in nanoexclude))
@@ -169,14 +171,14 @@ def buildpython(df, outzipname):
             upx(row.src, row.dst)
         else:
             shutil.copy(row.src, row.dst)
-    
+
     os.chdir(libdir)
-    pypth = pathjoin(outdir, "python36._pth")
+    pypth = pathjoin(outdir, "python{}._pth".format(pyver))
     mode = pathexists(pypth) and "a" or "w"
 
     with open(pypth, mode) as pth:
         if mode == "w":
-            pth.write(".\npython36.zip\npython36.zip\\site-packages\nLib\nLib\\site-packages\nDLLs\nimport site\nsite.main()\n\n")
+            pth.write(".\npython{0}.zip\npython{0}.zip\\site-packages\nLib\nLib\\site-packages\nDLLs\nimport site\nsite.main()\n\n".format(pyver))
         for zi in df.dst[df.ext == ".pth"]:
             with open(zi) as f:
                 for line in f:
@@ -186,15 +188,15 @@ def buildpython(df, outzipname):
                     abp = abspath(line)
                     if line and libdir in abp:
                         pth.write("\n" + abp.replace(outdir + sep,""))
-    
-    with ZipFile(pathjoin(outdir, "python36.zip"), mode, ZIP_DEFLATED) as zf:
-        for i, row in df.loc[df.python36zip, ["src", "dst"]].iterrows():
+
+    with ZipFile(pathjoin(outdir, "python{}.zip".format(pyver)), mode, ZIP_DEFLATED) as zf:
+        for i, row in df.loc[df.python_zip, ["src", "dst"]].iterrows():
             zf.write(row.src, row.dst.replace(libdir + sep, ""))
-        
+
         hasinit = df.groupby("zipdir").apply(lambda x: x.dst.isin(x.zipdir+"\\__init__.pyc").any())
         for x in hasinit[~hasinit].index:
             zf.writestr(pathjoin(x , "__init__.py").replace(libdir + sep, ""),"")
-    
+
     dn = dirname(outzipname)
     fn,ext = splitext(basename(outzipname))
     shutil.make_archive(pathjoin(dn,fn), ext[1:], dirname(outdir), "python")
@@ -218,19 +220,19 @@ def dotnetdllcopy(outdir=outdir):
 
 
 def main(archivedir=archivedir):
-    shutil.rmtree(outroot, True)    
+    shutil.rmtree(outroot, True)
     mkdirs(outroot)
-    
+
     buildother(inproot=inproot, outroot=outroot)
-    
+
     df = maketable()
-    
-    buildpython(df[df.nano == True], pathjoin(archivedir, "python_nano64.zip"))
+
+    buildpython(df[df.nano == True], pathjoin(archivedir, "python{}_nano64.zip".format(pyver)))
 #    dotnetdllcopy(outdir)
-    shutil.make_archive(pathjoin(archivedir,"PortableApp17_nano"), "zip", outroot)
-    
-    buildpython(df[df.nano == False], pathjoin(archivedir, "python_min64.zip"))
-    shutil.make_archive(pathjoin(archivedir,"PortableApp17_min"), "zip", outroot)
+    shutil.make_archive(pathjoin(archivedir,"PortableApp18_nano"), "zip", outroot)
+
+    buildpython(df[df.nano == False], pathjoin(archivedir, "python{}_min64.zip".format(pyver)))
+    shutil.make_archive(pathjoin(archivedir,"PortableApp18_min"), "zip", outroot)
 
 if __name__ == "__main__":
     main()

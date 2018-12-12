@@ -88,7 +88,6 @@ from mimetypes import guess_type, guess_extension, guess_all_extensions
 from collections import deque
 from io import IOBase, StringIO, BytesIO
 from copy import deepcopy
-from six import string_types
 
 import pathlib
 from glob import glob
@@ -102,6 +101,7 @@ import zipfile
 import lzma
 
 import traceback
+from subprocess import getstatusoutput
 
 
 # 3rd party modules
@@ -120,15 +120,23 @@ class UnsupportCompressError(RuntimeError):
 class NonCompressedError(ValueError):
     pass
 
+def command(cmd):
+    code, dat = getstatusoutput(cmd)
+    if code == 0:
+        return dat
+    else:
+        raise RuntimeError(dat)
+
 def lsdir(path, recursive=True):
-    subfunc = "rglob" if recursive else "glob"
-    for f in glob(str(path)):
-        p = Path(f)
+    func = "rglob" if recursive else "glob"
+    for p in map(Path, glob(str(path))):
         yield p
-        for r in p.__getattribute__(subfunc)("*"):
+        for r in p.__getattribute__(func)("*"):
             yield r
 
 def getencoding(dat:bytes):
+    if b"\0" in dat:
+        return None
     enc = nkf.guess(dat).lower()
     if enc and enc == "shift_jis":
         return "cp932"
@@ -161,35 +169,44 @@ def geturi(s):
         return p.as_uri().replace("%5C", "/")
 
 def binopen(f, mode="rb", *args, **kw):
-    if isinstance(f, (ExFileObject, _baseArchive, BytesIO)):
+    check = lambda *tp: isinstance(f, tp)
+
+    if check(str):
+        return open(pathlib.Path(f), mode, *args, **kw)
+
+    if check(pathlib.Path):
+        return open(f, mode, *args, **kw)
+
+    if check(ExFileObject, _baseArchive, BytesIO):
         return f
-    elif isinstance(f, IOBase):
-        if isinstance(f, StringIO):
+
+    if check(bytearray, bytes):
+        bio = BytesIO(f)
+        bio.name = None
+        return bio
+
+    if check(IOBase):
+        if check(StringIO):
             e = f.encoding
             if e:
-                return BytesIO(f.getvalue().encode(e))
+                bio = BytesIO(f.getvalue().encode(e))
             else:
-                return BytesIO(f.getvalue().encode())
+                bio = BytesIO(f.getvalue().encode())
+            bio.name = f.name if hasattr(f, "name") else None
+            return bio
+
         m = f.mode
         if isinstance(m, int):
             return f
 
         name = f.name
-        p = f.tell()
 
         if "b" in m:
             return f
         else:
-            f.seek(0)
-            r = open(name, mode=m + "b", *args, **kw)
-            r.seek(p)
-            return r
-    elif isinstance(f, str):
-        return open(pathlib.Path(f), mode, *args, **kw)
-    elif isinstance(f, pathlib.Path):
-        return open(f, mode, *args, **kw)
-    else:
-        raise ValueError("Unknown Object. filename or filepointer buffer")
+            return open(name, mode=m + "b")
+
+    raise ValueError("Unknown Object `{}`. filename or filepointer buffer".format(type(f)))
 
 def opener(f, mode="r", *args, **kw):
     if isinstance(f, IOBase):
@@ -224,55 +241,57 @@ def opener(f, mode="r", *args, **kw):
     else:
         raise ValueError("Unknown Object. filename or filepointer buffer")
 
-def flatten(iterable, base_type=None, levels=None):
-    """Flatten an iterable with multiple levels of nesting (e.g., a list of
-    lists of tuples) into non-iterable types.
+#def _flatten(iterable, base_type=None, levels=None):
+#    """Flatten an iterable with multiple levels of nesting (e.g., a list of
+#    lists of tuples) into non-iterable types.
+#
+#        >>> iterable = [(1, 2), ([3, 4], [[5], [6]])]
+#        >>> list(flatten(iterable))
+#        [1, 2, 3, 4, 5, 6]
+#
+#    String types are not considered iterable and will not be flattend.
+#    To avoid collapsing other types, specify *base_type*:
+#
+#        >>> iterable = ['ab', ('cd', 'ef'), ['gh', 'ij']]
+#        >>> list(flatten(iterable, base_type=tuple))
+#        ['ab', ('cd', 'ef'), 'gh', 'ij']
+#
+#    Specify *levels* to stop flattening after a certain level:
+#
+#    >>> iterable = [('a', ['b']), ('c', ['d'])]
+#    >>> list(flatten(iterable))  # Fully flattened
+#    ['a', 'b', 'c', 'd']
+#    >>> list(flatten(iterable, levels=1))  # Only one level flattened
+#    ['a', ['b'], 'c', ['d']]
+#
+#    """
+#    def walk(node, level):
+#        if (
+#            ((levels is not None) and (level > levels)) or
+#            isinstance(node, string_types) or
+#            ((base_type is not None) and isinstance(node, base_type))
+#        ):
+#            yield node
+#            return
+#
+#        try:
+#            tree = iter(node)
+#        except TypeError:
+#            yield node
+#            return
+#        else:
+#            for child in tree:
+#                for x in walk(child, level + 1):
+#                    yield x
+#
+#    return list(walk(iterable, 0))
 
-        >>> iterable = [(1, 2), ([3, 4], [[5], [6]])]
-        >>> list(flatten(iterable))
-        [1, 2, 3, 4, 5, 6]
-
-    String types are not considered iterable and will not be flattend.
-    To avoid collapsing other types, specify *base_type*:
-
-        >>> iterable = ['ab', ('cd', 'ef'), ['gh', 'ij']]
-        >>> list(flatten(iterable, base_type=tuple))
-        ['ab', ('cd', 'ef'), 'gh', 'ij']
-
-    Specify *levels* to stop flattening after a certain level:
-
-    >>> iterable = [('a', ['b']), ('c', ['d'])]
-    >>> list(flatten(iterable))  # Fully flattened
-    ['a', 'b', 'c', 'd']
-    >>> list(flatten(iterable, levels=1))  # Only one level flattened
-    ['a', ['b'], 'c', ['d']]
-
-    """
-    def walk(node, level):
-        if (
-            ((levels is not None) and (level > levels)) or
-            isinstance(node, string_types) or
-            ((base_type is not None) and isinstance(node, base_type))
-        ):
-            yield node
-            return
-
-        try:
-            tree = iter(node)
-        except TypeError:
-            yield node
-            return
-        else:
-            for child in tree:
-                for x in walk(child, level + 1):
-                    yield x
-
-    return list(walk(iterable, 0))
-
+def flatten(x):
+    return [z for y in x for z in (flatten(y)
+             if y is not None and hasattr(y, "__iter__") and not isinstance(y, (str, bytes, bytearray)) else (y,))]
 
 def timestamp2date(x, dfm = "%Y/%m/%d %H:%M"):
     return dt.fromtimestamp(x).strftime(dfm)
-
 
 def which(executable):
     env = os.environ['PATH'].split(os.pathsep)
@@ -289,12 +308,7 @@ def which(executable):
         if os.path.splitext(executable)[-1]:
             return None
         else:
-            for ext in exc:
-                ret = which(executable + ext)
-                if ret:
-                    return ret
-
-    return None
+            return next((which(executable + ext) for ext in exc), None)
 
 def isnamedtuple(s):
     if not hasattr(s, "_fields"):
@@ -413,22 +427,15 @@ def islarge(o):
         return True
     return False
 
-
 def in_glob(srclst, wc):
     if not wc:
         return None
     if isinstance(wc , str):
         return fnmatch.filter(srclst, wc)
 
-    ret = []
-    sl = srclst.copy()
-    while sl:
-        src = sl.pop(0)
-        for w in wc:
-            if fnmatch.fnmatch(src, w):
-                ret.append(src)
-                break
-    return ret
+    return [s for s in srclst
+                if next((s for w in wc
+                    if fnmatch.fnmatch(s, w)), None)]
 
 re_zsplit=re.compile('(.+(?:\\.gz|\\.gzip|\\.bz2|\\.xz|\\.lzma|\\.lzh|\\.lz|\\.tar|\\.tgz|\\.tz2|\\.zip|\\.rar|\\.7z|\\.Z|\\.cab|\\.dgc|\\.gca))[/\\\\]?(.*)', re.I)
 def path_norm(f):
@@ -652,18 +659,20 @@ difo = namedtuple("DirSniff", ('count', 'size'))
 fdifo = namedtuple("DirExProp", fifo._fields+difo._fields)
 
 def getdialect(dat:bytes):
-    enc = nkf.guess(dat).lower()
-    if enc == "shift_jis":
-        enc = "cp932"
-    if enc == "binary":
-        return None
-    else:
-        return csv.Sniffer().sniff(dat.decode(enc))
+    enc = getencoding(dat)
+    if enc is None:
+        raise ValueError("Cannot get dialect of Binary File.")
+    txt = dat.decode(enc)
+    return csv.Sniffer().sniff(txt)
 
 def sniffer(dat:bytes):
-    d = getdialect(dat)
+    enc = getencoding(dat)
+    if enc is None:
+        raise ValueError("Cannot get dialect of Binary File.")
+    d = csv.Sniffer().sniff(dat.decode(enc))
+
     if d:
-        return kifo(d.delimiter, getencoding(dat), d.lineterminator, d.quoting, d.doublequote, d.delimiter, d.quotechar)
+        return kifo(d.delimiter, enc, d.lineterminator, d.quoting, d.doublequote, d.delimiter, d.quotechar)
     else:
         return kifo(None, "binary", None, None, None, None, None)
 
@@ -695,10 +704,7 @@ class PathList(list):
         return [x.samefile(other_path) for x in self if x.is_file()]
 
     def iterdir(self):
-        for x in self:
-            if x.is_dir():
-                for y in x.iterdir():
-                    yield y
+        return (y for x in self if x.is_dir() for y in x.iterdir())
 
     def glob(self, pattern):
         return flatten(x.glob(pattern) for x in self if x.is_dir())
@@ -931,7 +937,8 @@ class Path(type(pathlib.Path())):
     def dialect(self):
         if self._dialect is None:
             dat = self.read_bytes(self.SAMPLE)
-            self._dialect = csv.Sniffer().sniff(dat.decode(self.encoding))
+            #TODO performance?
+            self._dialect = getdialect(dat)#csv.Sniffer().sniff(dat.decode(self.encoding))
         return self._dialect
 
     @property
@@ -956,12 +963,15 @@ class Path(type(pathlib.Path())):
         return self.dialect.quotechar
 
     def wordcount(self, word, buf_size = 1024 ** 2):
-        with self.open(encoding=self.encoding) as f:
+        with self.open(mode="rb") as f:
             read_f = f.read # loop optimization
-            if isinstance(word, bytes):
-                word = word.decode(self.encoding)
+            if isinstance(word, str):
+                if self.encoding:
+                    word = word.encode(self.encoding)
+                else:
+                    word = word.encode()
             elif isinstance(word, (int, float)):
-                word = str(word)
+                word = bytes(str(word))
 
             pos = f.tell()
             if pos != 0:
@@ -2051,6 +2061,7 @@ _tmp = _tmpdir()
 TMPDIR = _tmp.name
 
 def test():
+    from datetime import datetime as dt
 
     def test_lsdir():
         def _testargs(func, pathstr, *args):
@@ -2213,6 +2224,8 @@ def test():
 
         p = Path(tdir+"test.zip/*")
         assert(isinstance(p, Path))
+
+        assert(len(list(Path(tdir + "/../test*").iterdir())) > 1)
 
 
     def test_binopen():
@@ -2708,7 +2721,10 @@ def test():
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
+            t1 = dt.now()
             func()
+            t2 = dt.now()
+            print("{} : time {}".format(x, t2-t1))
 
 if __name__ == "__main__":
     test()

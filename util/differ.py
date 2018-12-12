@@ -31,10 +31,8 @@ import sys
 from itertools import chain, zip_longest
 from collections import namedtuple
 
-from numpy import int64
 
 __all__ = ["differ"]
-
 
 
 def sanitize(a, b):
@@ -358,7 +356,7 @@ def differ(A, B, keya=None, keyb=None, sorted=False, skipequal=True, startidx=1,
                 r = min(x[1:3])
             else:
                 r = x[1] or x[2]
-            return r
+            return r if isinstance(r, int) else -1
 
         if header:
             head = [next(ret)]
@@ -496,9 +494,10 @@ def test():
     from io import StringIO
     from collections import Counter
     from util.dfutil import read_any
-    
+    from datetime import datetime as dt
+
     pe = lambda *x: print("\n", *x, file=sys.stderr)
-    
+
     def debug_test_Differ_usecol():
         import pandas as pd
         a = [list("ac"), list("13"), list("46")]
@@ -796,10 +795,12 @@ def test():
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
-            print(x,file=sys.stderr,end="")
+            t1 = dt.now()
             func()
-            print("... ok.",file=sys.stderr)
+            t2 = dt.now()
+            print("{} : time {}".format(x, t2-t1),file=sys.stderr)
+
 
 if __name__ == "__main__":
-    # test()
+#    test()
     main()

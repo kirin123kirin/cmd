@@ -139,6 +139,7 @@ def read_dbsrv(server, sql_or_table=None, uid="", passwd="", vendor="mysql", *ar
 
 def test():
     from util.core import tdir
+    from datetime import datetime as dt
 
     def test_read():
         f = tdir + "sample.accdb"
@@ -149,7 +150,10 @@ def test():
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
+            t1 = dt.now()
             func()
+            t2 = dt.now()
+            print("{} : time {}".format(x, t2-t1))
 
 
 if __name__ == "__main__":

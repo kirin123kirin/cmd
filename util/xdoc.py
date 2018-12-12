@@ -53,57 +53,40 @@ from util.core import Path
 pinfo = namedtuple("OfficeDoc", ["path", "target", "value"])
 def pptx(ppt_path_or_buffer):
     path = Path(ppt_path_or_buffer)
-
     for i, s in enumerate(Presentation(path).slides):
-        for sp in s.shapes:
-
-            if not sp.has_text_frame:
-                continue
-
-            for para in sp.text_frame.paragraphs:
-                for run in para.runs:
-                    txt = run.text
-                    if txt:
-                        yield pinfo(path, i, txt)
+        for txt in (r.text for sp in s.shapes if sp.has_text_frame for p in sp.text_frame.paragraphs for r in p.runs if r.text):
+            yield pinfo(path, i, txt)
 
 def docx(docx_path_or_buffer):
     path = Path(docx_path_or_buffer)
-    doc = Document(path)
-
-    for para in doc.paragraphs:
-        txt = para.text
-        if txt:
-            yield pinfo(path, "#TODO", txt)
+    return (pinfo(path, "#TODO", txt) for txt in (p.text for p in Document(path).paragraphs if p.text))
 
 def xlsx(xlsx_path_or_buffer):
     path = Path(xlsx_path_or_buffer)
     with xlrd.open_workbook(path) as wb:
-        for sheet in wb.sheets():
-            nr = sheet.nrows
-            if nr > 0:
-                for i in range(nr):
-                    yield pinfo(path, "{}:{}".format(sheet.name, i+1), sheet.row_values(i))
+        for i, sh in ((r, sh) for sh in wb.sheets() for r in range(sh.nrows)):
+            yield pinfo(path, "{}:{}".format(sh.name, i+1), sh.row_values(i))
 
 def pdf(path_or_buffer):
     path = Path(path_or_buffer)
 
     with path.open('rb') as fp:
-        parser = PDFParser(fp)
+        ps = PDFParser(fp)
         doc = PDFDocument()
-        parser.set_document(doc)
-        doc.set_parser(parser)
+        ps.set_document(doc)
+        doc.set_parser(ps)
         doc.initialize('')
 
-        rsrcmgr = PDFResourceManager(caching=True)
-        device = PDFPageAggregator(rsrcmgr, laparams=LAParams())
-        interpreter = PDFPageInterpreter(rsrcmgr, device)
+        mgr = PDFResourceManager(caching=True)
+        dev = PDFPageAggregator(mgr, laparams=LAParams())
+        ip = PDFPageInterpreter(mgr, dev)
 
         for i, page in enumerate(doc.get_pages(), 1):
-            interpreter.process_page(page)
-            text = "".join(x.get_text() for x in device.get_result() if isinstance(x, (LTTextBox, LTTextLine)))
+            ip.process_page(page)
+            text = "".join(x.get_text() for x in dev.get_result() if isinstance(x, (LTTextBox, LTTextLine)))
             yield pinfo(path, i, text.rstrip("{}\n".format(i)))
 
-        device.close()
+        dev.close()
 
 def txt(path_or_buffer):
     path = Path(path_or_buffer)
@@ -124,10 +107,11 @@ def any(path_or_buffer):
     ext = path.ext.lower()[:4]
     func = _handler.get(ext, txt)
     return func(path_or_buffer)
-    
+
 
 def test():
     from util.core import tdir
+    from datetime import datetime as dt
 
     def test_pptx():
         f = tdir+"test.pptx"
@@ -166,7 +150,7 @@ def test():
         f = tdir+'diff1.xlsx'
         for x in any(f):
             assert(type(x) == pinfo)
-            
+
         f = tdir + "test.pdf"
         for x in any(f):
             assert(type(x) == pinfo)
@@ -174,10 +158,13 @@ def test():
         f = tdir + "test.csv"
         for x in any(f):
             assert(type(x) == pinfo)
-    
+
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
+            t1 = dt.now()
             func()
+            t2 = dt.now()
+            print("{} : time {}".format(x, t2-t1))
 
 if __name__ == "__main__":
     test()

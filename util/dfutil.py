@@ -54,8 +54,24 @@ def read_bytes(urlpath, *args, **kw):
 
     return dask.bytes.core.read_bytes(urlpath, *args, **kw)
 
+#for dask overwride
+def sort_values(self, *args, **kw):
+    def xsortv(x):
+        return x.sort_values(*args, **kw)
+        
+    if any(x in kw for x in ["inplace", "axis"]):
+        raise AttributeError("not support arguments")
+    return self.map_partitions(xsortv)
+
+def nunique(self, dropna=True):
+    def nuniq(x):
+        return x.nunique(dropna)
+    return self.map_partitions(nuniq)
+
 import dask.dataframe
 dask.dataframe.io.csv.read_bytes = read_bytes
+dask.dataframe.core._Frame.sort_values = sort_values
+dask.dataframe.core._Frame.nunique = nunique
 import dask.dataframe as dd
 
 try:
@@ -92,6 +108,7 @@ class _dfhandler(object):
 
     def guesskw(self):
         def kwargs(p):
+            #TODO botolneck 200msec
             return dict(
                 sep          = p.sep,
                 encoding= p.encoding,
@@ -112,6 +129,7 @@ class _dfhandler(object):
             self.gk.append([p, kwargs(p)])
 
     def _handler_read(self):
+        #TODO botolneck 142msec
         if self.size < BUF or vmfree() > self.size * 5:
             reader = pd.__getattribute__(self.func)
             self.concater = pd.concat
@@ -263,6 +281,7 @@ def read_any(f, *args, **kw):
 """
 def test():
     from util.core import tdir
+    from datetime import datetime as dt
 
     def nontest_daskwrapper():
         #TODO
@@ -404,7 +423,10 @@ def test():
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
+            t1 = dt.now()
             func()
+            t2 = dt.now()
+            print("{} : time {}".format(x, t2-t1))
 
 
 if __name__ == "__main__":

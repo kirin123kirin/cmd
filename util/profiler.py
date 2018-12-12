@@ -21,8 +21,8 @@ import os
 from io import StringIO
 
 # 3rd party modules
-import numpy as np
 import pandas as pd
+import dask.dataframe as dd
 
 
 __all__ = [
@@ -30,6 +30,10 @@ __all__ = [
         "Profile",
         ]
 
+def skew(key):
+    for i in range(1, len(key)):
+        for x in combinations(key, i):
+            yield sum(key[k] for k in x), x
 
 def profiler(f, top=10, header=True, outputencoding="cp932", *args, **kw):
     df = read_any(f, *args, **kw)
@@ -50,6 +54,8 @@ def profiler(f, top=10, header=True, outputencoding="cp932", *args, **kw):
 
 
 class Profile(object):
+    dnrule = "diff{:02d}".format
+
     def __init__(self, df, top=10, percentile=95):
         self.df = df if (df.dtypes == object).all() else df.astype("str")
         self._top = top
@@ -63,18 +69,23 @@ class Profile(object):
     @property
     def data(self):
         if self._profiler is None:
-            exctop = (self.df[c].value_counts().head(self.top).index.tolist() for c in self.df.columns)
+            cols = self.df.columns.tolist()
+            rec = len(self.df)
+
             if hasattr(self.df, "compute"):
-                rec = self.df.index.size.compute()
-                pr = pd.DataFrame(self.df.count().compute().rename("count"))
-                pr["unique"] = pd.DataFrame([self.df[c].nunique().compute() for c in self.df.columns], index=self.df.columns)
-                if self.top and self.top > 0:
-                    pr["top"] = list(exctop)
+                pr = pd.concat([
+                        self.df.count().rename("count").compute(),
+                        self.df.nunique().rename("unique").compute()], axis=1)
+
             else:
-                rec = self.df.index.size
-                pr = self.df.describe().T
-                if self.top and self.top > 1:
-                    pr["top"] = list(exctop)
+                pr = pd.concat([
+                        self.df.count().rename("count"),
+                        self.df.nunique().rename("unique")], axis=1)
+
+            if self.top:
+                pr["top"] = list(self.df[c].value_counts().head(self.top).index.tolist() for c in cols)
+            else:
+                pr["top"] = list(self.df[c].value_counts().index.tolist() for c in cols)
 
             pr.reset_index(inplace=True)
             pr.rename(columns=dict(index="cols"),inplace=True)
@@ -88,29 +99,25 @@ class Profile(object):
     @property
     def guesskey(self):
         if self._guesskey is None or self._top != self.top:
-            pr = self.data.sort_values("keyrate", ascending=False)
-            self._guesskey = pr.head(self.top)[["cols", "keyrate"]]
+            dt = self.data.loc[self.data.keyrate > 0, ["cols", "keyrate"]]
+            self._guesskey = dt.set_index("cols").keyrate.to_dict()
         return self._guesskey
 
     @property
     def diffkey(self):
         if self._diffkey is None or self._percentile != self.percentile:
-            key = self.guesskey
+            df = pd.DataFrame(skew(self.guesskey), columns=["skw", "key"])
+            pt = df.skw.quantile(self.percentile / 100.0)
+            df = df[(df.skw > pt) | (df.key.apply(len) == len(self.guesskey)-1)].sort_values("skw", ascending=False)
+            df.index = list(map(self.dnrule, range(1, df.index.size + 1)))
 
-            kg = []
-            pt = []
-            for i in range(len(key), 0, -1):
-                for cb in combinations(key.cols, i):
-                    skew = sum(key.keyrate[key.cols == c].sum() for c in cb)
-                    kg.append((skew, list(cb)))
-                    pt.append(skew)
-            kg.sort(reverse=True)
-            percentile = np.percentile(pt, self.percentile)
-            self._diffkey = dict(("diff{:02d}".format(i+1),k) for i, (s, k) in enumerate(kg) if s > percentile or len(k) == len(key.cols) - 1)
+            self._diffkey = df.key.to_dict()
         return self._diffkey
+
     def __getitem__(self, name):
-        k = "diff{:02d}".format(int(name.split("diff")[-1]))
+        k = self.dnrule(int(name.split("diff")[-1]))
         return self.diffkey[k]
+
     def __getattr__(self, name):
         return self.__getitem__(name)
 
@@ -167,46 +174,51 @@ def main():
 
 def test():
     from util.core import tdir
-    def test_profiler():
+    from datetime import datetime as dt
+
+    def test_Profiler():
         f = tdir + "diff1.csv"
         df = read_any(f).head(3)
         pr = Profile(df)
         print(pr.data.to_csv(index=False))
+
+    def test_profiler():
+        f = tdir + "diff1.csv"
         print(profiler(f, top=None))
 
-    #TODO
-    def test_Profile():
-        pass
+
+    def test_diffkey_pandas():
+        f = tdir + "diff1.csv"
+        df = read_any(f).head(3)
+        t1 = dt.now()
+        pr = Profile(df)
+        pr.diffkey
+        t2 = dt.now()
+        print("diffkey_pandas", t2-t1)
+
+    def test_diffkey_dask():
+        f = tdir + "diff1.csv"
+        df = dd.from_pandas(read_any(f).head(3),1)
+        t1 = dt.now()
+        pr = Profile(df)
+        pr.diffkey
+        t2 = dt.now()
+        print("diffkey_dask", t2-t1)
 
     def test_main():
         sys.argv.extend(["-v", tdir + "sample.accdb"])
         main()
 
-
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
+            t1 = dt.now()
             func()
-
-
-def make_test_src_print(
-        srctmpl = "\n    #TODO\n    def test_{}():\n        pass\n",
-        exclude = ["make_test_src_print", "make_all_src_print",
-                   "test", "main", "test_main"]):
-
-    import types
-
-    for k, v in dict(globals()).items():
-        src = srctmpl.format(k)
-        if k in exclude:
-            continue
-        if isinstance(v, type) and v.__module__ == "__main__":
-            print(src)
-        if isinstance(v, types.FunctionType) and v.__module__ == "__main__":
-            print(src)
+            t2 = dt.now()
+            print("{} : time {}".format(x, t2-t1))
 
 
 if __name__ == "__main__":
-    # test()
+#    test()
     main()
 
 
