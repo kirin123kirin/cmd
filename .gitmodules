@@ -1,0 +1,3 @@
+[submodule ".\\pytsql"]
+	path = .\\pytsql
+	url = https://github.com/kirin123kirin/pytsql.git
