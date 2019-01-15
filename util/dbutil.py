@@ -80,8 +80,11 @@ def con_sqlite(f, uid="", passwd="", *args, **kw):
 def con_oracle(tsnname, uid, passwd, *args, **kw):
     con = create_engine(r'oracle+cx_oracle://{}:{}@{}'.format(uid, passwd,tsnname))
     return con, con.table_names()
+#def con_oracle(server, dbname, uid, passwd, port="1521", *args, **kw):
+    #con = create_engine("oracle+cx_oracle://{}:{}@{}/{}?port={}".format(uid, passwd,server,dbname,port))
+    #return con, con.table_names()
 
-def con_sqlserver(server, dbname, uid, passwd, *args, **kw):
+def con_sqlserver(server, dbname, uid, passwd, port=None, *args, **kw):
     target = "SQL Server Native Client"
     driver = sorted(x for x in pyodbc.drivers() if x.startswith(target))
     if not driver:
@@ -91,16 +94,20 @@ def con_sqlserver(server, dbname, uid, passwd, *args, **kw):
     con = create_engine(uri)
     return con, con.table_names()
 
-def con_mysql(server, dbname, uid, passwd, *args, **kw):
-    con = create_engine(r'mysql://{}:{}@{}:3309/{}'.format(uid,passwd,server,dbname))
+def con_mysql(server, dbname, uid, passwd, port="3309", *args, **kw):
+    con = create_engine(r'mysql://{}:{}@{}:{}/{}'.format(uid,passwd,server,port,dbname))
     return con, con.table_names()
 
-def con_vertica(server, dbname, uid, passwd, *args, **kw):
-    con = create_engine(r'vertica+vertica_python://{uid}:{passwd}@{server}:5433/{dbname}'.format(uid, passwd, server, dbname))
+def con_vertica(server, dbname, uid, passwd, port="5433", *args, **kw):
+    con = create_engine(r'vertica+vertica_python://{}:{}@{}:{}/{}'.format(uid, passwd, server, port, dbname))
     return con, con.table_names()
 
-def con_postgres(server, dbname, uid, passwd, *args, **kw):
-    con = create_engine(r'postgresql://{}:{}@{}:5433/{}'.format(uid,passwd,server,dbname))
+def con_postgres(server, dbname, uid, passwd, port="5432", *args, **kw):
+    con = create_engine(r'postgresql://{}:{}@{}:{}/{}'.format(uid,passwd,server,port,dbname))
+    return con, con.table_names()
+
+def con_db2(server, dbname, uid, passwd, port="50000", *args, **kw):
+    con = create_engine(r'db2+ibm_db://{}:{}@{}:{}/{}'.format(uid,passwd,server,port,dbname))
     return con, con.table_names()
 
 def parsesql(sql_or_table):
@@ -128,8 +135,11 @@ def read_db(f, sql_or_table=None, uid="", passwd="", *args, **kw):
     con, tables = sw[Path(f).ext](f, uid=uid, passwd=passwd)
     return read_sql(sql_or_table or tables, con, *args, **kw)
 
-def read_dbsrv(server, sql_or_table=None, uid="", passwd="", vendor="mysql", *args, **kw):
-    con, tables = eval("con_" + vendor)(server, uid=uid, passwd=passwd)
+def read_dbsrv(server, dbname, sql_or_table=None, uid="", passwd="", vendor="mysql", port=None, *args, **kw):
+    con_kw = dict(server=server, dbname=dbname, uid=uid, passwd=passwd)
+    if port:
+        con_kw.update(dict(port=port))
+    con, tables = eval("con_" + vendor)(**con_kw)
     return read_sql(sql_or_table or tables, con, *args, **kw)
 
 
