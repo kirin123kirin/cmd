@@ -125,7 +125,7 @@ def getdst(src):
 
 def maketable(inpdir=inpdir, outdir=outdir):
     src = pd.Series(lsdir(inpdir))
-    src = src[~src.isin(src[src.apply(lambda x: ".min." in x)].str.replace(".min.","."))]
+    #src = src[~src.isin(src[src.apply(lambda x: ".min." in x)].str.replace(".min.","."))] #bug fix commentouted
     excepts = [e for e in [pathjoin(inpdir, "Lib\\site-packages\\bokeh\\core\\__init__.py")] if pathexists(e)]
     if excepts:
         src = src.append(pd.Series(data=excepts, name="src"),ignore_index=True)
@@ -229,10 +229,10 @@ def main(archivedir=archivedir):
 
     buildpython(df[df.nano == True], pathjoin(archivedir, "python{}_nano64.zip".format(pyver)))
 #    dotnetdllcopy(outdir)
-    shutil.make_archive(pathjoin(archivedir,"PortableApp18_nano"), "zip", outroot)
+    shutil.make_archive(pathjoin(archivedir,"PortableApp23_nano"), "zip", outroot)
 
     buildpython(df[df.nano == False], pathjoin(archivedir, "python{}_min64.zip".format(pyver)))
-    shutil.make_archive(pathjoin(archivedir,"PortableApp18_min"), "zip", outroot)
+    shutil.make_archive(pathjoin(archivedir,"PortableApp23_min"), "zip", outroot)
 
 if __name__ == "__main__":
     main()
