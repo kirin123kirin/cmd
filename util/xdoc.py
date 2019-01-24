@@ -47,8 +47,8 @@ except ModuleNotFoundError:
     LTTextLine = ImportError
 
 #my library
-from util.core import Path
-
+from util.core import Path, command
+from io import StringIO
 
 pinfo = namedtuple("OfficeDoc", ["path", "target", "value"])
 def pptx(ppt_path_or_buffer):
@@ -104,10 +104,13 @@ _handler = {
 }
 def any(path_or_buffer):
     path = Path(path_or_buffer)
-    ext = path.ext.lower()[:4]
-    func = _handler.get(ext, txt)
-    return func(path_or_buffer)
-
+    try:
+        ext = path.ext.lower()[:4]
+        func = _handler.get(ext, txt)
+        return func(path_or_buffer)
+    except:
+        sio = StringIO(command("xdoc2txt -8 {}".format(path)))
+        return (pinfo(path, "", line) for line in sio if line.strip())
 
 def test():
     from util.core import tdir
@@ -166,5 +169,11 @@ def test():
             t2 = dt.now()
             print("{} : time {}".format(x, t2-t1))
 
+def main():
+    for t in any(sys.argv[1]):
+        print("\t".join([str(t.path), t.target, " ".join(map(str,t.value)) if hasattr(t.value, "__iter__") else t.value]))
+
 if __name__ == "__main__":
-    test()
+    #test()
+
+    main()

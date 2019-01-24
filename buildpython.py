@@ -165,11 +165,14 @@ def buildpython(df, outzipname):
     print("Build `{}`".format(basename(outzipname)))
     for i, row in df[["src", "dst","ext"]][~df.zipok].iterrows():
         mkdirs(dirname(row.dst))
-        if row.ext in [".css", ".htm", ".html", ".js", ".json", ".map"] and ".min." not in row.src:
-            minify(row.src, row.dst)
-        elif row.ext in [".exe", ".dll", ".pyd"]:
-            upx(row.src, row.dst)
-        else:
+        try:
+            if row.ext in [".css", ".htm", ".html", ".js", ".json", ".map"] and ".min." not in row.src:
+                minify(row.src, row.dst)
+            elif row.ext in [".exe", ".dll", ".pyd"]:
+                upx(row.src, row.dst)
+            else:
+                shutil.copy(row.src, row.dst)
+        except:
             shutil.copy(row.src, row.dst)
 
     os.chdir(libdir)
@@ -229,10 +232,10 @@ def main(archivedir=archivedir):
 
     buildpython(df[df.nano == True], pathjoin(archivedir, "python{}_nano64.zip".format(pyver)))
 #    dotnetdllcopy(outdir)
-    shutil.make_archive(pathjoin(archivedir,"PortableApp23_nano"), "zip", outroot)
+    shutil.make_archive(pathjoin(archivedir,"PortableApp24_nano"), "zip", outroot)
 
     buildpython(df[df.nano == False], pathjoin(archivedir, "python{}_min64.zip".format(pyver)))
-    shutil.make_archive(pathjoin(archivedir,"PortableApp23_min"), "zip", outroot)
+    shutil.make_archive(pathjoin(archivedir,"PortableApp24_min"), "zip", outroot)
 
 if __name__ == "__main__":
     main()

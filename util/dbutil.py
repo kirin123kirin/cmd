@@ -77,12 +77,9 @@ def con_sqlite(f, uid="", passwd="", *args, **kw):
     con = create_engine(r"sqlite:///" + f)
     return con, con.table_names()
 
-def con_oracle(tsnname, uid, passwd, *args, **kw):
-    con = create_engine(r'oracle+cx_oracle://{}:{}@{}'.format(uid, passwd,tsnname))
+def con_oracle(server, dbname, uid, passwd, port="1521", *args, **kw):
+    con = create_engine("oracle+cx_oracle://{}:{}@{}/{}?port={}".format(uid, passwd,server,dbname,port))
     return con, con.table_names()
-#def con_oracle(server, dbname, uid, passwd, port="1521", *args, **kw):
-    #con = create_engine("oracle+cx_oracle://{}:{}@{}/{}?port={}".format(uid, passwd,server,dbname,port))
-    #return con, con.table_names()
 
 def con_sqlserver(server, dbname, uid, passwd, port=None, *args, **kw):
     target = "SQL Server Native Client"
