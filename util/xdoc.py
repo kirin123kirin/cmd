@@ -109,7 +109,7 @@ def any(path_or_buffer):
         func = _handler.get(ext, txt)
         return func(path_or_buffer)
     except:
-        sio = StringIO(command("xdoc2txt -8 {}".format(path)))
+        sio = StringIO(command("xdoc2txt -8 -o=0 {}".format(path)))
         return (pinfo(path, "", line) for line in sio if line.strip())
 
 def test():

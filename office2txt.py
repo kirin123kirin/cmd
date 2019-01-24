@@ -6,14 +6,14 @@ from util import xdoc, lsdir, opener
 incread_files = re.compile("\.(xls|doc|ppt|pdf)")
 
 def render(t, sep="\t", sep2=" "):
-	"""
-	sep : separator of filename, line, data
-	sep2 : separator of datalist( ex. excel cell rows)
-	"""
-	if isinstance(t[2], (list,tuple)):
-        return sep.join([str(t[0]), t[1], sep2.join(map(str,t[2]))])
+    """
+    sep : separator of filename, line, data
+    sep2 : separator of datalist( ex. excel cell rows)
+    """
+    if isinstance(t[2], (list,tuple)):
+        return sep.join([str(t[0]), str(t[1]), sep2.join(map(str,t[2]))])
     else:
-        return sep.join([str(t[0]), t[1], t[2]])
+        return sep.join(map(str,t))
 
 def reader_all(path):
     for p in lsdir(path):
@@ -31,8 +31,8 @@ def reader_all(path):
                 print(render([path,"binaryfile",""]))
             else:
                 with open(path, "r", encoding=p.encoding) as f:
-                    for i, line in enumerate(f):
-                        print(render([path,i+1,line.strip()]))
+                    for i, line in enumerate(f, 1):
+                        print(render([path,i,line.strip()]))
 
 if __name__ == "__main__":
     import os
