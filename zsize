@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import gzip
+import os
+import sys
+from glob import glob
+
+def usage():
+    sys.stderr.write("This Program is gzip Uncompress Size Checker.\n\n")
+    sys.stderr.write("Usage: python " + os.path.basename(sys.argv[0]) + " test.gz [...]\n")
+    sys.exit(1)
+    
+if len(sys.argv) == 1 or any(x in sys.argv for x in ["-h", "--help"]):
+    usage()
+    
+isrun = 0
+for a in sys.argv[1:]:
+    for f in glob(a):
+        try:
+            with gzip.open(f) as fp:
+                fp.seek(0, os.SEEK_END)
+                if isrun == 0:
+                    sys.stdout.write("Compress byte Uncompress byte  ratio filename\n")
+                sys.stdout.write("{: >13,d} {: >15,d} {: >5.1f}% {}".format(fp.fileobj.tell(), fp.tell(), fp.tell()/fp.fileobj.tell(), os.path.basename(f)))
+                isrun += 1
+        except Exception as e:
+            sys.stderr.write("Error: {}  {}\n".format(f, e))
+            
+if isrun is None:
+    sys.stderr.write("File not Found\n\n")
+    usage()
+
+sys.exit(0)
+
+

@@ -8,6 +8,7 @@ from subprocess import Popen, PIPE
 from flask import send_from_directory
 from socket import gethostname
 from pipes import quote
+import re
 
 app = flask.Flask(__name__)
 
@@ -17,11 +18,11 @@ def getitem(obj, item, default):
     else:
         return obj[item]
 
-ipadr = ""
+re_path = re.compile("(/?.*)")
 def geturi(cs, res):
     if "ls -l" in cs or "ll" in cs:
         res = res.split(" ")[-1]
-    return res.replace("/home/admin/data/samba/", "//{}/".format(ipadr))
+    return res.replace("/home/admin/data/samba/", "//10.145.120.124/")
 
 okcmd = ["locate", "grep", "ls", "ll", "la", "file"]
 def denycmd(x):
@@ -36,7 +37,7 @@ def index():
     # handle user args
     args = flask.request.args
     query = getitem(args, 'searchbox', '')
-    cs = getitem(args, 'command', '')
+    cs = getitem(args, 'command', 'locate /samba')
     hostname = gethostname()
     if denycmd(cs):
         resultslist = '<h2>Access Deny Command!!!!!</h2>'
@@ -57,7 +58,10 @@ def index():
     html = flask.render_template(
         'index.html',
         resultslist=resultslist,
-        hostname=hostname)
+        hostname=hostname,
+        command=command,
+        query=query
+         )
     return html
 
 @app.route('/css/<path:path>')
