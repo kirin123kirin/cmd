@@ -20,7 +20,10 @@ def gzsize(f, chunksize=1048576):
             pos = fp.tell()
             fp.seek(pos + chunksize)
 
-        info = (fp.fileobj.tell(), fp.tell(), fp.tell()/fp.fileobj.tell(), os.path.basename(f))
+        p = fp.fileobj.tell()
+        c = fp.tell()
+        info = (p, c, float(p)/c*100, os.path.basename(f))
+        
         fp.close()
 
         if ver > 25:
@@ -30,8 +33,8 @@ def gzsize(f, chunksize=1048576):
 
         return 0
     except:
+        sys.stderr.write("Error " + f + ": " + sys.exc_info()[1] + "\n")
         fp.close()
-        sys.stderr.write("Error: " + f + " " + sys.exc_info()[0] + "\n")
         return 1
 
 def main():
@@ -41,14 +44,18 @@ def main():
     retcode = 0
     isrun = 0
     for a in sys.argv[1:]:
+        prev = isrun
         for f in glob(a):
             if isrun == 0:
-                sys.stdout.write("Compress byte Uncompress byte  ratio filename\n")
+                sys.stdout.write("CompressBytes UncompressBytes  ratio filename\n")
             retcode += gzsize(f)
             isrun += 1
+        
+        if prev == isrun:
+            sys.stderr.write("Error " + a + ": File not Found.\n")
 
     if isrun == 0:
-        sys.stderr.write("File not Found\n\n")
+        sys.stderr.write("All Files not Found.\n\n")
         usage()
 
     sys.exit(retcode)
