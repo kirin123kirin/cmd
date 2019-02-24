@@ -4,37 +4,83 @@ import gzip
 import os
 import sys
 from glob import glob
+import struct
+from zipfile import ZipFile
+#from bz2 import BZ2File
 
 ver = sys.version_info[0]*10 + sys.version_info[1]
+
+LIMITTER = 384*1024**2
+CHUNKSIZE=1024**2
 
 def usage():
     sys.stderr.write("This Program is gzip Uncompress Size Checker.\n\n")
     sys.stderr.write("Usage: python " + os.path.basename(sys.argv[0]) + " test.gz [...]\n")
     sys.exit(1)
 
-def gzsize(f, chunksize=1048576):
-    try:
-        fp = gzip.open(f)
-        pos = -1
-        while fp.tell() != pos:
-            pos = fp.tell()
-            fp.seek(pos + chunksize)
+def get_gzsize(fp, chunksize=CHUNKSIZE):
+    gz = fp.fileobj
+    p = os.stat(gz.name).st_size
+    
+    if p < LIMITTER:
+        gz.seek(-4, 2)
+        c = struct.unpack('I', gz.read(4))[0]
+        if p < c:
+            return p, c, float(p)/c*100, os.path.basename(gz.name)
+    
+    gz.seek(0)
+    pos = -1
+    while fp.tell() != pos:
+        pos = fp.tell()
+        fp.seek(pos + chunksize)
 
-        p = fp.fileobj.tell()
-        c = fp.tell()
-        info = (p, c, float(p)/c*100, os.path.basename(f))
-        
+    c = fp.tell()
+    return p, c, float(p)/c*100, os.path.basename(gz.name)
+
+def get_zipsize(fp, _=None):
+    p = os.stat(fp.filename).st_size
+    c = sum(i.file_size for i in fp.infolist())
+    return p, c, float(p)/c*100, os.path.basename(fp.filename)
+
+MAGIC = [
+    ("\\x1f\\x8b", gzip.open, get_gzsize),
+    ("PK\\x03\\x04", ZipFile, get_zipsize),
+    ("PK\\x05\\x06", ZipFile, get_zipsize),
+    ("PK\\x07\\x08", ZipFile, get_zipsize),
+    ("BZh", BZ2File, None),
+    ("\\x1f\\x9d", gzip.open, get_gzsize), #CompressZFile
+]
+
+def getopener(fname):
+    f = open(fname, "rb")
+    header = repr(f.read(4)).strip("b").strip("'")
+    f.close()
+    for m in MAGIC:
+        if header.startswith(m[0]):
+            return m[1], m[2]
+    raise ValueError("Unknown Type Format.")
+
+def render(f, header=True, chunksize=CHUNKSIZE):
+    try:
+        op = getopener(f)
+        fp = op[0](f)
+        info = op[1](fp, chunksize)
         fp.close()
+        if header:
+            sys.stdout.write("  CompressBytes   UncompressBytes   ratio filename\n")
 
         if ver > 25:
-            sys.stdout.write("{: >13,d} {: >15,d} {: >5.1f}% {}\n".format(*info))
+            sys.stdout.write("{: >15,d} {: >17,d} {: >6.1f}% {}\n".format(*info))
         else:
-            sys.stdout.write("%13d %15d %5.1f%% %s\n" % info)
+            sys.stdout.write("%15d %17d %6.1f%% %s\n" % info)
 
         return 0
     except:
-        sys.stderr.write("Error " + f + ": " + sys.exc_info()[1] + "\n")
-        fp.close()
+        sys.stderr.write("Error " + f + ": " + str(sys.exc_info()[1]) + "\n")
+        try:
+            fp.close()
+        except:
+            pass
         return 1
 
 def main():
@@ -46,11 +92,9 @@ def main():
     for a in sys.argv[1:]:
         prev = isrun
         for f in glob(a):
-            if isrun == 0:
-                sys.stdout.write("CompressBytes UncompressBytes  ratio filename\n")
-            retcode += gzsize(f)
+            retcode += render(f, isrun == 0)
             isrun += 1
-        
+
         if prev == isrun:
             sys.stderr.write("Error " + a + ": File not Found.\n")
 
@@ -61,5 +105,6 @@ def main():
     sys.exit(retcode)
 
 if __name__ == "__main__":
-#     sys.argv.append("/etc/alternatives/infobrowser.1.gz")
+    #sys.argv.append("")
     main()
+
