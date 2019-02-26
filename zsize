@@ -6,7 +6,7 @@ import sys
 from glob import glob
 import struct
 from zipfile import ZipFile
-#from bz2 import BZ2File
+from bz2 import BZ2File
 
 ver = sys.version_info[0]*10 + sys.version_info[1]
 
@@ -21,13 +21,13 @@ def usage():
 def get_gzsize(fp, chunksize=CHUNKSIZE):
     gz = fp.fileobj
     p = os.stat(gz.name).st_size
-    
+
     if p < LIMITTER:
         gz.seek(-4, 2)
         c = struct.unpack('I', gz.read(4))[0]
         if p < c:
             return p, c, float(p)/c*100, os.path.basename(gz.name)
-    
+
     gz.seek(0)
     pos = -1
     while fp.tell() != pos:
@@ -36,6 +36,17 @@ def get_gzsize(fp, chunksize=CHUNKSIZE):
 
     c = fp.tell()
     return p, c, float(p)/c*100, os.path.basename(gz.name)
+
+def get_bz2size(fp, chunksize=CHUNKSIZE):
+    p = os.stat(fp.name).st_size
+
+    pos = -1
+    while fp.tell() != pos:
+        pos = fp.tell()
+        fp.seek(pos + chunksize)
+
+    c = fp.tell()
+    return p, c, float(p)/c*100, os.path.basename(fp.name)
 
 def get_zipsize(fp, _=None):
     p = os.stat(fp.filename).st_size
@@ -47,7 +58,7 @@ MAGIC = [
     ("PK\\x03\\x04", ZipFile, get_zipsize),
     ("PK\\x05\\x06", ZipFile, get_zipsize),
     ("PK\\x07\\x08", ZipFile, get_zipsize),
-    ("BZh", BZ2File, None),
+    ("BZh", BZ2File, get_bz2size),
     ("\\x1f\\x9d", gzip.open, get_gzsize), #CompressZFile
 ]
 
@@ -64,6 +75,7 @@ def render(f, header=True, chunksize=CHUNKSIZE):
     try:
         op = getopener(f)
         fp = op[0](f)
+        fp.name = os.path.normpath(f)
         info = op[1](fp, chunksize)
         fp.close()
         if header:
