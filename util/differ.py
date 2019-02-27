@@ -25,6 +25,7 @@ from util.core import (
         )
 
 from util.profiler import Profile
+from pandas import DataFrame
 
 import os
 import sys
@@ -310,9 +311,9 @@ def dictdiffer(a, b, keya=None, keyb=None, sorted=False, skipequal=True, startid
             va, vb = val.split(" ---> ")
             _a, _b = a[va], b[vb]
         elif tag == "insert":
-            _a, _b = [], b[val]
+            _a, _b = DataFrame(), b[val]
         elif tag == "delete":
-            _a, _b = a[val], []
+            _a, _b = a[val], DataFrame()
 
         rr = diffauto(_a, _b, sorted=sorted, skipequal=skipequal, startidx=startidx, header=header, usecola=usecola, usecolb=usecolb)
 
@@ -707,6 +708,23 @@ def test():
 
         assert(list(differ(a,b)) == anser)
 
+    def test_differxls_blanksheet():
+        f1 = tdir + "diff5.xlsx"
+        f2 = tdir + "diff6.xlsx"
+
+        a = read_any(f1)
+        b = read_any(f2)
+        anser = [
+            ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'TARGET', 'mpg', 'cyl', 'displ', 'hp', 'weight', 'Unnamed: 5', 'accel', 'yr', 'origin', 'name'],
+            ['replace', 2, 2, 'diff1 ---> diff2', 'b ---> 10', '8', '307', '130', '3504', '', '12', '70', '1', 'chevrolet chevelle malibue'],
+            ['insert', '', 16, 'diff1 ---> diff2', '22', '6', '198', '95', '2833', '', '15.5', '70', '1', 'plymouth duster'],
+            ['insert', '', 24, 'diff1 ---> diff2', '26', '4', '121', '113', '2234', '', '12.5', '70', '2', 'bmw 2002'],
+            ['replace', 38, 40, 'diff1 ---> diff2', '14', '9 ---> 8', '351', '153', '4154', '', '13.5', '71', '1', 'ford galaxie 500'],
+            ['replace', 47, 49, 'diff1 ---> diff2', '23', '4', '122', '86', '2220', '', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'],
+            ['delete', 56, '', 'diff1 ---> diff2', '25', '4', '97.5', '80', '2126', '', '17', '72', '1', 'dodge colt hardtop']]
+
+        assert(list(differ(a,b)) == anser)
+
     def test_differlist():
         anser = [['equal', 1, 1, 1],
         ['replace', 2, 2, '2 ---> 3'],
@@ -802,5 +820,5 @@ def test():
 
 
 if __name__ == "__main__":
-#    test()
-    main()
+    test()
+#    main()

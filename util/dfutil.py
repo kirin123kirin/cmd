@@ -58,14 +58,14 @@ def read_bytes(urlpath, *args, **kw):
 def sort_values(self, *args, **kw):
     def xsortv(x):
         return x.sort_values(*args, **kw)
-        
+
     if any(x in kw for x in ["inplace", "axis"]):
         raise AttributeError("not support arguments")
     return self.map_partitions(xsortv)
 
 def nunique(self, dropna=True):
     def nuniq(x):
-        return x.nunique(dropna)
+        return x.nunique(dropna=dropna)
     return self.map_partitions(nuniq)
 
 import dask.dataframe

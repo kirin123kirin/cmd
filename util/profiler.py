@@ -71,6 +71,8 @@ class Profile(object):
         if self._profiler is None:
             cols = self.df.columns.tolist()
             rec = len(self.df)
+            if cols == [] and rec == 0:
+                return pd.DataFrame(columns=['cols','rec','count','unique','uniqrate','valrate','keyrate','top'])
 
             if hasattr(self.df, "compute"):
                 pr = pd.concat([
@@ -218,7 +220,7 @@ def test():
 
 
 if __name__ == "__main__":
-#    test()
-    main()
+    test()
+#    main()
 
 

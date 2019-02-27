@@ -158,6 +158,8 @@ def geturi(s):
 
     if len(urlparse(s).scheme) > 1:
         return s
+    elif s[1] == ":":
+        return "file:///" + s.replace("\\", "/")
     elif s.startswith(r"\\") or s.startswith("//"):
         return "file://" + s.replace("\\", "/")
     else:
@@ -2106,8 +2108,9 @@ def test():
             assert(getsize(f) == len(dat))
 
     def test_geturi():
-        assert(geturi(tdir) == "file://" + (isposix is False and "/" or "") + tdir.replace("\\", "/")[:-1])
+        assert(geturi(tdir) == "file://" + (isposix is False and "/" or "") + tdir.replace("\\", "/"))
         Path(geturi(tdir+"test.zip"))
+        assert(geturi(r"Z:\temp\hoge.txt") == "file:///Z:/temp/hoge.txt")
 
     def test_getdialect():
         with open(tdir+"diff1.csv", "rb") as f:
@@ -2188,7 +2191,7 @@ def test():
 
     def test_PathList():
         p = Path(tdir+"diff*")
-        assert(len(p) == 6)
+        assert(len(p) == 8)
         assert(all(isinstance(x, Path) for x in p))
         p = Path(tdir+"diff*.csv")
         assert(p.sep == [",", ","])
