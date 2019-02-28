@@ -1007,7 +1007,7 @@ class Path(type(pathlib.Path())):
             if et in guess_all_extensions(mime):
                 return et
             else:
-                return guess_extension(mime)
+                return guess_extension(mime) or et
         elif mime and ex == "gzip":
             return guess_extension(mime) + ".gz"
         elif not mime and ex == "gzip":
