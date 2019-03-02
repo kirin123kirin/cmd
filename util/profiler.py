@@ -31,6 +31,8 @@ __all__ = [
         ]
 
 def skew(key):
+    if(len(key)) > 20: # for memory over flow
+        key = dict(sorted(key.items(), key=lambda x: x[1], reverse=True)[:20])
     for i in range(1, len(key)):
         for x in combinations(key, i):
             yield sum(key[k] for k in x), x
