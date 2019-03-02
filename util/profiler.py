@@ -23,7 +23,7 @@ from io import StringIO
 # 3rd party modules
 import pandas as pd
 import dask.dataframe as dd
-
+import numpy as np
 
 __all__ = [
         "profiler",
@@ -76,12 +76,12 @@ class Profile(object):
 
             if hasattr(self.df, "compute"):
                 pr = pd.concat([
-                        self.df.count().rename("count").compute(),
+                        self.df.replace("", np.nan).count().rename("count").compute(),
                         self.df.nunique().rename("unique").compute()], axis=1)
 
             else:
                 pr = pd.concat([
-                        self.df.count().rename("count"),
+                        self.df.replace("", np.nan).count().rename("count"),
                         self.df.nunique().rename("unique")], axis=1)
 
             if self.top:
@@ -222,5 +222,4 @@ def test():
 if __name__ == "__main__":
 #    test()
     main()
-
 

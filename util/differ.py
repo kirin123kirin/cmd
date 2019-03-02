@@ -31,6 +31,7 @@ import os
 import sys
 from itertools import chain, zip_longest
 from collections import namedtuple
+import math
 
 
 __all__ = ["differ"]
@@ -265,16 +266,20 @@ class Differ(object):
 def diffauto(a, b, sorted=False, skipequal=True, startidx=1, header=True, usecola=None, usecolb=None):
     cola = a.columns.tolist()
     colb = b.columns.tolist()
-    dka = {tuple(cola.index(z) for z in v):k for k, v in Profile(a.head(10), top=None).diffkey.items()}
-    dkb = {tuple(colb.index(z) for z in v) for v in Profile(b.head(10), top=None).diffkey.values()}
-    diffkeys=[(dka[x], x) for x in set(dka) & dkb]
-    diffkeys.sort()
+    diffkeys = [(None, None)]
+
+    if sorted is False:
+        dka = {tuple(cola.index(z) for z in v):k for k, v in Profile(a.head(10), top=None).diffkey.items()}
+        dkb = {tuple(colb.index(z) for z in v) for v in Profile(b.head(10), top=None).diffkey.values()}
+        dk=[(dka[x], x) for x in set(dka) & dkb]
+        dk.sort()
+        diffkeys += dk
     dummy = -1
 
-    for i, (_, key) in enumerate([(None, None)] + diffkeys):
+    for i, (_, key) in enumerate(diffkeys):
         if i == 0:
             r = Differ(a, b, sorted=sorted, skipequal=skipequal, startidx=startidx, header=True, usecola=usecola, usecolb=usecolb)
-            r.unmatch_count_allow = 0
+            r.unmatch_count_allow = math.floor(math.log(len(cola))*math.log(len(colb))) if sorted else 0
             reta, retb = [[dummy, *cola]], [[dummy, *colb]]
         else:
             r = Differ(reta.copy(), retb.copy(), keya=key, keyb=key, skipequal=skipequal, startidx="infer", header=True, usecola=usecola, usecolb=usecolb)
@@ -345,7 +350,7 @@ def differ(A, B, keya=None, keyb=None, sorted=False, skipequal=True, startidx=1,
     except:
         pass
     if isinstance(A, dict) and isinstance(B, dict):
-        ret = dictdiffer(A, B, keya=keya, keyb=keyb, skipequal=skipequal, startidx=startidx, header=header, usecola=usecola, usecolb=usecolb)
+        ret = dictdiffer(A, B, keya=keya, keyb=keyb, sorted=sorted, skipequal=skipequal, startidx=startidx, header=header, usecola=usecola, usecolb=usecolb)
     elif isdataframe(A) and isdataframe(B) and not keya and not keyb:
         ret = diffauto(A, B, skipequal=skipequal, startidx=startidx, header=header, usecola=usecola, usecolb=usecolb)
     else:
