@@ -7,6 +7,9 @@ import (
     "regexp"
     "io/ioutil"
     "reflect"
+    "strings"
+    "golang.org/x/text/encoding/japanese"
+    "golang.org/x/text/transform"
 )
 
 var excludeDir = regexp.MustCompile(`^(\.svn|\.git)$`)
@@ -24,6 +27,16 @@ type Info_t struct {
     name string
     fullpath string
     link string
+}
+
+func utf8_to_sjis(str string) (string) {
+        iostr := strings.NewReader(str)
+        rio := transform.NewReader(iostr, japanese.ShiftJIS.NewEncoder())
+        ret, err := ioutil.ReadAll(rio)
+        if err != nil {
+                return ""
+        }
+        return string(ret)
 }
 
 func is_dir(name string) bool {
@@ -79,7 +92,7 @@ func printInfo(info Info_t) {
 	v := reflect.Indirect(reflect.ValueOf(info))
     t := v.Type()
 	for i := 0; i < t.NumField(); i++ {
-	    fmt.Printf("%s" + sep, v.Field(i).String())
+	    fmt.Printf("%s" + sep, utf8_to_sjis(v.Field(i).String()))
 	}
 	fmt.Println("")
 }
