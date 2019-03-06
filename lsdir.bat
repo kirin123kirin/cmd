@@ -1,2 +1,3 @@
 @echo off
-python %~dp0\%~n0.py %*
+
+powershell "Get-ChildItem %* -Recurse | ? { $_.PSIsContainer } | Select-Object mode,length,lastwritetime,fullname| ConvertTo-Csv -NoTypeInformation -Delimiter `t"
