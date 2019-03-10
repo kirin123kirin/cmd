@@ -92,6 +92,8 @@ __all__ = [
         "hdf",
         ]
 
+forcedask = False
+
 class _dfhandler(object):
     re_attr = re.compile("\n([^-\s]+)\s.*:[^\n]+")
 
@@ -130,7 +132,7 @@ class _dfhandler(object):
 
     def _handler_read(self):
         #TODO botolneck 142msec
-        if self.size < BUF or vmfree() > self.size * 5:
+        if forcedask is False and (self.size < BUF or vmfree() > self.size * 5):
             reader = pd.__getattribute__(self.func)
             self.concater = pd.concat
         else:
