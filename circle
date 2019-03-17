@@ -22,8 +22,7 @@ def circle_data(df, fromkey="from", tokey="to"):
 def viz_circle(df, fromkey="from", tokey="to"):
     fk, fg = getcol(df, fromkey)
     tk, tg = getcol(df, tokey)
-    #lgn = Lightning(host=url)
-    lgn = Lightning()
+    lgn = Lightning(host=url)
     lgn.create_session()
 
     if fg and tg:
