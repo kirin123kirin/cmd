@@ -2,11 +2,16 @@ from lightning import Lightning
 import pandas as pd
 import numpy as np
 import os
+import urllib.parse
 
 if os.environ.get("USERNAME") == "yellow":
     url = "http://192.168.1.201:3000"
 else:
     url = "http://10.145.120.40:3000"
+    if "http_proxy" in os.environ:
+        del os.environ["http_proxy"]
+    if "https_proxy" in os.environ:
+        del os.environ["https_proxy"]
 
 def circle_data(df, fromkey="from", tokey="to"):
     dic = df.set_index(fromkey)[tokey].to_dict()
