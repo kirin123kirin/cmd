@@ -78,7 +78,7 @@ class Profile(object):
 
             if hasattr(self.df, "compute"):
                 pr = pd.concat([
-                        self.df.replace("", np.nan).count().rename("count").compute(),
+                        self.df.mask(self.df == "", np.nan).count().rename("count").compute(),
                         self.df.nunique().rename("unique").compute()], axis=1)
 
             else:

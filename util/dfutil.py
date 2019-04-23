@@ -74,6 +74,17 @@ dask.dataframe.core._Frame.sort_values = sort_values
 dask.dataframe.core._Frame.nunique = nunique
 import dask.dataframe as dd
 
+import pandas.io.formats.excel
+class ExcelFormatter(pandas.io.formats.excel.ExcelFormatter):
+    header_style = {"font": {"bold": False},
+                "borders": {"top": "thin",
+                            "right": "thin",
+                            "bottom": "thin",
+                            "left": "thin"},
+                "alignment": {"horizontal": "center",
+                              "vertical": "center"}}
+pandas.io.formats.excel.ExcelFormatter = ExcelFormatter
+
 try:
     from xlrd import XLRDError
 except ImportError:
@@ -185,6 +196,9 @@ def read_excel(f, sheet_name=None, dtype=str, keep_default_na=False, *arg, **kw)
         else:
             return df_cast(df)
 
+def xlform(df, *arg, **prop):
+    kw = {"border-style": "solid", "border-width": "thin", "vertical-align": "center", **prop}
+    return df.style.set_properties(*arg, **kw)
 
 def read_json(f, concatenate=True, *args, **kw):
     dfh = _dfhandler("read_json", f, *args, **kw)

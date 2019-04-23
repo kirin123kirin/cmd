@@ -174,6 +174,6 @@ def main():
         print("\t".join([str(t.path), t.target, " ".join(map(str,t.value)) if hasattr(t.value, "__iter__") else t.value]))
 
 if __name__ == "__main__":
-    #test()
+#    test()
 
     main()
