@@ -4,7 +4,7 @@ set VERSION=%1
 
 if "%VERSION%" == "" (
   echo "引数がありません。アップデートしたいバージョンを指定してください。"
-  echo "例: pythonbuild.bat 3.7.2"
+  echo "例: pythonupgrade.bat 3.7.2"
   pause
   exit /b 1
 )
