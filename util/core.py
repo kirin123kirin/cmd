@@ -152,23 +152,40 @@ def getsize(fp):
     fp.seek(p)
     return size
 
-def geturi(s):
-    if isinstance(s, Path):
-        s = str(s.as_posix())
+#def geturi(s):
+#    if isinstance(s, Path):
+#        s = str(s.as_posix())
+#
+#    if len(urlparse(s).scheme) > 1:
+#        return s
+#    elif s[1] == ":":
+#        return "file:///" + s.replace("\\", "/")
+#    elif s.startswith(r"\\") or s.startswith("//"):
+#        return "file://" + s.replace("\\", "/")
+#    else:
+#        p = pathlib.Path(s)
+#
+#        if not p.is_absolute():
+#            p = p.resolve()
+#
+#        return p.as_uri().replace("%5C", "/")
 
+def geturi(s, file_prefix="file://"):
+    if isinstance(s, pathlib.Path):
+        s = str(s)
+    
+    s = s.replace("\\", "/")
+    
+    if s[1] == ":":
+        return file_prefix + "/" + s
+        
+    if s.startswith("//"):
+        return file_prefix + s
+        
     if len(urlparse(s).scheme) > 1:
         return s
-    elif s[1] == ":":
-        return "file:///" + s.replace("\\", "/")
-    elif s.startswith(r"\\") or s.startswith("//"):
-        return "file://" + s.replace("\\", "/")
-    else:
-        p = pathlib.Path(s)
 
-        if not p.is_absolute():
-            p = p.resolve()
-
-        return p.as_uri().replace("%5C", "/")
+    return file_prefix + os.path.abspath(s).replace("\\", "/")
 
 def binopen(f, mode="rb", *args, **kw):
     check = lambda *tp: isinstance(f, tp)
