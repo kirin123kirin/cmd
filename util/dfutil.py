@@ -183,7 +183,7 @@ def read_csv(f, dtype="object", keep_default_na=False, concatenate=True, *args, 
 
 def read_excel(f, sheet_name=None, dtype=str, keep_default_na=False, *arg, **kw):
     try:
-        df = pd.read_excel(geturi(f),
+        df = pd.read_excel(f,
                              dtype=dtype,
                              keep_default_na=keep_default_na,
                              sheet_name=sheet_name,

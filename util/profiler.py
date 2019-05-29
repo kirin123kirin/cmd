@@ -87,7 +87,8 @@ class Profile(object):
                         self.df.nunique().rename("unique")], axis=1)
 
             if self.top:
-                pr["top"] = list(self.df[c].value_counts().head(self.top).index.tolist() for c in cols)
+                #TODO Userwarning
+                pr["top"] = list(self.df[c].value_counts().head(min([self.top, rec])).index.tolist() for c in cols)
             else:
                 pr["top"] = list(self.df[c].value_counts().index.tolist() for c in cols)
 
@@ -180,18 +181,18 @@ def test():
     from util.core import tdir
     from datetime import datetime as dt
 
-    def test_Profiler():
+    def _test_Profiler():
         f = tdir + "diff1.csv"
         df = read_any(f).head(3)
         pr = Profile(df)
         print(pr.data.to_csv(index=False))
 
-    def test_profiler():
+    def _test_profiler():
         f = tdir + "diff1.csv"
         print(profiler(f, top=None))
 
 
-    def test_diffkey_pandas():
+    def _test_diffkey_pandas():
         f = tdir + "diff1.csv"
         df = read_any(f).head(3)
         t1 = dt.now()
@@ -205,6 +206,7 @@ def test():
         df = dd.from_pandas(read_any(f).head(3),1)
         t1 = dt.now()
         pr = Profile(df)
+#        pr.guesskey  #TODO Userwarning
         pr.diffkey
         t2 = dt.now()
         print("diffkey_dask", t2-t1)
@@ -222,6 +224,6 @@ def test():
 
 
 if __name__ == "__main__":
-#     test()
+#    test()
     main()
 
