@@ -33,12 +33,6 @@ except:
         sys.stderr.write("Please install pyodbc:\npip3 install pyodbc\n")
 
 
-__all__ = [
-        "read_sql",
-        "read_db",
-        "read_dbsrv",
-        ]
-
 
 __mdberrmsg = """
 Not Found ODBC Driver Microsoft Access Driver...

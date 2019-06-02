@@ -17,80 +17,14 @@ BUF = 128 * 1024 ** 2
 
 CHUNKSIZE = int(BUF / (64 * 40))
 
-__all__ = [
-    "TMPDIR",
-    "lsdir",
-    "getencoding",
-    "getsize",
-    "geturi",
-    "binopen",
-    "opener",
-    "flatten",
-    "timestamp2date",
-    "which",
-    "isnamedtuple",
-    "values_at",
-    "values_not",
-    "vmfree",
-    "compute_object_size",
-    "logger",
-    "islarge",
-    "in_glob",
-    "path_norm",
-    "sorter",
-    "isposkey",
-    "iterhead",
-    "is1darray",
-    "is2darray",
-    "isdataframe",
-    "sortedrows",
-    "iterrows",
-    "listlike",
-    "kwtolist",
-    "fifo",
-    "kifo",
-    "fkifo",
-    "difo",
-    "fdifo",
-    "getdialect",
-    "sniffer",
-    "Path",
-    "ZipArchiveWraper",
-    "TarArchiveWraper",
-    "LhaArchiveWraper",
-    "RarArchiveWraper",
-    "ZLibArchiveWraper",
-    "ZipExtFile",
-    "ZipFile",
-    "TarFile",
-    "RarFile",
-    "LhaInfo",
-    "LhaFile",
-    "GzipFile",
-    "LZMAFile",
-    "BZ2File",
-    "is_compress",
-    "zopen",
-    "zopen_recursive",
-]
-
 import re
 import sys
 import codecs
 import io
-import csv
 from datetime import datetime as dt
-from psutil import virtual_memory, Process
-from urllib.parse import urlparse
 from itertools import chain, zip_longest
-import fnmatch
-from mimetypes import guess_type, guess_extension, guess_all_extensions
-from collections import deque
-from io import IOBase, StringIO, BytesIO
-from copy import deepcopy
 
 import pathlib
-from glob import glob
 from collections import namedtuple
 
 import gzip
@@ -100,19 +34,6 @@ import bz2
 import zipfile
 import lzma
 
-import traceback
-from subprocess import getstatusoutput
-
-
-# 3rd party modules
-import nkf
-
-try:
-    from xsorted import xsorted   # awesome
-except ModuleNotFoundError:
-    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install xsorted\n")
-    xsorted = lambda *a, **k: iter(sorted(*a, **k))
-
 
 class UnsupportCompressError(RuntimeError):
     pass
@@ -121,6 +42,7 @@ class NonCompressedError(ValueError):
     pass
 
 def command(cmd):
+    from subprocess import getstatusoutput
     code, dat = getstatusoutput(cmd)
     if code == 0:
         return dat
@@ -128,6 +50,7 @@ def command(cmd):
         raise RuntimeError(dat)
 
 def lsdir(path, recursive=True):
+    from glob import glob
     func = "rglob" if recursive else "glob"
     for p in map(Path, glob(str(path))):
         yield p
@@ -135,6 +58,7 @@ def lsdir(path, recursive=True):
             yield r
 
 def getencoding(dat:bytes):
+    import nkf
     if b"\0" in dat:
         return None
     enc = nkf.guess(dat).lower()
@@ -152,42 +76,27 @@ def getsize(fp):
     fp.seek(p)
     return size
 
-#def geturi(s):
-#    if isinstance(s, Path):
-#        s = str(s.as_posix())
-#
-#    if len(urlparse(s).scheme) > 1:
-#        return s
-#    elif s[1] == ":":
-#        return "file:///" + s.replace("\\", "/")
-#    elif s.startswith(r"\\") or s.startswith("//"):
-#        return "file://" + s.replace("\\", "/")
-#    else:
-#        p = pathlib.Path(s)
-#
-#        if not p.is_absolute():
-#            p = p.resolve()
-#
-#        return p.as_uri().replace("%5C", "/")
-
 def geturi(s, file_prefix="file://"):
     if isinstance(s, pathlib.Path):
         s = str(s)
-    
+
     s = s.replace("\\", "/")
-    
+
     if s[1] == ":":
         return file_prefix + "/" + s
-        
+
     if s.startswith("//"):
         return file_prefix + s
-        
+
+    from urllib.parse import urlparse
     if len(urlparse(s).scheme) > 1:
         return s
 
     return file_prefix + os.path.abspath(s).replace("\\", "/")
 
 def binopen(f, mode="rb", *args, **kw):
+    from io import IOBase, StringIO, BytesIO
+
     check = lambda *tp: isinstance(f, tp)
 
     if check(str):
@@ -228,6 +137,8 @@ def binopen(f, mode="rb", *args, **kw):
     raise ValueError("Unknown Object `{}`. filename or filepointer buffer".format(type(f)))
 
 def opener(f, mode="r", *args, **kw):
+    from io import IOBase, StringIO, BytesIO
+
     if isinstance(f, IOBase):
         if isinstance(f, StringIO):
             return f
@@ -369,9 +280,12 @@ def values_not(item:iter, k:list):
 
 def vmfree():
     """ Virtual memory free size"""
+    from psutil import virtual_memory
     return virtual_memory().available
 
 def compute_object_size(o, handlers={}):
+    from collections import deque
+
     dict_handler = lambda d: chain.from_iterable(d.items())
     all_handlers = {tuple: iter,
                     list: iter,
@@ -441,6 +355,7 @@ def islarge(o):
         return True
     if "dask" in str(type(o)):
         return True
+    from psutil import Process
     rss = Process(os.getpid()).memory_info().rss
     if rss * 5 > vmfree():
         return True
@@ -449,6 +364,8 @@ def islarge(o):
 def in_glob(srclst, wc):
     if not wc:
         return None
+
+    import fnmatch
     if isinstance(wc , str):
         return fnmatch.filter(srclst, wc)
 
@@ -468,6 +385,12 @@ def path_norm(f):
 
 def sorter(o, *arg, **kw):
     if islarge(o):
+        try:
+            from xsorted import xsorted   # awesome
+        except ModuleNotFoundError:
+            sys.stderr.write("** No module warning **\nPlease Install command: pip3 install xsorted\n")
+            xsorted = lambda *a, **k: iter(sorted(*a, **k))
+
         return xsorted(o, *arg, **kw)
     else:
         return iter(sorted(o, *arg, **kw))
@@ -480,6 +403,8 @@ def isposkey(key):
 
 def iterhead(iterator, n=1):
     if hasattr(iterator, "__next__") and n > 0 and isinstance(n, int):
+        from copy import deepcopy
+
         it = deepcopy(iterator)
         if n == 1:
             head = next(it)
@@ -574,6 +499,8 @@ def iterrows(o, start=1, callback=flatten):
 
 
 def listlike(iterator, callback=None):
+    from copy import deepcopy
+
     class Slice(object):
         def __init__(self, iterator, callback=None):
             self._iter = iterator
@@ -682,13 +609,15 @@ def getdialect(dat:bytes):
     if enc is None:
         raise ValueError("Cannot get dialect of Binary File.")
     txt = dat.decode(enc)
-    return csv.Sniffer().sniff(txt)
+    from csv import Sniffer
+    return Sniffer().sniff(txt)
 
 def sniffer(dat:bytes):
     enc = getencoding(dat)
     if enc is None:
         raise ValueError("Cannot get dialect of Binary File.")
-    d = csv.Sniffer().sniff(dat.decode(enc))
+    from csv import Sniffer
+    d = Sniffer().sniff(dat.decode(enc))
 
     if d:
         return kifo(d.delimiter, enc, d.lineterminator, d.quoting, d.doublequote, d.delimiter, d.quotechar)
@@ -1016,6 +945,7 @@ class Path(type(pathlib.Path())):
         return self.stat().st_size
 
     def gettype(self):
+        from mimetypes import guess_type, guess_extension, guess_all_extensions
         mime, ex = guess_type(self.name)
         et = self.suffix.lower()
         if not mime and not ex:
@@ -2007,6 +1937,8 @@ class _handler_zopen:
     magic_header = max([265, max(len(x[0]) for x in archived_magic_numbers)])
 
     def __new__(cls, path_or_buffer):
+        from io import BytesIO
+
         if isinstance(path_or_buffer, str) and os.path.exists(path_or_buffer):
             if os.path.isdir(path_or_buffer) or os.path.splitext(path_or_buffer)[-1] in [".xlsx", ".docx", ".pptx"]:
                 raise NonCompressedError("`{}` is non Compressed file".format(path_or_buffer))
@@ -2079,673 +2011,681 @@ class _tmpdir(TemporaryDirectory):
 _tmp = _tmpdir()
 TMPDIR = _tmp.name
 
-def test():
-    from datetime import datetime as dt
+if __name__ == "__main__":
 
-    def test_lsdir():
-        def _testargs(func, pathstr, *args):
-            #TODO assert
-            ret = [
-                func(pathstr, *args),
-                func(pathlib.Path(pathstr), *args),
-                func(Path(pathstr), *args),
-            ]
-            try:
-                with open(pathstr) as f:
-                    ret.append(func(f, *args))
-            except Exception as e:
-                ret.append(e)
-            return ret
-        _testargs(lsdir, tdir)
-        _testargs(lsdir, tdir + "diff*")
-        _testargs(lsdir, tdir+"test.csv")
-        _testargs(lsdir, tdir+"*est.csv")
-        _testargs(lsdir, tdir+"ddfghjdtui")
-        _testargs(lsdir, tdir, False)
-        _testargs(lsdir, tdir + "diff*", False)
-        _testargs(lsdir, tdir+"test.csv", False)
-        _testargs(lsdir, tdir+"*est.csv", False)
-        _testargs(lsdir, tdir+"ddfghjdtui", False)
+    def test():
+        from datetime import datetime as dt
 
-    def test_getencoding():
-        with open(tdir+"diff1.csv", "rb") as f:
-            assert(getencoding(f.read()) == "cp932")
-        with open(tdir+"diff2.csv", "rb") as f:
-            assert(getencoding(f.read()) == "cp932")
-        with open(tdir+"test_utf8.csv", "rb") as f:
-            assert(getencoding(f.read()) == "utf-8")
-        with open(tdir+"sample.sqlite3", "rb") as f:
-            assert(getencoding(f.read()) is None)
+        def test_lsdir():
+            def _testargs(func, pathstr, *args):
+                #TODO assert
+                ret = [
+                    func(pathstr, *args),
+                    func(pathlib.Path(pathstr), *args),
+                    func(Path(pathstr), *args),
+                ]
+                try:
+                    with open(pathstr) as f:
+                        ret.append(func(f, *args))
+                except Exception as e:
+                    ret.append(e)
+                return ret
+            _testargs(lsdir, tdir)
+            _testargs(lsdir, tdir + "diff*")
+            _testargs(lsdir, tdir+"test.csv")
+            _testargs(lsdir, tdir+"*est.csv")
+            _testargs(lsdir, tdir+"ddfghjdtui")
+            _testargs(lsdir, tdir, False)
+            _testargs(lsdir, tdir + "diff*", False)
+            _testargs(lsdir, tdir+"test.csv", False)
+            _testargs(lsdir, tdir+"*est.csv", False)
+            _testargs(lsdir, tdir+"ddfghjdtui", False)
 
-
-    def test_getsize():
-        with open(tdir+"diff1.csv", "rb") as f:
-            dat = f.read()
-            f.seek(0)
-            assert(getsize(f) == len(dat))
-
-    def test_geturi():
-        assert(geturi(tdir) == "file://" + (isposix is False and "/" or "") + tdir.replace("\\", "/"))
-        Path(geturi(tdir+"test.zip"))
-        assert(geturi(r"Z:\temp\hoge.txt") == "file:///Z:/temp/hoge.txt")
-
-    def test_getdialect():
-        with open(tdir+"diff1.csv", "rb") as f:
-            assert(getdialect(f.read()).delimiter == ",")
+        def test_getencoding():
+            with open(tdir+"diff1.csv", "rb") as f:
+                assert(getencoding(f.read()) == "cp932")
+            with open(tdir+"diff2.csv", "rb") as f:
+                assert(getencoding(f.read()) == "cp932")
+            with open(tdir+"test_utf8.csv", "rb") as f:
+                assert(getencoding(f.read()) == "utf-8")
+            with open(tdir+"sample.sqlite3", "rb") as f:
+                assert(getencoding(f.read()) is None)
 
 
-    def test_sniffer():
-        with open(tdir+"diff1.csv", "rb") as f:
-            assert(sniffer(f.read()) == kifo(sep=',', encoding='cp932', lineterminator='\r\n', quoting=csv.QUOTE_MINIMAL, doublequote=False, delimiter=',', quotechar='"'))
+        def test_getsize():
+            with open(tdir+"diff1.csv", "rb") as f:
+                dat = f.read()
+                f.seek(0)
+                assert(getsize(f) == len(dat))
 
-    def test_back_to_path():
-        uris = ["file:/Y:/usr/share/testdata/test.zip",
-                 "file://Y:/usr/share/testdata/test.zip",
-                 "file:///Y:/usr/share/testdata/test.zip",
-                 "file:///Y/usr/share/testdata/test.zip",
-                 "file:/usr/share/testdata/test.zip",
-                 "file://usr/share/testdata/test.zip",
-                 "file:///usr/share/testdata/test.zip",
-                 "http://www/google.com",
-                 r"file:\Y:\usr\share\testdata\test.zip"]
+        def test_geturi():
+            assert(geturi(tdir) == "file://" + (isposix is False and "/" or "") + tdir.replace("\\", "/"))
+            Path(geturi(tdir+"test.zip"))
+            assert(geturi(r"Z:\temp\hoge.txt") == "file:///Z:/temp/hoge.txt")
 
-        assert(list(map(back_to_path, uris)) == [
-                "Y:/usr/share/testdata/test.zip",
-                "Y:/usr/share/testdata/test.zip",
-                "Y:/usr/share/testdata/test.zip",
-                "Y:/usr/share/testdata/test.zip",
-                "/usr/share/testdata/test.zip",
-                "/usr/share/testdata/test.zip",
-                "/usr/share/testdata/test.zip",
-                "http://www/google.com",
-                "Y:/usr/share/testdata/test.zip"])
-
-    def test_Path():
-        p = Path(tdir+"diff1.csv")
-        assert(p.ext == ".csv")
-        assert(p.encoding == "cp932")
-        assert(p.dialect)
-        assert(p.lineterminator == "\r\n")
-        assert(p.delimiter == ",")
-        assert(p.linecount() > 0)
-        assert(p.wordcount(",") > 0)
-        assert(len(list(p.lsdir())) == 1)
-        assert(len(list(p.tree_file()))==1)
-        assert(list(p.tree_dir()) == [])
-        assert(p.is_compress() is False)
-        assert(Path(open(p)) == p)
-
-        p = Path(tdir)
-        assert(p.ext == "")
-        assert(len(list(p.lsdir())) > 0)
-        assert(p.is_compress() is False)
-
-        p = Path(tdir+"test.tar.gz")
-        assert(p.is_compress() is True)
-        assert(Path(open(p)) == p)
-
-        p = Path(tdir+"test.zip/test.csv")
-        assert(p.is_compress() == True)
-        assert(isinstance(p.open(), ZipArchiveWraper))
-        assert(p.read_bytes())
-        assert(isinstance(Path(open(p)), Path))
+        def test_getdialect():
+            with open(tdir+"diff1.csv", "rb") as f:
+                assert(getdialect(f.read()).delimiter == ",")
 
 
-        p = Path(tdir+"test.zip/test.csv")
-        assert((p.as_posix(), p.content, p.fullpath.as_posix()) == (tdir+"test.zip", "test.csv", tdir+"test.zip/test.csv"))
-        assert(p.exists() is True)
-        assert(p.is_compress() is True)
+        def test_sniffer():
+            from csv import QUOTE_MINIMAL
+            with open(tdir+"diff1.csv", "rb") as f:
+                assert(sniffer(f.read()) == kifo(sep=',', encoding='cp932', lineterminator='\r\n', quoting=QUOTE_MINIMAL, doublequote=False, delimiter=',', quotechar='"'))
 
-        p = Path(tdir+"1test*.zip/test.csv")
-        assert((p.as_posix(), p.content, p.fullpath.as_posix()) == (tdir+"1test*.zip", "test.csv", tdir+"1test*.zip/test.csv"))
-        assert(p.exists() is False)
+        def test_back_to_path():
+            uris = ["file:/Y:/usr/share/testdata/test.zip",
+                     "file://Y:/usr/share/testdata/test.zip",
+                     "file:///Y:/usr/share/testdata/test.zip",
+                     "file:///Y/usr/share/testdata/test.zip",
+                     "file:/usr/share/testdata/test.zip",
+                     "file://usr/share/testdata/test.zip",
+                     "file:///usr/share/testdata/test.zip",
+                     "http://www/google.com",
+                     r"file:\Y:\usr\share\testdata\test.zip"]
 
-        p = Path(tdir+"test*.zip/test.csv")
-        assert(p.is_compress() is True)
+            assert(list(map(back_to_path, uris)) == [
+                    "Y:/usr/share/testdata/test.zip",
+                    "Y:/usr/share/testdata/test.zip",
+                    "Y:/usr/share/testdata/test.zip",
+                    "Y:/usr/share/testdata/test.zip",
+                    "/usr/share/testdata/test.zip",
+                    "/usr/share/testdata/test.zip",
+                    "/usr/share/testdata/test.zip",
+                    "http://www/google.com",
+                    "Y:/usr/share/testdata/test.zip"])
 
-        p = Path(geturi(tdir+"test.csv"))
-        assert(p.is_file() is True)
+        def test_Path():
+            p = Path(tdir+"diff1.csv")
+            assert(p.ext == ".csv")
+            assert(p.encoding == "cp932")
+            assert(p.dialect)
+            assert(p.lineterminator == "\r\n")
+            assert(p.delimiter == ",")
+            assert(p.linecount() > 0)
+            assert(p.wordcount(",") > 0)
+            assert(len(list(p.lsdir())) == 1)
+            assert(len(list(p.tree_file()))==1)
+            assert(list(p.tree_dir()) == [])
+            assert(p.is_compress() is False)
+            assert(Path(open(p)) == p)
 
-    def test_PathList():
-        p = Path(tdir+"diff*")
-        assert(len(p) == 8)
-        assert(all(isinstance(x, Path) for x in p))
-        p = Path(tdir+"diff*.csv")
-        assert(p.sep == [",", ","])
+            p = Path(tdir)
+            assert(p.ext == "")
+            assert(len(list(p.lsdir())) > 0)
+            assert(p.is_compress() is False)
 
-        try:
-            p.mkdir
-        except RuntimeError:
-            pass
-        except:
-            raise AssertionError
+            p = Path(tdir+"test.tar.gz")
+            assert(p.is_compress() is True)
+            assert(Path(open(p)) == p)
 
-        try:
-            p.replace
-        except RuntimeError:
-            pass
-        except:
-            raise AssertionError
-
-        try:
-            p.rmdir
-        except RuntimeError:
-            pass
-        except:
-            raise AssertionError
-
-        assert(p.encoding == ["cp932", "cp932"])
-        assert(p.ext == [".csv", ".csv"])
-        assert(p.lineterminator == ["\r\n", "\r\n"])
-        assert(p.quoting == [0,0])
-        assert(p.doublequote == [False, False])
-        assert(p.delimiter == [",", ","])
-        assert(p.quotechar == ['"', '"'])
-
-        p = Path(tdir+"test.zip/*")
-        assert(isinstance(p, Path))
-
-        assert(len(list(Path(tdir + "/../test*").iterdir())) > 1)
+            p = Path(tdir+"test.zip/test.csv")
+            assert(p.is_compress() == True)
+            assert(isinstance(p.open(), ZipArchiveWraper))
+            assert(p.read_bytes())
+            assert(isinstance(Path(open(p)), Path))
 
 
-    def test_binopen():
-        pass
+            p = Path(tdir+"test.zip/test.csv")
+            assert((p.as_posix(), p.content, p.fullpath.as_posix()) == (tdir+"test.zip", "test.csv", tdir+"test.zip/test.csv"))
+            assert(p.exists() is True)
+            assert(p.is_compress() is True)
 
-    def test_opener():
+            p = Path(tdir+"1test*.zip/test.csv")
+            assert((p.as_posix(), p.content, p.fullpath.as_posix()) == (tdir+"1test*.zip", "test.csv", tdir+"1test*.zip/test.csv"))
+            assert(p.exists() is False)
 
-        def tests(func):
-            f = tdir + "diff2.csv"
+            p = Path(tdir+"test*.zip/test.csv")
+            assert(p.is_compress() is True)
 
-            with open(f, "r") as ff:
-                assert(isinstance(func(ff), IOBase))
+            p = Path(geturi(tdir+"test.csv"))
+            assert(p.is_file() is True)
 
-            with open(f, "rb") as ff:
-                assert(isinstance(func(ff), IOBase))
+        def test_PathList():
+            p = Path(tdir+"diff*")
+            assert(len(p) == 8)
+            assert(all(isinstance(x, Path) for x in p))
+            p = Path(tdir+"diff*.csv")
+            assert(p.sep == [",", ","])
 
             try:
-                w = os.path.join(TMPDIR, "writetest")
-
-                with open(w, "w") as ww:
-                    assert(isinstance(func(ww), IOBase))
-
-                with open(w, "wb") as ww:
-                    assert(isinstance(func(ww), IOBase))
+                p.mkdir
+            except RuntimeError:
+                pass
             except:
-                traceback.print_exc()
-                raise
-            finally:
-                os.remove(w)
-
-            with StringIO("aa") as s:
-                assert(isinstance(func(s), IOBase))
-
-            with BytesIO(b"aa") as b:
-                assert(isinstance(func(b), IOBase))
+                raise AssertionError
 
             try:
-                assert(isinstance(func("/hoge/foo"), IOBase))
+                p.replace
+            except RuntimeError:
+                pass
+            except:
+                raise AssertionError
+
+            try:
+                p.rmdir
+            except RuntimeError:
+                pass
+            except:
+                raise AssertionError
+
+            assert(p.encoding == ["cp932", "cp932"])
+            assert(p.ext == [".csv", ".csv"])
+            assert(p.lineterminator == ["\r\n", "\r\n"])
+            assert(p.quoting == [0,0])
+            assert(p.doublequote == [False, False])
+            assert(p.delimiter == [",", ","])
+            assert(p.quotechar == ['"', '"'])
+
+            p = Path(tdir+"test.zip/*")
+            assert(isinstance(p, Path))
+
+            assert(len(list(Path(tdir + "/../test*").iterdir())) > 1)
+
+
+        def test_binopen():
+            pass
+
+        def test_opener():
+            from io import IOBase, StringIO, BytesIO
+            import traceback
+
+            def tests(func):
+                f = tdir + "diff2.csv"
+
+                with open(f, "r") as ff:
+                    assert(isinstance(func(ff), IOBase))
+
+                with open(f, "rb") as ff:
+                    assert(isinstance(func(ff), IOBase))
+
+                try:
+                    w = os.path.join(TMPDIR, "writetest")
+
+                    with open(w, "w") as ww:
+                        assert(isinstance(func(ww), IOBase))
+
+                    with open(w, "wb") as ww:
+                        assert(isinstance(func(ww), IOBase))
+                except:
+                    traceback.print_exc()
+                    raise
+                finally:
+                    os.remove(w)
+
+                with StringIO("aa") as s:
+                    assert(isinstance(func(s), IOBase))
+
+                with BytesIO(b"aa") as b:
+                    assert(isinstance(func(b), IOBase))
+
+                try:
+                    assert(isinstance(func("/hoge/foo"), IOBase))
+                except FileNotFoundError:
+                    pass
+
+            tests(opener)
+            tests(binopen)
+
+        def test_flatten():
+            assert(flatten([0,1,2]) == [0,1,2])
+            assert(flatten([[0,1,2]]) == [0,1,2])
+            assert(flatten([[0,1],2]) == [0,1,2])
+            assert(flatten([[0,1],[[2]]]) == [0,1,2])
+
+        def test_timestamp2date():
+            assert(timestamp2date(140400) == "1970/01/03 00:00")
+            assert(timestamp2date(2**31 - 1) == "2038/01/19 12:14")
+            try:
+                timestamp2date("1")
+            except TypeError:
+                pass
+            except:
+                raise AssertionError
+            else:
+                raise AssertionError
+
+        def test_which():
+            assert("python" in which("python"))
+            assert(which("dfhjksahjfklsahnfkjl") is None)
+
+        def test_isnamedtuple():
+            n = namedtuple("hoo", ["bar", "hoge"])
+            try:
+                isnamedtuple(n)
+            except ValueError:
+                pass
+            except:
+                raise AssertionError
+            else:
+                raise AssertionError
+            r = n(1,2)
+            assert(isnamedtuple(r) is True)
+            assert(isnamedtuple([1]) is False)
+
+        def test_values_at():
+            assert(values_at(dict(a=1,b=2,c=3), ["a", "c"]) == {'a': 1, 'c': 3})
+            assert(values_at(["a", "b", "c"], ["a", "c"]) == ["a", "c"])
+            assert(values_at(["a", "b", "c"], [0,2]) == ["a", "c"])
+            t = namedtuple("test", list("abc"))
+            assert(values_at(t(1,2,3), [0, 2]) == [1, 3])
+            assert(values_at(t(1,2,3), ["a", "c"]) == [1, 3])
+
+
+        def test_values_not():
+            assert(values_not(dict(a=1,b=2,c=3), ["a", "c"]) == {'b': 2})
+            assert(values_not(["a", "b", "c"], ["a", "c"]) == ["b"])
+            assert(values_not(["a", "b", "c"], [0,2]) == ["b"])
+            t = namedtuple("test", list("abc"))
+            assert(values_not(t(1,2,3), [0, 2]) == [2])
+            assert(values_not(t(1,2,3), ["a", "c"]) == [2])
+
+        def test_vmfree():
+            assert(vmfree() > 0)
+
+        def test_compute_object_size():
+            assert(compute_object_size(_handler_zopen.archived_magic_numbers) > 0)
+
+        def test_logger():
+            from io import StringIO
+
+            s = StringIO(newline=None)
+            with logger(s) as log:
+                log.write("hoge")
+                assert(log.getvalue() == "hoge")
+                log.write("foo", 0)
+                assert(log.getvalue() == "hoge")
+                log.write("foo", 2)
+                assert(log.getvalue() == "hogefoo")
+                log.loglevel = 2
+                log.write("bar")
+                assert(log.getvalue() == "hogefoo")
+                log.write("bar", 3)
+                assert(log.getvalue() == "hogefoobar")
+                log.loglevel = 1
+                log.writelines(["123","456"])
+                assert(log.getvalue() == "hogefoobar123456")
+            assert(s.closed)
+
+            s = StringIO(newline=None)
+            with logger(s) as log:
+                log("hoge")
+                assert(log.getvalue() == "hoge")
+                log("foo", 0)
+                assert(log.getvalue() == "hoge")
+                log("foo", 2)
+                assert(log.getvalue() == "hogefoo")
+                log.loglevel = 2
+                log("bar")
+                assert(log.getvalue() == "hogefoo")
+                log("bar", 3)
+                assert(log.getvalue() == "hogefoobar")
+            assert(s.closed)
+
+        def test_islarge():
+            assert(islarge([]) is False)
+            global BUF
+            BUF = 10
+            assert(islarge(_handler_zopen.archived_magic_numbers) is True)
+            BUF = 128 * 1024 ** 2
+
+
+        def test_in_glob():
+            assert(in_glob(["abc.txt", "hoge.csv"], "*.txt") == ["abc.txt"])
+            assert(in_glob(["abc.txt", "hoge.csv"], ["*.txt", "abc*"]) == ["abc.txt"])
+            assert(in_glob(["abc.txt", "hoge.csv"], ["*.*", "*.txt"]) == ["abc.txt", "hoge.csv"])
+            assert(in_glob(["abc.txt", "hoge.csv"], ["*.*", "*"]) == ["abc.txt", "hoge.csv"])
+            assert(in_glob(["abc.txt", "hoge.csv"], ["foo", "bar"]) == [])
+            assert(in_glob(["abc.txt", "hoge.csv"], []) == None)
+
+        def test_path_norm():
+            assert(path_norm("/hoge/test/test.zip") == ('/hoge/test/test.zip', None))
+            assert(path_norm("/hoge/test/test.zip/foo.txt") == ('/hoge/test/test.zip', "foo.txt"))
+            assert(path_norm(r"\\hoge\test\test.zip\foo.txt") == (r'\\hoge\test\test.zip', "foo.txt"))
+            assert(path_norm("") == ("", None))
+            try:
+                path_norm(None)
+            except TypeError:
+                pass
+            except:
+                raise AssertionError
+            else:
+                raise AssertionError
+        def test_sorter():
+            pass
+
+        def test_isposkey():
+            assert(isposkey([0,1]) is True)
+            assert(isposkey([0,"1"]) is False)
+            assert(isposkey([]) is False)
+            assert(isposkey(None) is False)
+
+        def test_iterhead():
+            a = iter(list("abc"))
+            h = iterhead(a)
+            assert((h, list(a)) == ("a", ['a', 'b', 'c']))
+
+        def test_is1darray():
+            assert(is1darray([1,2]))
+            assert(is1darray([[1],[2]]) is False)
+
+        def test_is2darray():
+            assert(is2darray([1,2]) is False)
+            assert(is2darray([[1],[2]]))
+            assert(is2darray([tuple("abc"), tuple("def")]))
+            assert(is2darray((tuple("abc"), tuple("def"))))
+
+        def test_isdataframe():
+            import pandas as pd
+            assert(isdataframe(pd.DataFrame()))
+            assert(isdataframe([]) is False)
+            assert(isdataframe({1:1}) is False)
+            assert(isdataframe(pd.Series()) is False)
+
+        def test_sortedrows():
+            assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [[4, [1]], [2, [2]], [1, [3]], [3, [5]]])
+            assert(list(sortedrows(iter([[3],[2],[5],[1]]),start=0)) == [[3, [1]], [1, [2]], [0, [3]], [2, [5]]])
+            assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [[4, [1]], [2, [2]], [1, [3]], [3, [5]]])
+            assert(list(sortedrows(iter([[1,3],[2,2],[3,5],[4,1]]), lambda x: x[1])) == [[4, [4, 1]], [2, [2, 2]], [1, [1, 3]], [3, [3, 5]]])
+            assert(list(sortedrows(iter([[3],[2],[5],[1]]), start=0)) == [[3, [1]], [1, [2]], [0, [3]], [2, [5]]])
+            assert(list(sortedrows([[3,3],[2,2],[1,1]], header=False)) == [[3, [1, 1]], [2, [2, 2]], [1, [3, 3]]])
+            assert(list(sortedrows([[3,3],[2,2],[1,1]], header=True)) == [[1, [3, 3]], [3, [1, 1]], [2, [2, 2]]])
+            assert(list(sortedrows([[3,"b"],[2,"a"],[1,"c"]], header=False, key=lambda x: x[1])) == [[2, [2, 'a']], [1, [3, 'b']], [3, [1, 'c']]])
+            assert(list(sortedrows([[3,"b"],[2,"c"],[1,"a"]], header=True, key=lambda x: x[1])) == [[1, [3, 'b']], [3, [1, 'a']], [2, [2, 'c']]])
+
+
+
+        def test_iterrows():
+            from util.dfutil import read_any
+            a = iter(list("abc"))
+            h = iterrows(a,None)
+            assert(list(h) == ['a', 'b', 'c'])
+            assert(list(iterrows([tuple("abc"), tuple("def")])) == [[1, ['a', 'b', 'c']], [2, ['d', 'e', 'f']]])
+            assert(list(iterrows([tuple("abc"), tuple("def")])) == [[1, ['a', 'b', 'c']], [2, ['d', 'e', 'f']]])
+            assert(list(iterrows([[3,*list("abc")],[9,*list("abc")]],start="infer")) == [[3, ["a", "b", "c"]], [9, ["a", "b", "c"]]])
+
+            f = tdir + "diff1.csv"
+            a = read_any(f).head(3)
+            a.reset_index(inplace=True)
+            idxcheck = [1] + a.index.tolist()
+            h = iterrows(a,"infer")
+            for i, hh in enumerate(h):
+                assert(len(hh) == 2)
+                assert(hh[0] == idxcheck[i])
+
+
+        def test_listlike():
+            a = iter([1,2,3])
+            try:
+                len(a)
+            except TypeError:
+                pass
+            b = listlike(a)
+            assert(len(b) == 3)
+            assert(b[0] == 1)
+            assert(list(b) == [1,2,3])
+
+            a = iter(list("abcd"))
+            r = listlike(a)
+            assert(r[0] == "a")
+            assert(r[0] == "a")
+            assert(len(r) == 4)
+            assert(r[1:] == list("bcd"))
+            assert(r[:-1] == list("abc"))
+            assert(r[-1:] == ["d"])
+            assert(r[:3] == list("abc"))
+            assert(list(a) == list("abcd"))
+            assert(list(a) == [])
+
+        def test_kwtolist():
+            assert(kwtolist("a,b,c") == list("abc"))
+            assert(kwtolist("1,2,3", 0) == [1,2,3])
+            assert(kwtolist("1-3", 0) == [1,2,3])
+            assert(kwtolist("1,2,3") == [0,1,2])
+            assert(kwtolist("1-3,5") == [0,1,2,4])
+            assert(kwtolist("1-3,5",0) == [1,2,3,5])
+
+        def __test_wrap(wrapobj):
+            assert(len(list(wrapobj.lsdir()))>0)
+            assert(len(list(wrapobj.tree_file()))>0)
+            wrapobj.tree_dir()
+            for infile in wrapobj:
+                anser = b'n,aa\r\n1,1\r\n2,\x82\xa0\r\n'
+                assert(infile.read() == anser)
+                infile.seek(0)
+                assert(infile.read_bytes() == anser)
+                infile.seek(0)
+                assert(infile.read_text() == anser.decode("cp932"))
+                assert(isinstance(infile.getinfo(),fifo))
+                assert(isinstance(infile.getinfo(True), fkifo))
+                infile.seek(0)
+                assert(infile.encoding)
+                assert(getencoding(infile.read()))
+                infile.seek(0)
+                infile.extract(TMPDIR)
+                with open(Path(TMPDIR).joinpath("test.csv"),"rb") as f:
+                    assert(f.read() == anser)
+
+        def test_RarFile():
+            with RarFile(tdir+"test.rar") as l:
+                __test_wrap(l)
+
+            with RarFile(tdir+"test.rar/test.*") as l:
+                assert(len(list(l))>0)
+                __test_wrap(l)
+
+
+        def test_LhaFile():
+            with LhaFile(tdir+"test.lzh") as l:
+                __test_wrap(l)
+
+            with LhaFile(tdir+"test.lzh/test.*") as l:
+                __test_wrap(l)
+
+
+        def test_ZipFile():
+            with ZipFile(tdir+"test.zip") as l:
+                __test_wrap(l)
+
+            with ZipFile(tdir+"test.zip/test.*") as l:
+                assert(len(list(l))>0)
+                __test_wrap(l)
+
+
+        def test_TarFileOpen():
+            with TarFileOpen(tdir+"test.tar.gz") as l:
+                __test_wrap(l)
+
+            with TarFileOpen(tdir+"test.tar.gz/test.*") as l:
+                assert(len(list(l))>0)
+                __test_wrap(l)
+
+        def test_GzipFile():
+            with GzipFile(tdir+"test.csv.gz") as l:
+                __test_wrap(l)
+
+            with GzipFile(tdir+"test.csv.gz/test.*") as l:
+                assert(len(list(l))>0)
+                __test_wrap(l)
+
+
+        def test_LZMAFile():
+            with LZMAFile(tdir+"test.csv.xz") as l:
+                __test_wrap(l)
+
+            with LZMAFile(tdir+"test.csv.xz/test.*") as l:
+                assert(len(list(l))>0)
+                __test_wrap(l)
+
+
+        def test_BZ2File():
+            with BZ2File(tdir+"test.csv.bz2") as l:
+                __test_wrap(l)
+
+            with BZ2File(tdir+"test.csv.bz2/test.*") as l:
+                assert(len(list(l))>0)
+                __test_wrap(l)
+
+
+        def __test_ArchiveWrapper(r):
+            assert(r.parent)
+            assert(r.info)
+            assert(r.opened)
+            assert(r.parentname)
+            assert(r.name)
+            assert(r.ext)
+            assert(isinstance(r.dialect, type))
+            assert(r.fullpath)
+            assert(r.parentpath)
+            assert(r.basename)
+            assert(r.extention == ".csv")
+            r.owner
+            r.group
+            r.permision
+            r.mdate
+            assert(r.filesize)
+            assert(r.encoding == "cp932")
+            assert(r.lineterminator == "\r\n")
+            assert(r.quoting == 0)
+            assert(r.doublequote is False)
+            assert(r.delimiter == ",")
+            assert(r.quotechar == '"')
+            assert(isinstance(r.getinfo(), fifo))
+            assert(r.wordcount("1") == 2)
+            assert(r.wordcount(1) == 2)
+            assert(r.wordcount("あ") == 1)
+            assert(r.linecount() == 3)
+            assert(r.geturi())
+            assert(r.getsize())
+            assert(r.gettype() == "csv")
+            assert(r.read_bytes() == b'n,aa\r\n1,1\r\n2,\x82\xa0\r\n')
+            r.seek(0)
+            assert(r.read_text() == 'n,aa\r\n1,1\r\n2,あ\r\n')
+
+        def test__baseArchive():
+            class testoverride(_baseArchive):
+                pass
+            testoverride.__init__
+
+        def test_ZipArchiveWraper():
+            with zipfile.ZipFile(tdir+"test.zip") as l:
+                r = ZipArchiveWraper(l, l.infolist()[0])
+                __test_ArchiveWrapper(r)
+
+        def test_TarArchiveWraper():
+            with tarfile.open(tdir+"test.tar.gz") as l:
+                r = TarArchiveWraper(l, l.getmembers()[0])
+                __test_ArchiveWrapper(r)
+
+        def test_LhaArchiveWraper():
+            l = LhaFile(tdir+"test.lzh")
+            r = LhaArchiveWraper(l, l.infolist()[0])
+            __test_ArchiveWrapper(r)
+
+        def test_RarArchiveWraper():
+            with RarFile(tdir+"test.rar") as l:
+                r = RarArchiveWraper(l, l.infolist()[0])
+                __test_ArchiveWrapper(r)
+
+        def test_ZLibArchiveWraper():
+            with GzipFile(tdir+"test.csv.gz") as l:
+                r = ZLibArchiveWraper(l, l.name)
+                __test_ArchiveWrapper(r)
+
+            with LZMAFile(tdir+"test.csv.xz") as l:
+                r = ZLibArchiveWraper(l, l.name)
+                __test_ArchiveWrapper(r)
+
+
+            with BZ2File(tdir+"test.csv.bz2") as l:
+                r = ZLibArchiveWraper(l, l.name)
+                __test_ArchiveWrapper(r)
+
+
+        def test__handler_zopen():
+            assert(_handler_zopen(tdir+"test.zip") == ZipFile)
+            assert(_handler_zopen(tdir+"test.tar.gz") == TarFileOpen)
+            assert(_handler_zopen(tdir+"test.lzh") == LhaFile)
+            assert(_handler_zopen(tdir+"test.rar") == RarFile)
+            assert(_handler_zopen(tdir+"test.csv.gz") == GzipFile)
+            assert(_handler_zopen(tdir+"test.csv.xz") == LZMAFile)
+            assert(_handler_zopen(tdir+"test.csv.bz2") == BZ2File)
+            try:
+                _handler_zopen(tdir+"test.csv")
+            except NonCompressedError:
+                pass
+            else:
+                raise AssertionError
+
+
+        def test_is_compress():
+            assert(is_compress(tdir) is False)
+            assert(is_compress(tdir + "test.csv.tar") is True)
+            assert(is_compress(tdir + "diff1.csv") is False)
+            assert(is_compress(tdir + "diff1.xlsx") is False)
+            assert(is_compress(tdir + "sample.accdb") is False)
+            assert(is_compress(tdir + "sample.sqlite3") is False)
+            assert(is_compress(tdir + "test.csv") is False)
+            assert(is_compress(tdir + "test.csv.bz2") is True)
+            assert(is_compress(tdir + "test.csv.gz") is True)
+            assert(is_compress(tdir + "test.csv.tar") is True)
+            assert(is_compress(tdir + "test.csv.tar.gz") is True)
+            assert(is_compress(tdir + "test.csv.xz") is True)
+            assert(is_compress(tdir + "test.lzh") is True)
+            assert(is_compress(tdir + "test.rar") is True)
+            assert(is_compress(tdir + "test.tar.gz") is True)
+            assert(is_compress(tdir + "test.zip") is True)
+            try:
+                is_compress("hoge")
+            except FileNotFoundError:
+                pass
+            else:
+                raise AssertionError
+
+
+        def test_zopen():
+            with zopen(tdir+"test.zip") as z:
+                assert(isinstance(z, ZipFile))
+            with zopen(tdir+"test.tar.gz") as z:
+                assert(isinstance(z, TarFile))
+            with zopen(tdir+"test.csv.gz") as z:
+                assert(isinstance(z, GzipFile))
+            with zopen(tdir+"test.csv.xz") as z:
+                assert(isinstance(z, LZMAFile))
+            with zopen(tdir+"test.csv.bz2") as z:
+                assert(isinstance(z, BZ2File))
+            with zopen(tdir+"test.lzh") as z:
+                assert(isinstance(z, LhaFile))
+            with zopen(tdir+"test.rar") as z:
+                assert(isinstance(z, RarFile))
+
+            try:
+                with zopen(tdir+"test.csv") as z:
+                    assert(isinstance(z, TarFile))
+            except NonCompressedError:
+                pass
+            else:
+                raise AssertionError
+
+            try:
+                zopen(tdir+"notfound.csv")
             except FileNotFoundError:
                 pass
 
-        tests(opener)
-        tests(binopen)
 
-    def test_flatten():
-        assert(flatten([0,1,2]) == [0,1,2])
-        assert(flatten([[0,1,2]]) == [0,1,2])
-        assert(flatten([[0,1],2]) == [0,1,2])
-        assert(flatten([[0,1],[[2]]]) == [0,1,2])
-
-    def test_timestamp2date():
-        assert(timestamp2date(140400) == "1970/01/03 00:00")
-        assert(timestamp2date(2**31 - 1) == "2038/01/19 12:14")
-        try:
-            timestamp2date("1")
-        except TypeError:
-            pass
-        except:
-            raise AssertionError
-        else:
-            raise AssertionError
-
-    def test_which():
-        assert("python" in which("python"))
-        assert(which("dfhjksahjfklsahnfkjl") is None)
-
-    def test_isnamedtuple():
-        n = namedtuple("hoo", ["bar", "hoge"])
-        try:
-            isnamedtuple(n)
-        except ValueError:
-            pass
-        except:
-            raise AssertionError
-        else:
-            raise AssertionError
-        r = n(1,2)
-        assert(isnamedtuple(r) is True)
-        assert(isnamedtuple([1]) is False)
-
-    def test_values_at():
-        assert(values_at(dict(a=1,b=2,c=3), ["a", "c"]) == {'a': 1, 'c': 3})
-        assert(values_at(["a", "b", "c"], ["a", "c"]) == ["a", "c"])
-        assert(values_at(["a", "b", "c"], [0,2]) == ["a", "c"])
-        t = namedtuple("test", list("abc"))
-        assert(values_at(t(1,2,3), [0, 2]) == [1, 3])
-        assert(values_at(t(1,2,3), ["a", "c"]) == [1, 3])
-
-
-    def test_values_not():
-        assert(values_not(dict(a=1,b=2,c=3), ["a", "c"]) == {'b': 2})
-        assert(values_not(["a", "b", "c"], ["a", "c"]) == ["b"])
-        assert(values_not(["a", "b", "c"], [0,2]) == ["b"])
-        t = namedtuple("test", list("abc"))
-        assert(values_not(t(1,2,3), [0, 2]) == [2])
-        assert(values_not(t(1,2,3), ["a", "c"]) == [2])
-
-    def test_vmfree():
-        assert(vmfree() > 0)
-
-    def test_compute_object_size():
-        assert(compute_object_size(_handler_zopen.archived_magic_numbers) > 0)
-
-    def test_logger():
-        s = StringIO(newline=None)
-        with logger(s) as log:
-            log.write("hoge")
-            assert(log.getvalue() == "hoge")
-            log.write("foo", 0)
-            assert(log.getvalue() == "hoge")
-            log.write("foo", 2)
-            assert(log.getvalue() == "hogefoo")
-            log.loglevel = 2
-            log.write("bar")
-            assert(log.getvalue() == "hogefoo")
-            log.write("bar", 3)
-            assert(log.getvalue() == "hogefoobar")
-            log.loglevel = 1
-            log.writelines(["123","456"])
-            assert(log.getvalue() == "hogefoobar123456")
-        assert(s.closed)
-
-        s = StringIO(newline=None)
-        with logger(s) as log:
-            log("hoge")
-            assert(log.getvalue() == "hoge")
-            log("foo", 0)
-            assert(log.getvalue() == "hoge")
-            log("foo", 2)
-            assert(log.getvalue() == "hogefoo")
-            log.loglevel = 2
-            log("bar")
-            assert(log.getvalue() == "hogefoo")
-            log("bar", 3)
-            assert(log.getvalue() == "hogefoobar")
-        assert(s.closed)
-
-    def test_islarge():
-        assert(islarge([]) is False)
-        global BUF
-        BUF = 10
-        assert(islarge(_handler_zopen.archived_magic_numbers) is True)
-        BUF = 128 * 1024 ** 2
-
-
-    def test_in_glob():
-        assert(in_glob(["abc.txt", "hoge.csv"], "*.txt") == ["abc.txt"])
-        assert(in_glob(["abc.txt", "hoge.csv"], ["*.txt", "abc*"]) == ["abc.txt"])
-        assert(in_glob(["abc.txt", "hoge.csv"], ["*.*", "*.txt"]) == ["abc.txt", "hoge.csv"])
-        assert(in_glob(["abc.txt", "hoge.csv"], ["*.*", "*"]) == ["abc.txt", "hoge.csv"])
-        assert(in_glob(["abc.txt", "hoge.csv"], ["foo", "bar"]) == [])
-        assert(in_glob(["abc.txt", "hoge.csv"], []) == None)
-
-    def test_path_norm():
-        assert(path_norm("/hoge/test/test.zip") == ('/hoge/test/test.zip', None))
-        assert(path_norm("/hoge/test/test.zip/foo.txt") == ('/hoge/test/test.zip', "foo.txt"))
-        assert(path_norm(r"\\hoge\test\test.zip\foo.txt") == (r'\\hoge\test\test.zip', "foo.txt"))
-        assert(path_norm("") == ("", None))
-        try:
-            path_norm(None)
-        except TypeError:
-            pass
-        except:
-            raise AssertionError
-        else:
-            raise AssertionError
-    def test_sorter():
-        pass
-
-    def test_isposkey():
-        assert(isposkey([0,1]) is True)
-        assert(isposkey([0,"1"]) is False)
-        assert(isposkey([]) is False)
-        assert(isposkey(None) is False)
-
-    def test_iterhead():
-        a = iter(list("abc"))
-        h = iterhead(a)
-        assert((h, list(a)) == ("a", ['a', 'b', 'c']))
-
-    def test_is1darray():
-        assert(is1darray([1,2]))
-        assert(is1darray([[1],[2]]) is False)
-
-    def test_is2darray():
-        assert(is2darray([1,2]) is False)
-        assert(is2darray([[1],[2]]))
-        assert(is2darray([tuple("abc"), tuple("def")]))
-        assert(is2darray((tuple("abc"), tuple("def"))))
-
-    def test_isdataframe():
-        import pandas as pd
-        assert(isdataframe(pd.DataFrame()))
-        assert(isdataframe([]) is False)
-        assert(isdataframe({1:1}) is False)
-        assert(isdataframe(pd.Series()) is False)
-
-    def test_sortedrows():
-        assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [[4, [1]], [2, [2]], [1, [3]], [3, [5]]])
-        assert(list(sortedrows(iter([[3],[2],[5],[1]]),start=0)) == [[3, [1]], [1, [2]], [0, [3]], [2, [5]]])
-        assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [[4, [1]], [2, [2]], [1, [3]], [3, [5]]])
-        assert(list(sortedrows(iter([[1,3],[2,2],[3,5],[4,1]]), lambda x: x[1])) == [[4, [4, 1]], [2, [2, 2]], [1, [1, 3]], [3, [3, 5]]])
-        assert(list(sortedrows(iter([[3],[2],[5],[1]]), start=0)) == [[3, [1]], [1, [2]], [0, [3]], [2, [5]]])
-        assert(list(sortedrows([[3,3],[2,2],[1,1]], header=False)) == [[3, [1, 1]], [2, [2, 2]], [1, [3, 3]]])
-        assert(list(sortedrows([[3,3],[2,2],[1,1]], header=True)) == [[1, [3, 3]], [3, [1, 1]], [2, [2, 2]]])
-        assert(list(sortedrows([[3,"b"],[2,"a"],[1,"c"]], header=False, key=lambda x: x[1])) == [[2, [2, 'a']], [1, [3, 'b']], [3, [1, 'c']]])
-        assert(list(sortedrows([[3,"b"],[2,"c"],[1,"a"]], header=True, key=lambda x: x[1])) == [[1, [3, 'b']], [3, [1, 'a']], [2, [2, 'c']]])
-
-
-
-    def test_iterrows():
-        from util.dfutil import read_any
-        a = iter(list("abc"))
-        h = iterrows(a,None)
-        assert(list(h) == ['a', 'b', 'c'])
-        assert(list(iterrows([tuple("abc"), tuple("def")])) == [[1, ['a', 'b', 'c']], [2, ['d', 'e', 'f']]])
-        assert(list(iterrows([tuple("abc"), tuple("def")])) == [[1, ['a', 'b', 'c']], [2, ['d', 'e', 'f']]])
-        assert(list(iterrows([[3,*list("abc")],[9,*list("abc")]],start="infer")) == [[3, ["a", "b", "c"]], [9, ["a", "b", "c"]]])
-
-        f = tdir + "diff1.csv"
-        a = read_any(f).head(3)
-        a.reset_index(inplace=True)
-        idxcheck = [1] + a.index.tolist()
-        h = iterrows(a,"infer")
-        for i, hh in enumerate(h):
-            assert(len(hh) == 2)
-            assert(hh[0] == idxcheck[i])
-
-
-    def test_listlike():
-        a = iter([1,2,3])
-        try:
-            len(a)
-        except TypeError:
-            pass
-        b = listlike(a)
-        assert(len(b) == 3)
-        assert(b[0] == 1)
-        assert(list(b) == [1,2,3])
-
-        a = iter(list("abcd"))
-        r = listlike(a)
-        assert(r[0] == "a")
-        assert(r[0] == "a")
-        assert(len(r) == 4)
-        assert(r[1:] == list("bcd"))
-        assert(r[:-1] == list("abc"))
-        assert(r[-1:] == ["d"])
-        assert(r[:3] == list("abc"))
-        assert(list(a) == list("abcd"))
-        assert(list(a) == [])
-
-    def test_kwtolist():
-        assert(kwtolist("a,b,c") == list("abc"))
-        assert(kwtolist("1,2,3", 0) == [1,2,3])
-        assert(kwtolist("1-3", 0) == [1,2,3])
-        assert(kwtolist("1,2,3") == [0,1,2])
-        assert(kwtolist("1-3,5") == [0,1,2,4])
-        assert(kwtolist("1-3,5",0) == [1,2,3,5])
-
-    def __test_wrap(wrapobj):
-        assert(len(list(wrapobj.lsdir()))>0)
-        assert(len(list(wrapobj.tree_file()))>0)
-        wrapobj.tree_dir()
-        for infile in wrapobj:
-            anser = b'n,aa\r\n1,1\r\n2,\x82\xa0\r\n'
-            assert(infile.read() == anser)
-            infile.seek(0)
-            assert(infile.read_bytes() == anser)
-            infile.seek(0)
-            assert(infile.read_text() == anser.decode("cp932"))
-            assert(isinstance(infile.getinfo(),fifo))
-            assert(isinstance(infile.getinfo(True), fkifo))
-            infile.seek(0)
-            assert(infile.encoding)
-            assert(getencoding(infile.read()))
-            infile.seek(0)
-            infile.extract(TMPDIR)
-            with open(Path(TMPDIR).joinpath("test.csv"),"rb") as f:
-                assert(f.read() == anser)
-
-    def test_RarFile():
-        with RarFile(tdir+"test.rar") as l:
-            __test_wrap(l)
-
-        with RarFile(tdir+"test.rar/test.*") as l:
-            assert(len(list(l))>0)
-            __test_wrap(l)
-
-
-    def test_LhaFile():
-        with LhaFile(tdir+"test.lzh") as l:
-            __test_wrap(l)
-
-        with LhaFile(tdir+"test.lzh/test.*") as l:
-            __test_wrap(l)
-
-
-    def test_ZipFile():
-        with ZipFile(tdir+"test.zip") as l:
-            __test_wrap(l)
-
-        with ZipFile(tdir+"test.zip/test.*") as l:
-            assert(len(list(l))>0)
-            __test_wrap(l)
-
-
-    def test_TarFileOpen():
-        with TarFileOpen(tdir+"test.tar.gz") as l:
-            __test_wrap(l)
-
-        with TarFileOpen(tdir+"test.tar.gz/test.*") as l:
-            assert(len(list(l))>0)
-            __test_wrap(l)
-
-    def test_GzipFile():
-        with GzipFile(tdir+"test.csv.gz") as l:
-            __test_wrap(l)
-
-        with GzipFile(tdir+"test.csv.gz/test.*") as l:
-            assert(len(list(l))>0)
-            __test_wrap(l)
-
-
-    def test_LZMAFile():
-        with LZMAFile(tdir+"test.csv.xz") as l:
-            __test_wrap(l)
-
-        with LZMAFile(tdir+"test.csv.xz/test.*") as l:
-            assert(len(list(l))>0)
-            __test_wrap(l)
-
-
-    def test_BZ2File():
-        with BZ2File(tdir+"test.csv.bz2") as l:
-            __test_wrap(l)
-
-        with BZ2File(tdir+"test.csv.bz2/test.*") as l:
-            assert(len(list(l))>0)
-            __test_wrap(l)
-
-
-    def __test_ArchiveWrapper(r):
-        assert(r.parent)
-        assert(r.info)
-        assert(r.opened)
-        assert(r.parentname)
-        assert(r.name)
-        assert(r.ext)
-        assert(isinstance(r.dialect, type))
-        assert(r.fullpath)
-        assert(r.parentpath)
-        assert(r.basename)
-        assert(r.extention == ".csv")
-        r.owner
-        r.group
-        r.permision
-        r.mdate
-        assert(r.filesize)
-        assert(r.encoding == "cp932")
-        assert(r.lineterminator == "\r\n")
-        assert(r.quoting == 0)
-        assert(r.doublequote is False)
-        assert(r.delimiter == ",")
-        assert(r.quotechar == '"')
-        assert(isinstance(r.getinfo(), fifo))
-        assert(r.wordcount("1") == 2)
-        assert(r.wordcount(1) == 2)
-        assert(r.wordcount("あ") == 1)
-        assert(r.linecount() == 3)
-        assert(r.geturi())
-        assert(r.getsize())
-        assert(r.gettype() == "csv")
-        assert(r.read_bytes() == b'n,aa\r\n1,1\r\n2,\x82\xa0\r\n')
-        r.seek(0)
-        assert(r.read_text() == 'n,aa\r\n1,1\r\n2,あ\r\n')
-
-    def test__baseArchive():
-        class testoverride(_baseArchive):
-            pass
-        testoverride.__init__
-
-    def test_ZipArchiveWraper():
-        with zipfile.ZipFile(tdir+"test.zip") as l:
-            r = ZipArchiveWraper(l, l.infolist()[0])
-            __test_ArchiveWrapper(r)
-
-    def test_TarArchiveWraper():
-        with tarfile.open(tdir+"test.tar.gz") as l:
-            r = TarArchiveWraper(l, l.getmembers()[0])
-            __test_ArchiveWrapper(r)
-
-    def test_LhaArchiveWraper():
-        l = LhaFile(tdir+"test.lzh")
-        r = LhaArchiveWraper(l, l.infolist()[0])
-        __test_ArchiveWrapper(r)
-
-    def test_RarArchiveWraper():
-        with RarFile(tdir+"test.rar") as l:
-            r = RarArchiveWraper(l, l.infolist()[0])
-            __test_ArchiveWrapper(r)
-
-    def test_ZLibArchiveWraper():
-        with GzipFile(tdir+"test.csv.gz") as l:
-            r = ZLibArchiveWraper(l, l.name)
-            __test_ArchiveWrapper(r)
-
-        with LZMAFile(tdir+"test.csv.xz") as l:
-            r = ZLibArchiveWraper(l, l.name)
-            __test_ArchiveWrapper(r)
-
-
-        with BZ2File(tdir+"test.csv.bz2") as l:
-            r = ZLibArchiveWraper(l, l.name)
-            __test_ArchiveWrapper(r)
-
-
-    def test__handler_zopen():
-        assert(_handler_zopen(tdir+"test.zip") == ZipFile)
-        assert(_handler_zopen(tdir+"test.tar.gz") == TarFileOpen)
-        assert(_handler_zopen(tdir+"test.lzh") == LhaFile)
-        assert(_handler_zopen(tdir+"test.rar") == RarFile)
-        assert(_handler_zopen(tdir+"test.csv.gz") == GzipFile)
-        assert(_handler_zopen(tdir+"test.csv.xz") == LZMAFile)
-        assert(_handler_zopen(tdir+"test.csv.bz2") == BZ2File)
-        try:
-            _handler_zopen(tdir+"test.csv")
-        except NonCompressedError:
-            pass
-        else:
-            raise AssertionError
-
-
-    def test_is_compress():
-        assert(is_compress(tdir) is False)
-        assert(is_compress(tdir + "test.csv.tar") is True)
-        assert(is_compress(tdir + "diff1.csv") is False)
-        assert(is_compress(tdir + "diff1.xlsx") is False)
-        assert(is_compress(tdir + "sample.accdb") is False)
-        assert(is_compress(tdir + "sample.sqlite3") is False)
-        assert(is_compress(tdir + "test.csv") is False)
-        assert(is_compress(tdir + "test.csv.bz2") is True)
-        assert(is_compress(tdir + "test.csv.gz") is True)
-        assert(is_compress(tdir + "test.csv.tar") is True)
-        assert(is_compress(tdir + "test.csv.tar.gz") is True)
-        assert(is_compress(tdir + "test.csv.xz") is True)
-        assert(is_compress(tdir + "test.lzh") is True)
-        assert(is_compress(tdir + "test.rar") is True)
-        assert(is_compress(tdir + "test.tar.gz") is True)
-        assert(is_compress(tdir + "test.zip") is True)
-        try:
-            is_compress("hoge")
-        except FileNotFoundError:
-            pass
-        else:
-            raise AssertionError
-
-
-    def test_zopen():
-        with zopen(tdir+"test.zip") as z:
-            assert(isinstance(z, ZipFile))
-        with zopen(tdir+"test.tar.gz") as z:
-            assert(isinstance(z, TarFile))
-        with zopen(tdir+"test.csv.gz") as z:
-            assert(isinstance(z, GzipFile))
-        with zopen(tdir+"test.csv.xz") as z:
-            assert(isinstance(z, LZMAFile))
-        with zopen(tdir+"test.csv.bz2") as z:
-            assert(isinstance(z, BZ2File))
-        with zopen(tdir+"test.lzh") as z:
-            assert(isinstance(z, LhaFile))
-        with zopen(tdir+"test.rar") as z:
-            assert(isinstance(z, RarFile))
-
-        try:
-            with zopen(tdir+"test.csv") as z:
-                assert(isinstance(z, TarFile))
-        except NonCompressedError:
-            pass
-        else:
-            raise AssertionError
-
-        try:
-            zopen(tdir+"notfound.csv")
-        except FileNotFoundError:
-            pass
-
-
-    def test_zopen_recursive():
-        for f in zopen_recursive(tdir+"test.csv.tar.gz"):
-            assert(f.read() == b'n,aa\r\n1,1\r\n2,\x82\xa0\r\n')
-
-
-    for x, func in list(locals().items()):
-        if x.startswith("test_") and callable(func):
-            t1 = dt.now()
-            func()
-            t2 = dt.now()
-            print("{} : time {}".format(x, t2-t1))
-
-if __name__ == "__main__":
+        def test_zopen_recursive():
+            for f in zopen_recursive(tdir+"test.csv.tar.gz"):
+                assert(f.read() == b'n,aa\r\n1,1\r\n2,\x82\xa0\r\n')
+
+
+        t0 = dt.now()
+        for x, func in list(locals().items()):
+            if x.startswith("test_") and callable(func):
+                t1 = dt.now()
+                func()
+                t2 = dt.now()
+                print("{} : time {}".format(x, t2-t1))
+        t3 = dt.now()
+        print("{} : time {}".format(x, t3-t0))
     test()
 

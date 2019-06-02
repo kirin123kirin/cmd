@@ -25,10 +25,6 @@ import pandas as pd
 import dask.dataframe as dd
 import numpy as np
 
-__all__ = [
-        "profiler",
-        "Profile",
-        ]
 
 def skew(key):
     if(len(key)) > 20: # for memory over flow
@@ -36,6 +32,13 @@ def skew(key):
     for i in range(1, len(key)):
         for x in combinations(key, i):
             yield sum(key[k] for k in x), x
+
+def _co_profiler(f, df, top):
+    for k, cdf in (df.items() if isinstance(df, dict) else df):
+        cdf = Profile(cdf, top=top).data
+        cdf.insert(0, "sheetname_or_table", k)
+        cdf.insert(0, "filename", f)
+        yield k, cdf
 
 def profiler(f, top=10, header=True, outputencoding="cp932", *args, **kw):
     df = read_any(f, *args, **kw)
@@ -45,15 +48,19 @@ def profiler(f, top=10, header=True, outputencoding="cp932", *args, **kw):
         df = [["-", df]]
 
     i = 0
-    for k, cdf in (df.items() if isinstance(df, dict) else df):
-        cdf = Profile(cdf, top=top).data
-        cdf.insert(0, "sheetname_or_table", k)
-        cdf.insert(0, "filename", f)
+    for k, cdf in _co_profiler(f, df, top):
         cdf.to_csv(sio, index=False, sep=",", header=i == 0 and header, encoding=outputencoding)
         i += 1
     sio.seek(0)
     return sio.getvalue()
 
+def profiler_df(f, top=10, *args, **kw):
+    df = read_any(f, *args, **kw)
+
+    if isdataframe(df):
+        df = [["-", df]]
+
+    return pd.concat([cdf for k, cdf in _co_profiler(f, df, top)])
 
 class Profile(object):
     dnrule = "diff{:02d}".format
@@ -130,6 +137,7 @@ class Profile(object):
 def main():
     from argparse import ArgumentParser
     from glob import glob
+    import codecs
 
     usage="""
     Any file Data Profiler
@@ -153,25 +161,56 @@ def main():
     padd("--outputencoding",
          help="出力ファイルのエンコーディングを指定する(デフォルトはcp932)\n選択肢cp932 utf-8 eucjp",
          default="cp932")
+    padd('-o', '--outfile', type=str, default=None,
+         help='output filepath (default `stdout`)')
     padd("filename",
          metavar="<filename>",
          nargs="+",  default=[],
          help="target any files(.txt, .csv, .tsv, .xls[x], .accdb, .sqlite3)")
     args = ps.parse_args()
 
+    def walk(args):
+        for arg in args.filename:
+            for f in glob(arg):
+                f = os.path.normpath(f)
+                if args.verbose:
+                    sys.stderr.write("Profiling:{}\n".format(f))
+                    sys.stderr.flush()
+                yield f
+
+    if args.outfile and os.path.splitext(args.outfile)[1].lower().startswith(".xls"):
+        from openpyxl.utils import get_column_letter
+        from openpyxl.formatting.rule import ColorScaleRule
+
+        ret = pd.concat([profiler_df(f, top=args.numtop) for f in walk(args)])
+        with pd.ExcelWriter(args.outfile, engine="openpyxl") as writer:
+            ret.to_excel_plus(writer, index=True,
+                title="Profile Data for {}".format(args.filename))
+            sheet = writer.sheets["Sheet1"]
+            cols = ret.columns.tolist()
+            en = sheet.max_row
+            rate_cols = [get_column_letter(cols.index(x) + 2) for x in ret if "rate" in x]
+            for rc in rate_cols:
+                target = '{}2:{}{}'.format(rc, rc, en)
+                sheet.conditional_formatting.add(
+                    target,
+                    ColorScaleRule(
+                        start_type='min', start_value=0.0, start_color="FFFFFF",
+                        end_type='max', end_value=1.0, end_color="FFA500"))
+                sheet.column_dimensions[rc].width = 10
+                for (c,) in sheet[target]:
+                    c.number_format = '0.00%'
+            writer.save()
+        return
+
+    out = codecs.open(args.outfile, mode="w", encoding=args.outputencoding) if args.outfile else sys.stdout
     i = 0
-    for arg in args.filename:
-        for f in glob(arg):
-            f = os.path.normpath(f)
-            if args.verbose:
-                sys.stderr.write("Profiling:{}\n".format(f))
-                sys.stderr.flush()
-            print(profiler(f, args.numtop, i == 0, outputencoding=args.outputencoding))
-            i += 1
+    for f in walk(args):
+        print(profiler(f, args.numtop, i == 0, outputencoding=args.outputencoding), file=out)
+        i += 1
 
     if i == 0:
         raise ValueError("ファイルが見つかりませんでした\n\n" + usage)
-
 
 """
    TestCase below

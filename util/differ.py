@@ -34,9 +34,6 @@ from collections import namedtuple
 import math
 
 
-__all__ = ["differ"]
-
-
 def sanitize(a, b):
     def comp(x, y):
         if x == y:
@@ -472,8 +469,21 @@ def main():
             b.columns = [str(x) for x in range(len(b.columns))]
             args.key2 = [str(x) for x in range(len(kb))]
 
-    f = codecs.open(args.outfile, mode="w", encoding=args.encoding) if args.outfile else sys.stdout
+    r = differ(a, b,
+                    keya=kwtolist(args.key or args.key1),
+                    keyb=kwtolist(args.key or args.key2),
+                    sorted=args.sorted, skipequal=args.all is False,
+                    usecola=usecols1, usecolb=usecols2,
+                    )
 
+    if args.outfile and os.path.splitext(args.outfile)[1].lower().startswith(".xls"):
+        col = next(r)
+        return DataFrame(r, columns=col).to_excel_plus(args.outfile,
+                         conditional_value="* ---> *",
+                         title="2Diff {} vs {}".format(args.file1[0],args.file2[0])
+                         )
+
+    f = codecs.open(args.outfile, mode="w", encoding=args.encoding) if args.outfile else sys.stdout
     writer = csv.writer(f, delimiter=args.sep, quoting=csv.QUOTE_ALL)
 
     if "ka" in locals():
@@ -486,13 +496,7 @@ def main():
     else:
         render = writer.writerow
 
-    for d in differ(a, b,
-                    keya=kwtolist(args.key or args.key1),
-                    keyb=kwtolist(args.key or args.key2),
-                    sorted=args.sorted, skipequal=args.all is False,
-                    usecola=usecols1, usecolb=usecols2,
-                    ):
-
+    for d in r:
         render(d)
 
 def test():
