@@ -721,8 +721,8 @@ def test():
         f1 = tdir + "diff5.xlsx"
         f2 = tdir + "diff6.xlsx"
 
-        a = read_any(f1)
-        b = read_any(f2)
+        a = read_any(f1, header=1)
+        b = read_any(f2, header=1)
         anser = [
             ['DIFFTAG', 'LEFTLINE#', 'RIGHTLINE#', 'TARGET', 'mpg', 'cyl', 'displ', 'hp', 'weight', 'Unnamed: 5', 'accel', 'yr', 'origin', 'name'],
             ['replace', 2, 2, 'diff1 ---> diff2', 'b ---> 10', '8', '307', '130', '3504', '', '12', '70', '1', 'chevrolet chevelle malibue'],
@@ -746,7 +746,7 @@ def test():
         assert(r == anser)
 
     def test_differequal():
-        from util import read_any
+        from util.dfutil import read_any
         f = tdir + "diff1.csv"
         df = read_any(f).head(5)
         assert(list(differ(df, df)) == [])
