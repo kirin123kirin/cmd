@@ -147,7 +147,7 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.argv.extend('C:/temp/mlocate.db -o C:/temp/test.xlsx'.split(" "))
+    #sys.argv.extend('C:/temp/mlocate.db -o C:/temp/test.xlsx'.split(" "))
     #sys.argv.append("mlocate.db")
 
     main()
