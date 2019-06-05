@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from glob import glob
-import sys, os
+import sys, os, re
 
 import plocate.mlocatedb
 
@@ -19,58 +19,56 @@ else:
                     fe.filename = fe.filename.replace("\\", "/")
                     yield fe
 
-def locate(f, outtype = "dir", limit = None):
-    with open(f,"rb") as database:
+def locate(f, limit = None):
+    with open(f, "rb") as database:
         mdb = mlocatedb(database)
-        try:
-            o = {"dir": 1, "file": 0}[outtype]
-        except KeyError:
-            raise ValueError("Unknown outtype. {}".format(outtype))
-
+        mdbfiles = mdb.files()
         if limit:
-            i = 0
-            for m in mdb.files():
-                if m.kind == o:
-                    yield m.filename
-                    i += 1
-                if i > limit:
-                    break
+            for _ in range(limit):
+                yield next(mdbfiles)
         else:
-            for m in mdb.files():
-                if m.kind == o:
-                    yield m.filename
+            for m in mdbfiles:
+                yield m
 
-def dumper(database, outtype="file", limit=None, hostname=None):
+def dumper(database, pattern=None, outtype="file", limit=None, hostname=None):
     from collections import defaultdict
 
     hostname = hostname or os.path.basename(database).replace(".db", "")
 
-    ld = locate(database, outtype, limit)
+    ld = locate(database, limit)
+
+    pt = re.compile(pattern).search if pattern else lambda p: True
 
     if outtype == "dir":
         for x in ld:
-            yield [hostname, x, -1, *map("/".__add__, x[1:].split("/"))]
-    else:
+            if x.is_dir() and pt(x):
+                yield [hostname, x, -1, *map("/".__add__, x[1:].split("/"))]
+
+    elif outtype == "file":
         ret = defaultdict(int)
-        cnt = 0
-        for x in ld:
-            n = x.count("/")
-            if n == cnt:
-                ret[x.rsplit("/", 1)[0] or "/"] += 1
-            else:
-                sl = ["/"] * n
-                for k,v in ret.items():
-                    dirs = map("".join, zip(sl, k[1:].split("/")))
-                    yield [hostname, k, v, *dirs]
-                ret.clear()
-                
-            cnt = n
-    
-def eachlocate(files, header=None, outtype="file", limit=None):
+        for o in ld:
+            path = o.filename.rsplit("/", 1)[0] or "/" # dirname
+
+            if o.is_file() and pt(path):
+                if ret and path not in ret:
+                    for k,v in ret.items():
+                        dirs = map("/".__add__, k[1:].split("/"))
+                        yield [hostname, k, v, *dirs]
+                    ret.clear()
+
+                ret[path] += 1
+
+    else:
+        for o in ld:
+            x = o.filename
+            if pt(x):
+                yield [hostname, x, 1, *map("/".__add__, x[1:].split("/"))]
+
+def eachlocate(files, header=None, pattern=None, outtype="file", limit=None):
     if header:
         yield ["server", "fullpath", "count", "DIRS*"]
     for f in files:
-        for d in  dumper(f, outtype, limit):
+        for d in  dumper(f, pattern, outtype, limit):
             yield d
 
 def to_csv(iterator, file=sys.stdout, **kw):
@@ -86,29 +84,40 @@ def to_csv(iterator, file=sys.stdout, **kw):
         fp.close()
 
 def to_excel(iterator, file):
-    #TODO
-    pass
+    from xlsxwriter import Workbook
+    with Workbook(file) as book:
+        header_fmt = book.add_format(
+            dict(border=True, align="center", bold=True))
+
+        sheet = book.add_worksheet()
+
+        for i, row in enumerate(iterator, 1):
+            sheet.write_row(i, 0, row)
+
+        dirs = map("DIR{:02d}".format, range(sheet.dim_colmax - 2))
+        sheet.write_row(0, 0, ["server", "fullpath", "count", *dirs], header_fmt)
+        sheet.autofilter(0, 0, sheet.dim_rowmax, sheet.dim_colmax)
 
 def main():
     from argparse import ArgumentParser
     usage="""
-    mlocate.db text dump
-       Example1: {0} *.db
-       Example2: {0} *.xlsx
+    path string dump from mlocate.db
+       Example1: {0} *.db -o fileslist.csv
+       Example2: {0} *.db -o fileslist.xlsx
 
     """.format(os.path.basename(sys.argv[0]).replace(".py", ""))
 
     ps = ArgumentParser(usage)
     padd = ps.add_argument
-    
+
     padd('-o', '--outfile', type=str, default=None,
          help='output filepath (default `stdout`)')
     padd("-l", "--limit",
          help="db dump limit lines number",
          type=int, default=None)
     padd('-t', '--type', type=str, default="file",
-         help='mlocate.db dumptype. `file` or `dir`')
-    padd('-r', '--regex', type=str, default=".",
+         help='mlocate.db dumptype. `file` or `dir` or `all`')
+    padd('-r', '--regex', type=str, default=None,
          help='regex path filter string')
     padd("-H", "--header",
          help="header print",
@@ -116,21 +125,30 @@ def main():
     padd("filename",
          metavar="<filename>",
          nargs="+",  default=[],
-         help="target any files(.txt, .csv, .tsv, .xls[x], .accdb, .sqlite3)")
+         help="target mlocate.db files")
     args = ps.parse_args()
-    
+
     header = args.header
-    outtype = args.type
+    outtype = None if args.type == "all" else args.type
     limit = args.limit
-    pattern = args.regex #TODO
-    
+    pattern = args.regex and args.regex.strip("'\"")
+    outfile = args.outfile or sys.stdout
+
     files = [g for fn in args.filename for g in glob(fn)]
     if not files:
         raise RuntimeError("Not found files {}".format(args.filename))
-    it = eachlocate(files, header, outtype, limit=limit)
-    to_csv(it, args.outfile or sys.stdout)
+
+    it = eachlocate(files, header, pattern, outtype, limit=limit)
+
+    if str(outfile).lower().rsplit(".", 1)[1].startswith("xls"):
+        to_excel(it, outfile)
+    else:
+        to_csv(it, outfile)
+
 
 if __name__ == "__main__":
+    sys.argv.extend('C:/temp/mlocate.db -o C:/temp/test.xlsx'.split(" "))
     #sys.argv.append("mlocate.db")
-    
+
     main()
+
