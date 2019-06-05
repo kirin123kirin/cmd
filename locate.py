@@ -76,6 +76,8 @@ def eachlocate(files, header=None, outtype="file", limit=None):
 def to_csv(iterator, file=sys.stdout, **kw):
     import csv
     fp = file if hasattr(file, "write") else open(file, "w")
+    if fp == sys.stdout:
+        kw["lineterminator"] = "\n"
     writer = csv.writer(fp, **kw)
     for x in iterator:
         writer.writerow(x)
@@ -123,10 +125,12 @@ def main():
     pattern = args.regex #TODO
     
     files = [g for fn in args.filename for g in glob(fn)]
+    if not files:
+        raise RuntimeError("Not found files {}".format(args.filename))
     it = eachlocate(files, header, outtype, limit=limit)
     to_csv(it, args.outfile or sys.stdout)
 
 if __name__ == "__main__":
-    sys.argv.append("mlocate.db")
+    #sys.argv.append("mlocate.db")
     
     main()
