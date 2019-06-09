@@ -84,29 +84,37 @@ def locate(f, limit = None):
             for m in mdbfiles:
                 yield m
 
-def dumper(database, pattern=None, outtype="file", limit=None, hostname=None):
-    hostname = hostname or os.path.basename(database).replace(".db", "")
+def dumper(database, pattern=None, outtype="file", limit=None, n_cpu=1, hostname=None):
+    hostname = re.sub(r"([\.\-_]mlocate)?\.db", "", hostname or os.path.basename(database))
 
     pt = re.compile(pattern).search if pattern else lambda p: True
 
-    for o in locate(database, limit):
+    def liner(o):
         x = o.filename
         tp = "dir" if o.is_dir() else "file"
         if pt(x) and (outtype == "all" or tp == outtype):
+            #TODO None skip
             if tp == "dir":
                 dirs = map("/".__add__, x[1:].split("/"))
             else:
                 dirs = map("/".__add__, x.rsplit("/", 1)[0][1:].split("/"))
 
-            yield [hostname, tp, os.path.basename(x), x, *dirs]
+            return [hostname, tp, os.path.basename(x), x, *dirs]
+    
+    if n_cpu == 1 or n_cpu == 0:
+        return map(liner, locate(database, limit))
+    else:
+        from joblib import Parallel, delayed
+        return Parallel(n_jobs=n_cpu, verbose=True)(delayed(liner)(o) for o in locate(database, limit))
 
-
-def eachlocate(files, header=None, pattern=None, outtype="file", limit=None):
+def eachlocate(files, header=None, pattern=None, outtype="file", limit=None, n_cpu=1):
     if header:
         yield ["server", "type", "basename", "fullpath", "DIRS*"]
+    
     for f in files:
-        for d in dumper(f, pattern, outtype, limit):
-            yield d
+        for d in dumper(f, pattern, outtype, limit, n_cpu):
+            if d:
+                yield d
 
 def to_csv(iterator, file=sys.stdout, **kw):
     import csv
@@ -151,6 +159,9 @@ def main():
     padd("-l", "--limit",
          help="db dump limit lines number",
          type=int, default=None)
+    padd("-P", "--paralell",
+         help="Paralell running.(if low memory `1`) `2` is use 2CPU, `-1` is use All CPU",
+         type=int, default=1)
     padd('-t', '--type', type=str, default="file",
          help='mlocate.db dumptype. `file` or `dir` or `all`')
     padd('-r', '--regex', type=str, default=None,
@@ -169,12 +180,13 @@ def main():
     limit = args.limit
     pattern = args.regex and args.regex.strip("'\"")
     outfile = args.outfile or sys.stdout
+    n_cpu = args.paralell
 
     files = [g for fn in args.filename for g in glob(fn)]
     if not files:
         raise RuntimeError("Not found files {}".format(args.filename))
 
-    it = eachlocate(files, header, pattern, outtype, limit=limit)
+    it = eachlocate(files, header, pattern, outtype, limit=limit, n_cpu=n_cpu)
 
     if str(outfile).lower().rsplit(".", 1)[1].startswith("xls"):
         to_excel(it, outfile)
@@ -183,9 +195,9 @@ def main():
 
 
 if __name__ == "__main__":
-#    sys.argv.extend('C:/temp/mlocate.db -Ht all -l 40'.split(" "))
-#    sys.argv.extend('C:/temp/mlocate.db -o C:/temp/test.csv'.split(" "))
-#    sys.argv.append("C:/temp/mlocate.db")
+#    sys.argv.extend('mlocate.db -t all -Ht all -l 40 -P 3'.split(" "))
+#    sys.argv.extend('mlocate.db -P 2 -o test.csv'.split(" "))
+#    sys.argv.append("mlocate.db")
 
     main()
 
