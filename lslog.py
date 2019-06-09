@@ -65,7 +65,7 @@ class lstab(object):
         self.fp = (line for f in self.file for line in self.open(f))
         self.rundate = re.compile("^(?:\[[\d\-/:\. ]{8,36}\] )")
         self.exist_p = re.compile(self.rundate.pattern + "?[^\s].*:$").match
-        self.exist_c = re.compile(self.rundate.pattern + "?[drwxtslc\-]{10} .*").match
+        self.exist_c = re.compile(self.rundate.pattern + "?[drwxtslcbp\-]{10} .*").match
         self.mod_sp = re.compile(" +")
         self.df = None
         self.ncol = 0
