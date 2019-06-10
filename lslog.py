@@ -7,6 +7,8 @@ from datetime import datetime
 from io import StringIO
 from pathlib import Path
 from dateutil.parser._parser import parser, parserinfo
+from joblib import Parallel, delayed
+from posixpath import basename, normpath, join as pathjoin
 
 class _jpinfo(parserinfo):
     WEEKDAYS = [
@@ -29,6 +31,7 @@ def to_datetime(timestr, parserinfo=_jpinfo(), **kwargs):
     timestr = timestr.replace("年", "/").replace("月", "/")
     return parser(info=parserinfo).parse(timestr, **kwargs)
 
+
 def parse_date(s,
         base_date = datetime.now(),
         future_date = True,
@@ -50,9 +53,31 @@ def parse_date(s,
 def _split_date_time(dt):
     return dt.strftime("%Y/%m/%d"), dt.strftime("%H:%M:%S")
 
+def parse_ls(line, parent="", base_date="", mod_sp = re.compile(" +")):
+    if line.startswith("l"):
+        p, _, o, g, size, *d, name, _, ln = mod_sp.split(line)
+    else:
+        ln = ""
+        p, _, o, g, size, *d, name = mod_sp.split(line)
+
+    dt = parse_date(" ".join(d), base_date, future_date=False, callback=_split_date_time)
+    try:
+        size = int(size)
+    except:
+        pass
+    ret = [p, o, g, size, *dt, name.split(".")[-1] if "." in name else "", name]
+
+    if not parent or parent == ".":
+        return [*ret, ln]
+
+    parent = normpath(parent)
+    fullpath = pathjoin(parent, name)
+    diritem = (fullpath if p.startswith("d") else parent).strip("/").split("/")
+
+    return [*ret, ln, fullpath, *map("/".__add__, diritem)]
 
 class lstab(object):
-    def __init__(self, file, parent = "", base_date=""):
+    def __init__(self, file, parent = "", base_date="", n_cpu=1):
         if isinstance(file, (list, tuple)):
             self.file = sum(map(glob, file), [])
         else:
@@ -65,31 +90,10 @@ class lstab(object):
         self.fp = (line for f in self.file for line in self.open(f))
         self.rundate = re.compile("^(?:\[[\d\-/:\. ]{8,36}\] )")
         self.exist_p = re.compile(self.rundate.pattern + "?[^\s].*:$").match
-        self.exist_c = re.compile(self.rundate.pattern + "?[drwxtslcbp\-]{10} .*").match
+        self.exist_c = re.compile(self.rundate.pattern + "?[drwxtslc\-]{10} .*").match
         self.mod_sp = re.compile(" +")
         self.df = None
-        self.ncol = 0
-
-    def parse_ls(self, line, parent=""):
-        if line.startswith("l"):
-            p, _, o, g, size, *d, name, _, ln = self.mod_sp.split(line)
-        else:
-            ln = ""
-            p, _, o, g, size, *d, name = self.mod_sp.split(line)
-
-        dt = parse_date(" ".join(d), self.base_date, future_date=False, callback=_split_date_time)
-        try:
-            size = int(size)
-        except:
-            pass
-        ret = [p, o, g, size, *dt, name.split(".")[-1] if "." in name else "", name]
-        parent = parent or self.parent
-        if not parent:
-            return [*ret, ln]
-        fullpath = parent.rstrip("/") + "/" + name
-        self.ncol = max(fullpath.count("/"), self.ncol)
-        dirname = (fullpath if p.startswith("d") else parent).strip("/")
-        return [*ret, ln, fullpath, *map("/".__add__, dirname.split("/"))]
+        self.n_cpu = n_cpu
 
     def open(self, file, *args, **kw):
         if hasattr(file, "read"):
@@ -107,6 +111,7 @@ class lstab(object):
 
     def __iter__(self):
         current = self.parent
+        func = parse_ls if self.n_cpu == 1 else delayed(parse_ls)
 
         for line in self.fp:
             line = self.rundate.sub("", line)
@@ -116,12 +121,17 @@ class lstab(object):
             line = line.rstrip()
 
             if self.exist_c(line):
-                yield self.parse_ls(line, current)
+                yield func(line, parent=current, base_date=self.base_date, mod_sp = self.mod_sp)
             elif self.exist_p(line):
                 if self.parent:
                     current = self.parent + line.strip(" :").lstrip(".")
                 else:
                     current = line.strip(" :")
+
+    def parse(self):
+        if self.n_cpu == 1:
+            return self.__iter__()
+        return Parallel(n_jobs=self.n_cpu)(self.__iter__())
 
     def to_csv(self, filepath_or_buffer, sep=',', index=False, quotechar='"', quoting=0, **kw):
         import csv
@@ -131,7 +141,7 @@ class lstab(object):
             writer = csv.writer(fp, delimiter=sep, quotechar=quotechar, quoting=quoting, **kw)
             if self.header:
                 writer.writerow(self.header + ["DIRS*"])
-            for x in self.__iter__():
+            for x in self.parse():
                 writer.writerow(x)
                 fp.flush()
         else:
@@ -146,7 +156,7 @@ class lstab(object):
 
             sheet = book.add_worksheet()
 
-            for i, row in enumerate(self.__iter__(), 1):
+            for i, row in enumerate(self.parse(), 1):
                 sheet.write_row(i, 0, row)
 
             if not sheet.dim_colmax:
@@ -161,7 +171,7 @@ class lstab(object):
     def to_pandas(self):
         from pandas import DataFrame
         if self.df is None:
-            self.df = DataFrame(self.__iter__())
+            self.df = DataFrame(self.parse())
             if len(self.df.columns) == 9:
                 self.df.columns = self.header[:-1]
             else:
@@ -176,14 +186,13 @@ class lstab(object):
 
 def main():
     from argparse import ArgumentParser
-    from glob import glob
 
     usage="""
     parse from `ls -lR` log string
        Example1: {0} *.log -o fileslist.csv
        Example2: {0} *.log -o fileslist.xlsx
 
-    """.format(os.path.basename(sys.argv[0]).replace(".py", ""))
+    """.format(basename(sys.argv[0]).replace(".py", ""))
 
     ps = ArgumentParser(usage)
     padd = ps.add_argument
@@ -192,6 +201,9 @@ def main():
          help='output filepath (default `stdout`)')
     padd('-b', '--basedate', type=str, default=None,
          help='run ls -lR Date')
+    padd("-P", "--paralell",
+         help="Paralell running.(if low memory `1`) `2` is use 2CPU, `-1` is use All CPU",
+         type=int, default=1)
     padd('-c', '--currentdirectory', type=str, default=None,
          help='run ls -lR Current Directory Path String')
     padd("filename",
@@ -203,12 +215,14 @@ def main():
     outfile = args.outfile or sys.stdout
     BASE_DATE = args.basedate
     PARENT = args.currentdirectory
+    n_cpu = args.paralell
 
     files = [g for fn in args.filename for g in glob(fn)]
     if not files:
         raise RuntimeError("Not found files {}".format(args.filename))
 
-    tb = lstab(files, parent=PARENT, base_date=BASE_DATE)
+    tb = lstab(files, parent=PARENT, base_date=BASE_DATE, n_cpu=n_cpu)
+
     ext = str(outfile).lower().rsplit(".", 1)[1]
     if ext.startswith("xls"):
         tb.to_excel(outfile)
@@ -221,7 +235,8 @@ def main():
 
 
 if __name__ == "__main__":
-#    sys.argv.extend(r"C:/temp/lsdir.log -o C:/temp/test.xlsx".split(" "))
-    sys.argv.append(r"C:/temp/lsdir.log")
+#    sys.argv.extend(r"C:\temp\lsdir.log -o C:\temp\test.csv".split(" "))
+#    sys.argv.extend(r"C:\temp\lsdir.log -o C:\temp\test.xlsx".split(" "))
+#    sys.argv.append(r"C:\temp\lsdir.log")
 
     main()
