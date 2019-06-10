@@ -23,6 +23,11 @@ import codecs
 import io
 from datetime import datetime as dt
 from itertools import chain, zip_longest
+from glob import glob
+from io import IOBase, StringIO, BytesIO
+import fnmatch
+from copy import deepcopy
+from csv import Sniffer
 
 import pathlib
 from collections import namedtuple
@@ -50,7 +55,6 @@ def command(cmd):
         raise RuntimeError(dat)
 
 def lsdir(path, recursive=True):
-    from glob import glob
     func = "rglob" if recursive else "glob"
     for p in map(Path, glob(str(path))):
         yield p
@@ -95,7 +99,6 @@ def geturi(s, file_prefix="file://"):
     return file_prefix + os.path.abspath(s).replace("\\", "/")
 
 def binopen(f, mode="rb", *args, **kw):
-    from io import IOBase, StringIO, BytesIO
 
     check = lambda *tp: isinstance(f, tp)
 
@@ -137,8 +140,6 @@ def binopen(f, mode="rb", *args, **kw):
     raise ValueError("Unknown Object `{}`. filename or filepointer buffer".format(type(f)))
 
 def opener(f, mode="r", *args, **kw):
-    from io import IOBase, StringIO, BytesIO
-
     if isinstance(f, IOBase):
         if isinstance(f, StringIO):
             return f
@@ -365,7 +366,6 @@ def in_glob(srclst, wc):
     if not wc:
         return None
 
-    import fnmatch
     if isinstance(wc , str):
         return fnmatch.filter(srclst, wc)
 
@@ -382,16 +382,19 @@ def path_norm(f):
     else:
         return f, None
 
-
+_xsorted = None
 def sorter(o, *arg, **kw):
     if islarge(o):
-        try:
-            from xsorted import xsorted   # awesome
-        except ModuleNotFoundError:
-            sys.stderr.write("** No module warning **\nPlease Install command: pip3 install xsorted\n")
-            xsorted = lambda *a, **k: iter(sorted(*a, **k))
+        global _xsorted
+        if _xsorted is None:
+            try:
+                from xsorted import xsorted # awesome
+            except ModuleNotFoundError:
+                sys.stderr.write("** No module warning **\nPlease Install command: pip3 install xsorted\n")
+                xsorted = lambda *a, **k: iter(sorted(*a, **k))
+            _xsorted = xsorted
 
-        return xsorted(o, *arg, **kw)
+        return _xsorted(o, *arg, **kw)
     else:
         return iter(sorted(o, *arg, **kw))
 
@@ -403,7 +406,6 @@ def isposkey(key):
 
 def iterhead(iterator, n=1):
     if hasattr(iterator, "__next__") and n > 0 and isinstance(n, int):
-        from copy import deepcopy
 
         it = deepcopy(iterator)
         if n == 1:
@@ -499,8 +501,6 @@ def iterrows(o, start=1, callback=flatten):
 
 
 def listlike(iterator, callback=None):
-    from copy import deepcopy
-
     class Slice(object):
         def __init__(self, iterator, callback=None):
             self._iter = iterator
@@ -609,14 +609,12 @@ def getdialect(dat:bytes):
     if enc is None:
         raise ValueError("Cannot get dialect of Binary File.")
     txt = dat.decode(enc)
-    from csv import Sniffer
     return Sniffer().sniff(txt)
 
 def sniffer(dat:bytes):
     enc = getencoding(dat)
     if enc is None:
         raise ValueError("Cannot get dialect of Binary File.")
-    from csv import Sniffer
     d = Sniffer().sniff(dat.decode(enc))
 
     if d:
@@ -1937,7 +1935,6 @@ class _handler_zopen:
     magic_header = max([265, max(len(x[0]) for x in archived_magic_numbers)])
 
     def __new__(cls, path_or_buffer):
-        from io import BytesIO
 
         if isinstance(path_or_buffer, str) and os.path.exists(path_or_buffer):
             if os.path.isdir(path_or_buffer) or os.path.splitext(path_or_buffer)[-1] in [".xlsx", ".docx", ".pptx"]:
@@ -2059,7 +2056,7 @@ if __name__ == "__main__":
                 assert(getsize(f) == len(dat))
 
         def test_geturi():
-            assert(geturi(tdir) == "file://" + (isposix is False and "/" or "") + tdir.replace("\\", "/"))
+            assert(geturi(tdir) == "file://" + (isposix is False and "/" or "") + tdir.replace("\\", "/").rstrip("/"))
             Path(geturi(tdir+"test.zip"))
             assert(geturi(r"Z:\temp\hoge.txt") == "file:///Z:/temp/hoge.txt")
 
@@ -2187,7 +2184,6 @@ if __name__ == "__main__":
             pass
 
         def test_opener():
-            from io import IOBase, StringIO, BytesIO
             import traceback
 
             def tests(func):
@@ -2287,7 +2283,6 @@ if __name__ == "__main__":
             assert(compute_object_size(_handler_zopen.archived_magic_numbers) > 0)
 
         def test_logger():
-            from io import StringIO
 
             s = StringIO(newline=None)
             with logger(s) as log:
