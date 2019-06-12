@@ -1,14 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+__version__ = "0.2.0"
+__author__ = "m.yama"
+
+
+__all__ = [
+        "to_datetime",
+        "parse_date",
+        "lstab"
+    ]
+
 import os, re, sys
 from glob import  glob
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
 from dateutil.parser._parser import parser, parserinfo
-from joblib import Parallel, delayed
 from posixpath import basename, normpath, join as pathjoin
+
+try:
+    from joblib import Parallel, delayed
+except:
+    sys.stderr.write("Please install joblib:\npip3 install joblib\n")
 
 class _jpinfo(parserinfo):
     WEEKDAYS = [
@@ -235,7 +249,7 @@ def main():
 
 
 if __name__ == "__main__":
-#    sys.argv.extend(r"C:\temp\lsdir.log -o C:\temp\test.csv".split(" "))
+#    sys.argv.extend(r"C:\Users\yellow\Documents\work\large.log -o C:\temp\test.xlsx".split(" "))
 #    sys.argv.extend(r"C:\temp\lsdir.log -o C:\temp\test.xlsx".split(" "))
 #    sys.argv.append(r"C:\temp\lsdir.log")
 

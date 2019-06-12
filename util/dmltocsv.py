@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+__version__ = "0.2.0"
+
+__all__ = ["dml_tolist"]
+
 import sys
 import re
 import codecs
@@ -97,5 +102,5 @@ def test():
             func()
 
 if __name__ == "__main__":
-    # test()
+#     test()
     main()

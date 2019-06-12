@@ -11,6 +11,10 @@ MIT License
 __version__ = "0.2.0"
 __author__ = "m.yama"
 
+
+__all__ = ["differ"]
+
+
 from util.core import (
         isposkey,
         isdataframe,

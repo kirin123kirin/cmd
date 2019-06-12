@@ -1,11 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+__version__ = "0.2.0"
+__author__ = "m.yama"
+
+
+__all__ = [
+        "locate",
+        "eachlocate",
+        "to_csv",
+        "to_excel"
+    ]
+
 from glob import glob
 import sys, os, re
 
 import plocate.mlocatedb
 from future.utils import native_str
 import struct
+try:
+    from joblib import Parallel, delayed
+except:
+    sys.stderr.write("Please install joblib:\npip3 install joblib\n")
 
 class mlocatedb(plocate.mlocatedb.mlocatedb):
     lndir = ("/etc/init.d",
@@ -92,7 +108,7 @@ def dumper(database, pattern=None, outtype="file", limit=None, n_cpu=1, hostname
     def is_target(o):
         tp = "dir" if o.is_dir() else "file"
         return pt(o.filename) and (outtype == "all" or tp == outtype)
-        
+
     def liner(o):
         x = o.filename
         tp = "dir" if o.is_dir() else "file"
@@ -102,17 +118,16 @@ def dumper(database, pattern=None, outtype="file", limit=None, n_cpu=1, hostname
             dirs = map("/".__add__, x.rsplit("/", 1)[0][1:].split("/"))
 
         return [hostname, tp, os.path.basename(x), x, *dirs]
-    
+
     if n_cpu == 1 or n_cpu == 0:
         return (liner(o) for o in locate(database, limit) if is_target(o))
     else:
-        from joblib import Parallel, delayed
         return Parallel(n_jobs=n_cpu)(delayed(liner)(o) for o in locate(database, limit) if is_target(o))
 
 def eachlocate(files, header=None, pattern=None, outtype="file", limit=None, n_cpu=1):
     if header:
         yield ["server", "type", "basename", "fullpath", "DIRS*"]
-    
+
     for f in files:
         for d in dumper(f, pattern, outtype, limit, n_cpu):
             yield d

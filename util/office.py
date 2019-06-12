@@ -8,6 +8,14 @@ require pandas and dask!!
 MIT License
 
 """
+
+__all__ = [
+    "reader",
+    "readlines",
+    "iterlines",
+]
+
+
 from collections import namedtuple
 from pathlib import Path
 import sys

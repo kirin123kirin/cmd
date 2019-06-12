@@ -17,6 +17,64 @@ BUF = 128 * 1024 ** 2
 
 CHUNKSIZE = int(BUF / (64 * 40))
 
+__all__ = [
+    "TMPDIR",
+    "lsdir",
+    "getencoding",
+    "getsize",
+    "geturi",
+    "binopen",
+    "opener",
+    "flatten",
+    "timestamp2date",
+    "which",
+    "isnamedtuple",
+    "values_at",
+    "values_not",
+    "vmfree",
+    "compute_object_size",
+    "logger",
+    "islarge",
+    "in_glob",
+    "path_norm",
+    "sorter",
+    "isposkey",
+    "iterhead",
+    "is1darray",
+    "is2darray",
+    "isdataframe",
+    "sortedrows",
+    "iterrows",
+    "listlike",
+    "kwtolist",
+    "fifo",
+    "kifo",
+    "fkifo",
+    "difo",
+    "fdifo",
+    "getdialect",
+    "sniffer",
+    "Path",
+    "ZipArchiveWraper",
+    "TarArchiveWraper",
+    "LhaArchiveWraper",
+    "RarArchiveWraper",
+    "ZLibArchiveWraper",
+    "ZipExtFile",
+    "ZipFile",
+    "TarFile",
+    "RarFile",
+    "LhaInfo",
+    "LhaFile",
+    "GzipFile",
+    "LZMAFile",
+    "BZ2File",
+    "is_compress",
+    "zopen",
+    "zopen_recursive",
+]
+
+
 import re
 import sys
 import codecs
@@ -2056,7 +2114,7 @@ if __name__ == "__main__":
                 assert(getsize(f) == len(dat))
 
         def test_geturi():
-            assert(geturi(tdir) == "file://" + (isposix is False and "/" or "") + tdir.replace("\\", "/").rstrip("/"))
+            assert(geturi(tdir).rstrip("/") == "file://" + (isposix is False and "/" or "") + tdir.replace("\\", "/").rstrip("/"))
             Path(geturi(tdir+"test.zip"))
             assert(geturi(r"Z:\temp\hoge.txt") == "file:///Z:/temp/hoge.txt")
 

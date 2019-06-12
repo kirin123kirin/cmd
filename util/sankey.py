@@ -1,5 +1,16 @@
 ﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+__author__  = 'm.yama'
+__license__ = 'MIT'
+__version__ = '0.0.2'
+
+
+__all__     = [
+    "render_sankey",
+    "tsvsankey",
+]
+
 import pandas as pd
 import plotly.offline as py
 import re
