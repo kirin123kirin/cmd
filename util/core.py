@@ -85,7 +85,7 @@ from glob import glob
 from io import IOBase, StringIO, BytesIO
 import fnmatch
 from copy import deepcopy
-from csv import Sniffer
+import csv
 
 import pathlib
 from collections import namedtuple
@@ -667,13 +667,13 @@ def getdialect(dat:bytes):
     if enc is None:
         raise ValueError("Cannot get dialect of Binary File.")
     txt = dat.decode(enc)
-    return Sniffer().sniff(txt)
+    return csv.Sniffer().sniff(txt)
 
 def sniffer(dat:bytes):
     enc = getencoding(dat)
     if enc is None:
         raise ValueError("Cannot get dialect of Binary File.")
-    d = Sniffer().sniff(dat.decode(enc))
+    d = csv.Sniffer().sniff(dat.decode(enc))
 
     if d:
         return kifo(d.delimiter, enc, d.lineterminator, d.quoting, d.doublequote, d.delimiter, d.quotechar)
@@ -913,6 +913,20 @@ class Path(type(pathlib.Path())):
         with io.open(str(self), mode='r', encoding=encoding or self.encoding, errors=errors) as f:
             return f.read(n)
 
+    def iterrow(self, lineterminator=None, quoting=None,
+        doublequote=None, delimiter=None,
+        quotechar=None, skipinitialspace=None):
+    
+        userkey = {k: v for k, v in dict(lineterminator=lineterminator,
+            quoting=quoting, doublequote=doublequote, 
+            delimiter=delimiter, quotechar=quotechar,
+            skipinitialspace=skipinitialspace).items() if v}
+    
+        return csv.reader(self.open(), self.dialect)
+
+    def read_row(self, *arg, **kw):
+        return list(self.iterrow(*arg, **kw))
+
     def delete(self):
         return self.unlink()
 
@@ -1060,7 +1074,6 @@ class Path(type(pathlib.Path())):
                 return io.open(str(self), mode, buffering=buffering, errors=errors, newline=newline)
             else:
                 return io.open(str(self), mode, buffering, encoding or self.encoding, errors, newline)
-
 
 class _baseArchive(object):
     __slots__ = (
