@@ -90,12 +90,16 @@ import csv
 import pathlib
 from collections import namedtuple
 
+# 3rd party libraly
 import gzip
 import tarfile
 from tarfile import ExFileObject
 import bz2
 import zipfile
 import lzma
+
+# own library
+import office
 
 
 class UnsupportCompressError(RuntimeError):
@@ -742,6 +746,12 @@ class PathList(list):
         return [x.read_text(n, encoding=encoding, errors=errors) for x in self if x.is_file()]
     read = read_text
 
+    def iterlines(self, *arg, **kw):
+        return (x.iterlines(*arg, **kw) for x in self)
+
+    def readlines(self, *arg, **kw):
+        return [x.readlines(*arg, **kw) for x in self]
+
     def lstat(self):
         return [x.lstat() for x in self]
 
@@ -802,6 +812,9 @@ class PathList(list):
     def is_compress(self):
         return [x.is_compress() for x in self if x.is_file()]
 
+    def close(self):
+        return [x.close() for x in self if x.is_file()]
+
     def __getattr__(self, name):
         if name in self.raiseop:
             raise RuntimeError("It's Operation is Dangerous. Please each Operation.")
@@ -819,6 +832,9 @@ class Path(type(pathlib.Path())):
         '_str',
         '_dialect',
         '_fullpath',
+        '_file',
+        '_rows',
+        '_rowsbuf',
         'content',
     )
 
@@ -867,6 +883,9 @@ class Path(type(pathlib.Path())):
         self._ext = None
         self._dialect = None
         self._fullpath = None
+        self._file = None
+        self._rows = None
+        self._rowsbuf = []
 
     @property
     def fullpath(self):
@@ -913,19 +932,18 @@ class Path(type(pathlib.Path())):
         with io.open(str(self), mode='r', encoding=encoding or self.encoding, errors=errors) as f:
             return f.read(n)
 
-    def iterrow(self, lineterminator=None, quoting=None,
-        doublequote=None, delimiter=None,
-        quotechar=None, skipinitialspace=None):
-    
-        userkey = {k: v for k, v in dict(lineterminator=lineterminator,
-            quoting=quoting, doublequote=doublequote, 
-            delimiter=delimiter, quotechar=quotechar,
-            skipinitialspace=skipinitialspace).items() if v}
-    
-        return csv.reader(self.open(), self.dialect)
+    def __next__(self):
+        return next(self.iterlines())
 
-    def read_row(self, *arg, **kw):
-        return list(self.iterrow(*arg, **kw))
+    def iterlines(self):
+        if self._rows is None:
+            self.open()
+        return self._rows
+
+    def readlines(self):
+        if not self._rowsbuf:
+            self._rowsbuf = list(self.iterlines())
+        return self._rowsbuf
 
     def delete(self):
         return self.unlink()
@@ -1059,23 +1077,79 @@ class Path(type(pathlib.Path())):
             return False
         return is_compress(self.read_bytes(265))
 
-    def open(self, mode='r', buffering=-1, encoding=None,
+    def open(self, mode=None, buffering=-1, encoding=None,
              errors=None, newline=None):
+
         if self._closed:
             self._raise_closed()
 
-        if self.is_compress():
-            lst = list(zopen_recursive(self._str, mode))
+        def ziped_rows(arch):
+            if mode is None:
+                ext = os.path.splitext(arch.name)[1][:4].lower()
+                if ext in [".csv", ".tsv"]:
+                    enc = arch.encoding
+                    if isinstance(arch.opened, (BZ2File, GzipFile, LZMAFile)):
+                        m = (y.decode(enc) for x in arch.opened for y in x)
+                    else:
+                        m = (x.decode(enc) for x in arch.opened)
+                    return csv.reader(m, arch.dialect)
+
+                if ext in olst:
+                    return office.iterlines(arch.opened)
+
+            return arch.opened.__iter__()
+
+        name = str(self)
+        ext = os.path.splitext(name.lower())[1][:4]
+        olst = [".ppt", ".doc", ".xls", ".pdf"]
+
+        if ext not in olst and self.is_compress():
+            lst = list(zopen_recursive(self._str, mode or "r"))
             if len(lst) == 1:
-                return lst[0]
-            return PathList(lst)
-        else:
-            if "b" in mode:
-                return io.open(str(self), mode, buffering=buffering, errors=errors, newline=newline)
+                self._file = lst[0]
+                self._rows = ziped_rows(self._file)
             else:
-                return io.open(str(self), mode, buffering, encoding or self.encoding, errors, newline)
+                self._file = PathList(lst)
+                self._rows = (y for x in self._file for y in ziped_rows(self._file))
+        else:
+            if mode and "b" in mode:
+                self._file = io.open(name, mode, buffering=buffering, errors=errors, newline=newline)
+                self._rows = self._file.__iter__()
+            elif mode is None:
+                if ext in [".csv", ".tsv"]:
+                    self._file = io.open(name, "r", buffering, encoding or self.encoding, errors, newline)
+                    self._rows = csv.reader(self._file, self.dialect)
+
+                if ext in olst:
+                    self._file = io.open(name, "rb", buffering, errors, newline)
+                    self._rows = office.iterlines(name)
+
+            else:
+                self._file = io.open(name, mode, buffering, encoding or self.encoding, errors, newline)
+                self._rows = self._file.__iter__()
+        return self._file
+
+    def close(self):
+        if hasattr(self._file, "close") and self._file.closed is False:
+            self._file.close()
+        self._file = None
+        self._rows = None
+        self._rowsbuf = []
+        self._closed = True
+
+    def __enter__(self):
+        if self._closed:
+            self._raise_closed()
+        self.open(mode=None)
+        return self
+
+    def __exit__(self, t, v, tb):
+        self.close()
+
 
 class _baseArchive(object):
+    SAMPLE = 92160
+
     __slots__ = (
         "parent",
         "info",
@@ -1154,7 +1228,7 @@ class _baseArchive(object):
             tell = self.opened.tell()
             if tell != 0:
                 self.opened.seek(0)
-            self._dialect = getdialect(self.opened.read(91260))
+            self._dialect = getdialect(self.opened.read(self.SAMPLE))
             self.opened.seek(tell)
         return self._dialect
 
@@ -1212,11 +1286,13 @@ class _baseArchive(object):
 
     @property
     def encoding(self):
-        tell = self.opened.tell()
-        if tell != 0:
-            self.opened.seek(0)
-        self._encoding = getencoding(self.opened.read(91260))
-        self.opened.seek(tell)
+        if self._encoding is None:
+            tell = self.opened.tell()
+            if tell != 0:
+                self.opened.seek(0)
+            self._encoding = getencoding(self.opened.read(self.SAMPLE))
+            self.opened.seek(tell)
+
         return self._encoding
 
     @property
@@ -1472,6 +1548,9 @@ class ZLibArchiveWraper(_baseArchive):
         return False
     def is_file(self):
         return True
+
+    def __iter__(self):
+        return self.opened._buffer.__iter__()
 
 
 if int("{}{}{}".format(*sys.version_info[:3])) <= 366:
@@ -2208,6 +2287,19 @@ if __name__ == "__main__":
 
             p = Path(geturi(tdir+"test.csv"))
             assert(p.is_file() is True)
+
+        def test_readlines():
+            ans = [['n', 'aa'], ['1', '1'], ['2', 'あ']]
+            assert(Path(tdir+"test.csv").readlines() == ans)
+            assert(Path(tdir+"test.zip").readlines() == ans)
+            assert(Path(tdir+"test.tar").readlines() == ans)
+            assert(Path(tdir+"test.tar.gz").readlines() == ans)
+            assert(Path(tdir+"test.lzh").readlines() == ans)
+            assert(Path(tdir+"test.rar").readlines() == ans)
+            assert(Path(tdir+"test.csv.xz").readlines() == ans)
+            assert(Path(tdir+"test.csv.bz2").readlines() == ans)
+            assert(Path(tdir+"test.csv.gz").readlines() == ans)
+            assert(Path(tdir+"test.xls").readlines() == [['n', 'aa'], [1.0, 1.0], [2.0, 'あ']])
 
         def test_PathList():
             p = Path(tdir+"diff*")

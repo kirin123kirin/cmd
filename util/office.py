@@ -18,7 +18,7 @@ __all__ = [
 
 from collections import namedtuple
 from pathlib import Path
-import sys
+import sys, os
 
 #3rd party
 try:
@@ -56,65 +56,88 @@ except ModuleNotFoundError:
     LTTextLine = ImportError
 
 
+def splitfileobj(path_or_buffer, mode="rb"):
+    try:
+        path = Path(path_or_buffer)
+        fp = open(path_or_buffer, mode)
+    except:
+        path = Path(path_or_buffer.name)
+        fp = path_or_buffer
+    return path, fp
+
 
 pinfo = namedtuple("OfficeDoc", ["path", "target", "value"])
-def pptx(ppt_path_or_buffer):
-    path = Path(ppt_path_or_buffer)
-    for i, s in enumerate(Presentation(path).slides):
+def pptx(path_or_buffer):
+    path, fp = splitfileobj(path_or_buffer)
+
+    for i, s in enumerate(Presentation(fp).slides):
         for t in (r.text for sp in s.shapes if sp.has_text_frame for p in sp.text_frame.paragraphs for r in p.runs if r.text):
             yield pinfo(path, i, t)
 
-def docx(docx_path_or_buffer):
-    path = Path(docx_path_or_buffer)
-    return (pinfo(path, "#TODO", txt) for txt in (p.text for p in Document(path).paragraphs if p.text))
+    if not hasattr(path_or_buffer, "close"):
+        fp.close()
 
-def xlsx(xlsx_path_or_buffer):
-    path = Path(xlsx_path_or_buffer)
-    with xlrd.open_workbook(path) as wb:
+def docx(path_or_buffer):
+    path, fp = splitfileobj(path_or_buffer)
+
+    return (pinfo(path, "#TODO", txt) for txt in (p.text for p in Document(fp).paragraphs if p.text))
+
+    if not hasattr(path_or_buffer, "close"):
+        fp.close()
+
+def xlsx(path_or_buffer):
+    path, fp = splitfileobj(path_or_buffer)
+
+    with xlrd.open_workbook(file_contents=fp.read()) as wb:
         for i, sh in ((r, sh) for sh in wb.sheets() for r in range(sh.nrows)):
             yield pinfo(path, "{}:{}".format(sh.name, i+1), sh.row_values(i))
 
+    if not hasattr(path_or_buffer, "close"):
+        fp.close()
+
+
 def pdf(path_or_buffer):
-    path = Path(path_or_buffer)
+    path, fp = splitfileobj(path_or_buffer)
 
-    with path.open('rb') as fp:
-        ps = PDFParser(fp)
-        doc = PDFDocument()
-        ps.set_document(doc)
-        doc.set_parser(ps)
-        doc.initialize('')
+    ps = PDFParser(fp)
+    doc = PDFDocument()
+    ps.set_document(doc)
+    doc.set_parser(ps)
+    doc.initialize('')
 
-        mgr = PDFResourceManager(caching=True)
-        dev = PDFPageAggregator(mgr, laparams=LAParams())
-        ip = PDFPageInterpreter(mgr, dev)
+    mgr = PDFResourceManager(caching=True)
+    dev = PDFPageAggregator(mgr, laparams=LAParams())
+    ip = PDFPageInterpreter(mgr, dev)
 
-        for i, page in enumerate(doc.get_pages(), 1):
-            ip.process_page(page)
-            text = "".join(x.get_text() for x in dev.get_result() if isinstance(x, (LTTextBox, LTTextLine)))
-            yield pinfo(path, i, text.rstrip("{}\n".format(i)))
+    for i, page in enumerate(doc.get_pages(), 1):
+        ip.process_page(page)
+        text = "".join(x.get_text() for x in dev.get_result() if isinstance(x, (LTTextBox, LTTextLine)))
+        yield pinfo(path, i, text.rstrip("{}\n".format(i)))
 
-        dev.close()
+    dev.close()
+    if not hasattr(path_or_buffer, "close"):
+        fp.close()
 
-def txt(path_or_buffer):
-    path = Path(path_or_buffer)
-    with path.open() as r:
-        for i, line in enumerate(r, 1):
-            yield pinfo(path, i, line.rstrip())
-
-
-_handler = {
-    ".ppt" : pptx,
-    ".doc" : docx,
-    ".xls" : xlsx,
-    ".pdf" : pdf,
-    ".txt" : txt,
-}
 
 def reader(path_or_buffer):
-    path = Path(path_or_buffer)
-    ext = path.suffix.lower()[:4]
-    func = _handler.get(ext, txt)
-    return func(path_or_buffer)
+    if hasattr(path_or_buffer, "name"):
+        ext = os.path.splitext(path_or_buffer.name)[1]
+    else:
+        ext = os.path.splitext(path_or_buffer)[1]
+
+    ext = ext.lower()[:4]
+
+    if ext == ".ppt":
+        return pptx(path_or_buffer)
+    elif ext == ".doc":
+        return docx(path_or_buffer)
+    elif ext == ".xls":
+        return xlsx(path_or_buffer)
+    elif ext == ".pdf":
+        return pdf(path_or_buffer)
+    else:
+        raise ValueError("Unknown office File")
+
 
 def readlines(path_or_buffer):
     return [r.value for r in reader(path_or_buffer)]
