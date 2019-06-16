@@ -240,7 +240,7 @@ class _dfhandler(object):
 
     def _handler_read(self):
         #TODO botolneck 142msec
-        if forcedask is False and (self.size < BUF or vmfree() > self.size * 5):
+        if forcedask is False and self.size < BUF: #(self.size < BUF or vmfree() > self.size * 5):
             reader = pd.__getattribute__(self.func)
             self.concater = pd.concat
         else:

@@ -961,14 +961,14 @@ class Path(type(pathlib.Path())):
             return f.read(n)
     read = read_text
 
-    def iterlines(self):
+    def iterlines(self, *arg, **kw):
         if self._rows is None:
-            self.open()
+            self.open(*arg, **kw)
         return self._rows
 
-    def readlines(self):
+    def readlines(self, *arg, **kw):
         if not self._rowsbuf:
-            self._rowsbuf = list(self.iterlines())
+            self._rowsbuf = list(self.iterlines(*arg, **kw))
         return self._rowsbuf
 
     def delete(self):
@@ -1117,7 +1117,9 @@ class Path(type(pathlib.Path())):
              quoting=0,
              skipinitialspace=False,
              strict=False):
-
+        """
+        TODO
+        """
         if self._closed:
             self._raise_closed()
 
