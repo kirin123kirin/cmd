@@ -99,7 +99,7 @@ import zipfile
 import lzma
 
 # own library
-import office
+from util import office
 
 
 class UnsupportCompressError(RuntimeError):
@@ -233,6 +233,31 @@ def opener(f, mode="r", *args, **kw):
         return codecs.open(f, mode=mode.replace("b", ""), *args, **kw)
     else:
         raise ValueError("Unknown Object. filename or filepointer buffer")
+
+def csvreader(itertable, encoding=None, delimiter=',',
+         doublequote=True, escapechar=None, lineterminator='\r\n',
+         quotechar='"', quoting=0,
+         skipinitialspace=False, strict=False):
+
+    userkw = {}
+    decoder = lambda x, enc=encoding: x.decode(enc) if enc else x
+    if delimiter != ',':
+        if not delimiter:
+            raise AttributeError("Invalid delimiter charactor. str or pattern")
+        elif len(delimiter) == 1 or delimiter in ["\t", "\r", "\n", "\v", "a", "f"]:
+            userkw["delimiter"] = delimiter
+        else:
+            userkw["delimiter"] = "\v"
+            decoder = lambda x, enc=encoding, rep=re.compile(delimiter): rep.sub("\v", x.decode(enc) if enc else x)
+    if doublequote      != True  : userkw["doublequote"] = doublequote
+    if escapechar       != None  : userkw["escapechar"] = escapechar
+    if lineterminator   != '\r\n': userkw["lineterminator"] = lineterminator
+    if quotechar        != '"'   : userkw["quotechar"] = quotechar
+    if quoting          != 0     : userkw["quoting"] = quoting
+    if skipinitialspace != False : userkw["skipinitialspace"] = skipinitialspace
+    if strict           != False : userkw["strict"] = strict
+
+    return csv.reader(map(decoder, itertable), **userkw)
 
 #def _flatten(iterable, base_type=None, levels=None):
 #    """Flatten an iterable with multiple levels of nesting (e.g., a list of
@@ -931,9 +956,7 @@ class Path(type(pathlib.Path())):
         """
         with io.open(str(self), mode='r', encoding=encoding or self.encoding, errors=errors) as f:
             return f.read(n)
-
-    def __next__(self):
-        return next(self.iterlines())
+    read = read_text
 
     def iterlines(self):
         if self._rows is None:
@@ -997,6 +1020,10 @@ class Path(type(pathlib.Path())):
     @property
     def quotechar(self):
         return self.dialect.quotechar
+
+    @property
+    def dialect_asdict(self):
+        return {k: v for k, v in vars(self.dialect).items() if k[0] != "_"}
 
     def wordcount(self, word, buf_size = 1024 ** 2):
         with self.open(mode="rb") as f:
@@ -1078,24 +1105,43 @@ class Path(type(pathlib.Path())):
         return is_compress(self.read_bytes(265))
 
     def open(self, mode=None, buffering=-1, encoding=None,
-             errors=None, newline=None):
+             errors=None, newline=None,
+             delimiter=',',
+             doublequote=True,
+             escapechar=None,
+             lineterminator='\r\n',
+             quotechar='"',
+             quoting=0,
+             skipinitialspace=False,
+             strict=False):
 
         if self._closed:
             self._raise_closed()
 
-        def ziped_rows(arch):
-            if mode is None:
-                ext = os.path.splitext(arch.name)[1][:4].lower()
-                if ext in [".csv", ".tsv"]:
-                    enc = arch.encoding
-                    if isinstance(arch.opened, (BZ2File, GzipFile, LZMAFile)):
-                        m = (y.decode(enc) for x in arch.opened for y in x)
-                    else:
-                        m = (x.decode(enc) for x in arch.opened)
-                    return csv.reader(m, arch.dialect)
+        userkw = {}
+        if delimiter        != ','   :userkw["delimiter"] = delimiter
+        if doublequote      != True  :userkw["doublequote"] = doublequote
+        if escapechar       != None  :userkw["escapechar"] = escapechar
+        if lineterminator   != '\r\n':userkw["lineterminator"] = lineterminator
+        if quotechar        != '"'   :userkw["quotechar"] = quotechar
+        if quoting          != 0     :userkw["quoting"] = quoting
+        if skipinitialspace != False :userkw["skipinitialspace"] = skipinitialspace
+        if strict           != False :userkw["strict"] = strict
 
-                if ext in olst:
-                    return office.iterlines(arch.opened)
+        def ziped_rows(arch):
+            ext = os.path.splitext(arch.name)[1][:4].lower()
+            if mode=="csv" or ext in [".csv", ".tsv"] or userkw:
+                enc = arch.encoding
+                if isinstance(arch.opened, (BZ2File, GzipFile, LZMAFile)):
+                    m = (y for x in arch.opened for y in x)
+                else:
+                    m = arch.opened
+                kw = arch.dialect_asdict
+                kw.update(userkw)
+                return csvreader(m, encoding=enc, **kw)
+
+            if ext in olst:
+                return office.iterlines(arch.opened)
 
             return arch.opened.__iter__()
 
@@ -1115,14 +1161,20 @@ class Path(type(pathlib.Path())):
             if mode and "b" in mode:
                 self._file = io.open(name, mode, buffering=buffering, errors=errors, newline=newline)
                 self._rows = self._file.__iter__()
-            elif mode is None:
-                if ext in [".csv", ".tsv"]:
+            elif mode is None or mode=="csv" or userkw:
+                if mode=="csv" or userkw or ext in [".csv", ".tsv"]:
                     self._file = io.open(name, "r", buffering, encoding or self.encoding, errors, newline)
-                    self._rows = csv.reader(self._file, self.dialect)
+                    kw = self.dialect_asdict
+                    kw.update(userkw)
+                    self._rows = csvreader(self._file, **kw)
 
-                if ext in olst:
+                elif ext in olst:
                     self._file = io.open(name, "rb", buffering, errors, newline)
                     self._rows = office.iterlines(name)
+
+                else:
+                    self._file = io.open(name, "r", buffering, encoding or self.encoding, errors, newline)
+                    self._rows = self._file.__iter__()
 
             else:
                 self._file = io.open(name, mode, buffering, encoding or self.encoding, errors, newline)
@@ -1136,6 +1188,9 @@ class Path(type(pathlib.Path())):
         self._rows = None
         self._rowsbuf = []
         self._closed = True
+
+    def __next__(self):
+        return next(self.iterlines())
 
     def __enter__(self):
         if self._closed:
@@ -1231,6 +1286,10 @@ class _baseArchive(object):
             self._dialect = getdialect(self.opened.read(self.SAMPLE))
             self.opened.seek(tell)
         return self._dialect
+
+    @property
+    def dialect_asdict(self):
+        return {k: v for k, v in vars(self.dialect).items() if k[0] != "_"}
 
     @property
     def fullpath(self):
