@@ -203,7 +203,6 @@ except ImportError:
 forcedask = False
 
 class _dfhandler(object):
-    re_attr = re.compile("\n([^-\s]+)\s.*:[^\n]+")
 
     def __init__(self, func, path_or_buffer, *args, **kw):
         self.func = func
@@ -238,17 +237,23 @@ class _dfhandler(object):
             self.size += p.getsize()
             self.gk.append([p, kwargs(p)])
 
+    def _docargs(self, obj, re_sp=re.compile("Parameters|Returns"),re_attr = re.compile("\n([^->\s\*][^-\s]*)\s.*:[^\n]+")):
+        return set(re_attr.findall(re_sp.split(obj.__doc__)[1]))
+
     def _handler_read(self):
         #TODO botolneck 142msec
-        if forcedask is False and self.size < BUF: #(self.size < BUF or vmfree() > self.size * 5):
+        if forcedask is False and (self.size < BUF or vmfree() > self.size * 5):
             reader = pd.__getattribute__(self.func)
             self.concater = pd.concat
+            funckw = self._docargs(pd.read_csv)
+
         else:
             reader = dd.__getattribute__(self.func) #TODO if dask uri path need
             self.concater = dd.concat
             self.kw["blocksize"] = None
+            funckw = self._docargs(reader) | self._docargs(pd.read_csv)
+            funckw.remove("filepath_or_buffer")
 
-        funckw = self.re_attr.findall(reader.__doc__.split("Parameters")[1])
         for fn, gkw in self.gk:
             gkw.update(self.kw)
             gkw = {x: gkw[x] for x in set(gkw) & set(funckw)}
@@ -265,7 +270,7 @@ class _dfhandler(object):
 
 def read_csv(f, dtype="object", keep_default_na=False, concatenate=True, *args, **kw):
     def reader(*args, **kw):
-        dfh = _dfhandler("read_csv", f, dtype=dtype,
+        dfh = _dfhandler("read_csv", f, dtype=dtype, low_memory=False,
                             keep_default_na=keep_default_na, *args, **kw)
         return dfh.compute(concatenate)
 
@@ -592,3 +597,4 @@ if __name__ == "__main__":
 
 
     test()
+
