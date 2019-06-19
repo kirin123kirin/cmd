@@ -213,7 +213,7 @@ def main():
 if __name__ == "__main__":
 #    sys.argv.extend('mlocate.db -t all -Ht all -l 1000 -P 3'.split(" "))
 #    sys.argv.extend('mlocate.db -P 2 -o test.csv'.split(" "))
-#    sys.argv.append("mlocate.db")
+#    sys.argv.extend("C:/temp/mlocate.db -o C:/temp/test.csv".split(" "))
 
     main()
 

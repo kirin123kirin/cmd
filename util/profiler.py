@@ -87,33 +87,34 @@ class Profile(object):
     def data(self):
         if self._profiler is None:
             cols = self.df.columns.tolist()
-            rec = len(self.df)
-            if cols == [] and rec == 0:
+            rec, ncol = len(self.df), len(cols)
+
+            if ncol + rec == 0:
                 return pd.DataFrame(columns=['cols','rec','count','unique','uniqrate','valrate','keyrate','top'])
 
             if hasattr(self.df, "compute"):
-                pr = pd.concat([
-                        self.df.mask(self.df == "", np.nan).count().rename("count").compute(),
-                        self.df.nunique().rename("unique").compute()], axis=1)
-
+                cnt = self.df.mask(self.df == "", np.nan).count().compute()
+                uniq = self.df.nunique().compute()
+                topfx = lambda c: self.df[c].value_counts().head(min(self.top or uniq[c], uniq[c])).index.tolist()
             else:
-                pr = pd.concat([
-                        self.df.replace("", np.nan).count().rename("count"),
-                        self.df.nunique().rename("unique")], axis=1)
+                cnt = self.df.replace("", np.nan).count()
+                uniq = self.df.nunique()
+                if self.top:
+                    topfx = lambda c: self.df[c].value_counts().head(self.top).index.tolist()
+                else:
+                    topfx = lambda c: self.df[c].value_counts().index.tolist()
 
-            if self.top:
-                #TODO Userwarning
-                pr["top"] = list(self.df[c].value_counts().head(min([self.top, rec])).index.tolist() for c in cols)
-            else:
-                pr["top"] = list(self.df[c].value_counts().index.tolist() for c in cols)
-
-            pr.reset_index(inplace=True)
-            pr.rename(columns=dict(index="cols"),inplace=True)
-            pr["rec"] = rec
-            pr["uniqrate"] = (pr["unique"] / rec)
-            pr["valrate"] = (pr["count"] / rec)
-            pr["keyrate"] = (pr["uniqrate"] * pr["valrate"])
-            self._profiler = pr[['cols','rec','count','unique','uniqrate','valrate','keyrate','top']]
+            self._profiler = pd.DataFrame(dict(
+                        cols=cols,
+                        rec=[rec] * ncol,
+                        count=cnt,
+                        unique=uniq,
+                        uniqrate = uniq / rec,
+                        valrate = cnt / rec,
+                        keyrate = uniq * cnt / rec ** 2,
+                        top = [topfx(c) for c in cols]
+                        ))
+            self._profiler.reset_index(drop=True, inplace=True)
         return self._profiler
 
     @property
@@ -228,18 +229,18 @@ def test():
     from util.core import tdir
     from datetime import datetime as dt
 
-    def _test_Profiler():
+    def test_Profiler():
         f = tdir + "diff1.csv"
         df = read_any(f).head(3)
         pr = Profile(df)
         print(pr.data.to_csv(index=False))
 
-    def _test_profiler():
+    def test_profiler():
         f = tdir + "diff1.csv"
         print(profiler(f, top=None))
 
 
-    def _test_diffkey_pandas():
+    def test_diffkey_pandas():
         f = tdir + "diff1.csv"
         df = read_any(f).head(3)
         t1 = dt.now()
@@ -253,7 +254,7 @@ def test():
         df = dd.from_pandas(read_any(f).head(3),1)
         t1 = dt.now()
         pr = Profile(df)
-#        pr.guesskey  #TODO Userwarning
+        pr.guesskey
         pr.diffkey
         t2 = dt.now()
         print("diffkey_dask", t2-t1)
@@ -273,4 +274,3 @@ def test():
 if __name__ == "__main__":
 #    test()
     main()
-
