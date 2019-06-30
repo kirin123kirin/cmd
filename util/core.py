@@ -22,6 +22,8 @@ __all__ = [
     "binopen",
     "command",
     "compute_object_size",
+    "compressor",
+    "decompressor",
     "csvreader",
     "difo",
     "fdifo",
@@ -93,13 +95,14 @@ import csv
 import pathlib
 from collections import namedtuple
 
-# 3rd party libraly
 import gzip
 import tarfile
 from tarfile import ExFileObject
 import bz2
 import zipfile
 import lzma
+import pickle
+# 3rd party libraly
 
 # own library
 from util import office
@@ -125,6 +128,12 @@ def lsdir(path, recursive=True):
         yield p
         for r in p.__getattribute__(func)("*"):
             yield r
+
+def compressor(obj, compresslevel=9):
+    return gzip.compress(pickle.dumps(obj, protocol=-1), compresslevel=compresslevel)
+
+def decompressor(obj):
+    return pickle.loads(gzip.decompress(obj))
 
 def getencoding(dat:bytes):
     import nkf

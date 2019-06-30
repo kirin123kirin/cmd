@@ -37,17 +37,17 @@ from itertools import chain, zip_longest
 from collections import namedtuple
 import math
 
+def comp(x, y):
+    if x == y:
+        return x
+    elif x and not y:
+        return "{} ---> DEL".format(x)
+    elif not x and y:
+        return "ADD ---> {}".format(y)
+    else:
+        return "{} ---> {}".format(x, y)
 
 def sanitize(a, b):
-    def comp(x, y):
-        if x == y:
-            return x
-        elif x and not y:
-            return "{} ---> DEL".format(x)
-        elif not x and y:
-            return "ADD ---> {}".format(y)
-        else:
-            return "{} ---> {}".format(x, y)
     if isinstance(a, (tuple, list)) and isinstance(b, (tuple, list)):
         return [comp(*x) for x in zip_longest(a, b, fillvalue="")]
     else:
