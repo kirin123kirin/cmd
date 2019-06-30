@@ -90,7 +90,7 @@ def xlsx(path_or_buffer):
 
     with xlrd.open_workbook(file_contents=fp.read()) as wb:
         for i, sh in ((r, sh) for sh in wb.sheets() for r in range(sh.nrows)):
-            yield pinfo(path, "{}:{}".format(sh.name, i+1), sh.row_values(i))
+            yield pinfo(path, sh.name, sh.row_values(i))
 
     if not hasattr(path_or_buffer, "close"):
         fp.close()
