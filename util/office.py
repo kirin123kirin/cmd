@@ -60,7 +60,7 @@ def splitfileobj(path_or_buffer, mode="rb"):
     try:
         path = Path(path_or_buffer)
         fp = open(path_or_buffer, mode)
-    except TypeError::
+    except TypeError:
         path = Path(path_or_buffer.name)
         fp = path_or_buffer
     return path, fp
@@ -143,5 +143,5 @@ def readlines(path_or_buffer):
     return [(r.target, *r.value) for r in reader(path_or_buffer)]
 
 def iterlines(path_or_buffer):
-    return ((r.target *r.value) for r in reader(path_or_buffer))
+    return ((r.target, *r.value) for r in reader(path_or_buffer))
 
