@@ -114,20 +114,22 @@ def to_excel_plus(self, excel_writer, sheet_name="Sheet1",
 
     sheet = writer.sheets["Sheet1"]
 
+    startrow = 1
+    startcol = 1
     if title:
         sheet["A1"] = title
         sheet['A1'].font = Font(size=16, bold=True)
+        startrow += 2
     if conditional_value:
         dxf = differential.DifferentialStyle(
             font=Font(color="9C0006"),
             fill=PatternFill(bgColor="FFC7CE"))
 
 
-        startrow += 2 if header else 1
         if index:
             startcol += 1
         st = sheet.cell(row=startrow, column=startcol).coordinate
-        en = sheet.cell(row=self.__len__()+startrow, column=len(self.columns)+startcol).coordinate
+        en = sheet.cell(row=self.__len__()+startrow, column=len(self.columns)+startcol-1).coordinate
         rule = Rule(
             type="containsText", operator="containsText",
             formula = ['NOT(ISERROR(SEARCH("{}",{})))'.format(conditional_value, st)],
@@ -136,10 +138,9 @@ def to_excel_plus(self, excel_writer, sheet_name="Sheet1",
         sheet.conditional_formatting.add(st+":"+en, rule)
 
     if autofilter:
-        if not conditional_value and title:
-            startrow += 2 if header else 1
-        shape = (get_column_letter(sheet.min_column), startrow-1,
-                 get_column_letter(sheet.max_column), self.__len__()+startrow-1)
+
+        shape = (get_column_letter(sheet.min_column), startrow,
+                 get_column_letter(sheet.max_column), self.__len__()+startrow)
         sheet.auto_filter.ref = "{}{}:{}{}".format(*shape)
 
     if not hasattr(excel_writer, "book"):

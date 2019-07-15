@@ -20,6 +20,13 @@ from collections import namedtuple
 from pathlib import Path
 import sys, os
 
+BASE_TYPE = [int, float, str, bytes, bytearray, bool]
+
+def flatten(x):
+    if x is None or type(x) in BASE_TYPE:
+        return x
+    return [z for y in x for z in ([y] if y is None or type(y) in BASE_TYPE else flatten(y))]
+
 #3rd party
 try:
     from pptx import Presentation
@@ -139,9 +146,15 @@ def reader(path_or_buffer):
         raise ValueError("Unknown office File")
 
 
-def readlines(path_or_buffer):
-    return [(r.target, *r.value) for r in reader(path_or_buffer)]
+def readlines(path_or_buffer, return_target=True):
+    if return_target:
+        return [flatten([r.target, r.value]) for r in reader(path_or_buffer)]
+    else:
+        return [r.value for r in reader(path_or_buffer)]
 
-def iterlines(path_or_buffer):
-    return ((r.target, *r.value) for r in reader(path_or_buffer))
+def iterlines(path_or_buffer, return_target=True):
+    if return_target:
+        return (flatten([r.target, r.value]) for r in reader(path_or_buffer))
+    else:
+        return (r.value for r in reader(path_or_buffer))
 

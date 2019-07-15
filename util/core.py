@@ -93,7 +93,7 @@ from copy import deepcopy
 import csv
 
 import pathlib
-from collections import namedtuple
+from collections import namedtuple, _count_elements
 
 import gzip
 import tarfile
@@ -319,6 +319,14 @@ def csvreader(itertable, encoding=None, delimiter=',',
 def flatten(x):
     return [z for y in x for z in (flatten(y)
              if y is not None and hasattr(y, "__iter__") and not isinstance(y, (str, bytes, bytearray)) else (y,))]
+
+#def flatten(*x, BASE_TYPE = [int, float, str, bytes, bytearray, bool]):
+#    return [z for y in x for z in ((y,) if y is None or type(y) in BASE_TYPE else flatten(*y))]
+
+def Counter(*iterable):
+    d = {}
+    _count_elements(d, *iterable)
+    return d
 
 def timestamp2date(x, dfm = "%Y/%m/%d %H:%M"):
     return dt.fromtimestamp(x).strftime(dfm)
@@ -1125,7 +1133,9 @@ class Path(type(pathlib.Path())):
              quotechar='"',
              quoting=0,
              skipinitialspace=False,
-             strict=False):
+             strict=False,
+             return_target=True,
+             ):
         """
         TODO
         """
@@ -1155,7 +1165,7 @@ class Path(type(pathlib.Path())):
                 return csvreader(m, encoding=enc, **kw)
 
             if ext in olst:
-                return office.iterlines(arch.opened)
+                return office.iterlines(arch.opened, return_target=return_target)
 
             return arch.opened.__iter__()
 
@@ -1184,7 +1194,7 @@ class Path(type(pathlib.Path())):
 
                 elif ext in olst:
                     self._file = io.open(name, "rb", buffering, errors, newline)
-                    self._rows = office.iterlines(name)
+                    self._rows = office.iterlines(name, return_target=return_target)
 
                 else:
                     self._file = io.open(name, "r", buffering, encoding or self.encoding, errors, newline)
@@ -2372,7 +2382,7 @@ if __name__ == "__main__":
             assert(Path(tdir+"test.csv.xz").readlines() == ans)
             assert(Path(tdir+"test.csv.bz2").readlines() == ans)
             assert(Path(tdir+"test.csv.gz").readlines() == ans)
-            assert(Path(tdir+"test.xls").readlines() == [['n', 'aa'], [1.0, 1.0], [2.0, 'あ']])
+            assert(Path(tdir+"test.xls").readlines() == [('test', 'n', 'aa'), ('test', 1.0, 1.0), ('test', 2.0, 'あ')])
 
         def test_PathList():
             p = Path(tdir+"diff*")
