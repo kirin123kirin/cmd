@@ -1,16 +1,46 @@
-#from functools import _CacheInfo, _lru_cache_wrapper
 
-#cdef double cy_mssqrt(tuple c):
-#    cdef int ret = 0
-#    for x in c:
-#        ret += x * x
-#    return ret ** 0.5
-#
-#mssqrt =_lru_cache_wrapper(cy_mssqrt, 128, False, _CacheInfo)
+cimport cython
+from _collections import _count_elements
+from itertools import zip_longest
+from functools import  lru_cache
 
-from collections import _count_elements as Counter
+cdef list BASE_TYPE = [type(None), int, float, str, bytes, bytearray, bool]
 
-def similar(tuple a, tuple b):
+cpdef tuple flatten(object x):
+    cdef list result = []
+    try:
+        for y in x:
+            if type(y) in BASE_TYPE:
+                result.append(y)
+            else:
+                result.extend(flatten(y))
+        return tuple(result)
+    except TypeError:
+        return (x, )
+
+cpdef tuple deephash(object x):
+    try:
+        return tuple([hash(y) if type(y) in BASE_TYPE else deephash(y) for y in x])
+    except:
+        return (hash(x), )
+
+cdef inline object compare(object x, object y, object conditional_value, object delstr, object addstr):
+    if x == y:
+        return x
+    elif x and y:
+        return "{}{}{}".format(x, conditional_value, y)
+    elif x:
+        return "{}{}{}".format(x, conditional_value, delstr)
+    else:
+        return "{}{}{}".format(addstr, conditional_value, y)
+
+cpdef object sanitize(object a, object b, object conditional_value=' ---> ', object delstr='DEL', object addstr='ADD'):
+    if a is None or type(a) in BASE_TYPE and b is None or type(b) in BASE_TYPE:
+        return compare(a, b, conditional_value, delstr, addstr)
+    else:
+        return [compare(x, y, conditional_value, delstr, addstr) for x, y in zip_longest(a, b, fillvalue="")]
+
+cpdef double similar(tuple a, tuple b):
     """
         Parameters:
             a: tuple (Compare target data left)
@@ -19,23 +49,33 @@ def similar(tuple a, tuple b):
             float (0.0 < return <= 1.000000000002)
     """
 
-    cdef dict ca = {}
-    Counter(ca, a)
-    cdef dict cb = {}
-    cdef dict cab = {}
-    cdef int prod = 0
+    ca = {}
+    _count_elements(ca, a)
+    cb = {}
+    cab = {}
+    cdef double prod = 0.0, v
 
     for k in b:
         if k in cb:
-            cb[k] += 1
+            cb[k] += 1.0
         else:
-            cb[k] = 1
+            cb[k] = 1.0
 
         if k in ca:
-            cab[k] = ca[k] + cb[k]
+            cab[k] = c_add(ca[k], cb[k])
 
     if cab:
         for v in cab.values():
             prod += v
-        return prod / (len(a) + len(b))
+        return c_div(prod , c_add(len(a), len(b)))
     return 0.0
+
+cdef inline double c_div(double a, double b):
+    return a / b
+
+cdef inline double c_add(double a, double b):
+    return a + b
+
+cdef inline double c_dot(double a, double b):
+    return a * b
+

@@ -3,30 +3,66 @@
 """
 
 My very usefull tools library
-require pandas and dask!!
 
 MIT License
 
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "m.yama"
 
 
 __all__ = ["differ"]
 
-
+from functools import  lru_cache
 from itertools import zip_longest
+import codecs
 
 try:
-    from similar import similar
+    from similar import similar, flatten, sanitize, deephash
 
     from functools import  _CacheInfo, _lru_cache_wrapper
     similar = _lru_cache_wrapper(similar, 128, False, _CacheInfo)
 except:
-    from collections import _count_elements as Counter
+    from collections import _count_elements
 
-    from functools import  lru_cache
+    BASE_TYPE = [type(None), int, float, str, bytes, bytearray, bool]
+
+    @lru_cache(maxsize=16)
+    def compare(x, y, conditional_value=' ---> ', delstr='DEL', addstr='ADD'):
+        if x == y:
+            return x
+        elif x and y:
+            return "{}{}{}".format(x, conditional_value, y)
+        elif x:
+            return "{}{}{}".format(x, conditional_value, delstr)
+        else:
+            return "{}{}{}".format(addstr, conditional_value, y)
+
+    def sanitize(a, b, **kw):
+        if type(a) in BASE_TYPE and type(b) in BASE_TYPE:
+            return compare(a, b, **kw)
+        else:
+            return [compare(x, y, **kw) for x, y in zip_longest(a, b, fillvalue="")]
+
+    def flatten(x):
+        try:
+            result = []
+            for y in x:
+                if type(y) in BASE_TYPE:
+                    result.append(y)
+                else:
+                    result.extend(flatten(y))
+            return tuple(result)
+        except TypeError:
+            return (x, )
+
+    def deephash(x):
+        try:
+            return tuple([hash(y) if type(y) in BASE_TYPE else deephash(y) for y in x])
+        except:
+            return (hash(x), )
+
     @lru_cache()
     def similar(a:tuple, b:tuple):
         """
@@ -37,7 +73,7 @@ except:
                 float (0.0 < return <= 1.000000000002)
         """
         ca = {}
-        Counter(ca, a)
+        _count_elements(ca, a)
         cb = {}
         cab = {}
 
@@ -55,155 +91,191 @@ except:
             return sum(cab.values()) / agg
         return 0.0
 
-
-try:
-    from xsorted import xsorted # awesome
-except ModuleNotFoundError:
-    xsorted = sorted
-
-BASE_TYPE = [int, float, str, bytes, bytearray, bool]
-
-def flatten(*x):
-    return [z for y in x for z in ([y] if y is None or type(y) in BASE_TYPE else flatten(*y))]
-
-#@lru_cache(maxsize=16)
-def compare(x, y, conditional_value=' ---> ', delstr='DEL', addstr='ADD'):
-    if x == y:
-        return x
-    elif x and y:
-        return "{}{}{}".format(x, conditional_value, y)
-    elif x:
-        return "{}{}{}".format(x, conditional_value, delstr)
-    else:
-        return "{}{}{}".format(addstr, conditional_value, y)
-
-def sanitize(a, b, **kw):
-    if a is None or type(a) in BASE_TYPE and b is None or type(b) in BASE_TYPE:
-        return compare(a, b, **kw)
-    else:
-        return [compare(x, y, **kw) for x, y in zip_longest(a, b, fillvalue="")]
-
-def deephash(x):
-    if type(x) in [int, float, bool]:
-        return hash(x)
-    return tuple(hash(y) if type(y) in BASE_TYPE else deephash(y) for y in x)
-
-def hashidx(x):
-    ret = {}
-    if not x:
-        return {}
-    if type(x) in [int, float]:
-        return {0: x}
-    if isinstance(x, dict):
-        x = x.items()
-
-    for i, v in enumerate(x):
-        h = deephash(v)
-        if h in ret:
-            ret[h].append(i)
+def countby(seq, func=None, return_index=False):
+    result = {}
+    if func:
+        if return_index:
+            indexes = {}
+            for value in seq:
+                key = func(value)
+                if key in result:
+                    result[key] += 1
+                else:
+                    result[key] = 1
+                    indexes[key] = value
+            return result, indexes
         else:
-            ret[h] = [i]
-    return ret
-
-
-def maxsimilar(repa, ia, ib, rep_rate=0.6):
-    rate, repbkey, repidx = 0.0, None, None
-    for repb in ib:
-        if repb:
-            rt = similar(repa, repb)
-            if rep_rate < rt and rate < rt:
-                rate = rt
-                repbkey = repb
-                repidx = zip(ia[repa], ib[repb])
-    return rate, repbkey, repidx
-
-def forcelist(x):
-    if hasattr(x, "__next__"):
-        return list(x)
-    elif hasattr(x, "itertuples"):
-        return list(x.itertuples(index=False))
-    elif hasattr(x, "readlines"):
-        return x.readlines()
+            for value in seq:
+                key = func(value)
+                if key in result:
+                    result[key] += 1
+                else:
+                    result[key] = 1
     else:
-        return x
+        _count_elements(result, seq)
+    return result
 
-def idiff(a, b, notequal=False, rep_rate=0.6, na_val=None, **kw):
-    a = forcelist(a)
-    b = forcelist(b)
-
-    ia = hashidx(a)
-    ib = hashidx(b)
-
-    # Analyze equal Section
-    for k in ia.keys() & ib.keys():
-        iak, ibk = ia[k], ib[k]
-        for ii, (x, y) in enumerate(zip(iak, ibk), 1):
-            if notequal:
-                continue
-            yield flatten("equal", x, y, a[x])
-        iia, iib = iak[ii:], ibk[ii:]
-
-        if iia:
-            ia[k] = iia
+def groupby(seq, func=None, return_index=False):
+    result = {}
+    if func:
+        if return_index:
+            indexes = {}
+            for i, value in enumerate(seq):
+                key = func(value)
+                if key in result:
+                    result[key].append(i)
+                else:
+                    result[key] = [i]
+                    indexes[key] = value
+            return result, indexes
         else:
-            del ia[k]
+            for i, value in enumerate(seq):
+                key = func(value)
+                if key in result:
+                    result[key].append(i)
+                else:
+                    result[key] = [i]
+    else:
+        for i, key in enumerate(seq):
+            if key in result:
+                result[key].append(i)
+            else:
+                result[key] = [i]
+    return result
 
-        if iib:
-            ib[k] = iib
-        else:
-            del ib[k]
+def differ(a, b, diffonly=False, sort=True, reverse=False, rep_rate=0.6, na_val=None, **kw):
+    result = []
 
-    # Analyze replace Section
-    if 0.0 < rep_rate < 1.0:
-        for repa in ia.copy():
-            if repa:
-                try:
-                    rate, repbkey, repidx = maxsimilar(repa, ia, ib, rep_rate=rep_rate)
-                except TypeError:
+    ca = countby(a, deephash)
+    cb = countby(b, deephash)
+    ga, ia = groupby(a, deephash, return_index=True)
+    gb, ib = groupby(b, deephash, return_index=True)
+
+    cab = ca.keys() & cb.keys()
+
+    ra = {k:ga[k] for k in (ga.keys() - cab)}
+    rb = {k:gb[k] for k in (gb.keys() - cab)}
+
+    for k in cab:
+        val = ia[k]
+        if not diffonly:
+            result.extend([flatten(("equal", x, y, val)) for x, y in zip(ga[k], gb[k])])
+
+        i, j = ca[k], cb[k]
+        if i < j:
+            rb[k] = gb[k][i:]
+        elif i > j:
+            ra[k] = ga[k][j:]
+
+    del cab, ca, cb, ga, gb
+
+    if 0 < rep_rate and rep_rate < 1:
+        for repa, ida in ra.items():
+            rate = -1.0
+            ret = None
+            for repb, idb in rb.items():
+                r = similar(repa, repb)
+                if r < rate:
                     continue
+                rate = r
+                ret = (repb, idb)
+            if rate < rep_rate:
+                val = ia[repa]
+                result.extend([flatten(("delete", x, na_val, val)) for x in ida])
+                continue
 
-                if rate:# and repbkey and repidx:
-                    for m, (ria, rib) in enumerate(repidx, 1):
-                        yield flatten("replace", ria, rib, sanitize(a[ria], b[rib], **kw))
+            repb, idb = ret
 
-                    rma, rmb = ia[repa][m:], ib[repbkey][m:]
-                    if rma:
-                        ia[repa] = rma
-                    else:
-                        del ia[repa]
+            val = sanitize(ia[repa], ib[repb])
+            z = list(zip(ida, idb))
+            result.extend([flatten(("replace", x, y, val)) for x, y in z])
 
-                    if rmb:
-                        ib[repbkey] = rmb
-                    else:
-                        del ib[repbkey]
+            yy = idb[len(z):]
+            if yy:
+                rb[repb] = yy
+            else:
+                del rb[repb]
+    else:
+        for k, v in ra.items():
+            val = ia[k]
+            result.extend([flatten(("delete", i, na_val, val)) for i in v])
 
+    del ra, ia
 
-    # Analyze delete Section
-    yield from (flatten("delete", i, na_val, a[i]) for v in ia.values() for i in v)
-    del ia
+    for k, v in rb.items():
+        val = ib[k]
+        result.extend([flatten(("insert", na_val, i, val)) for i in v])
 
-    # Analyze Insert Section
-    yield from (flatten("insert", na_val, i, b[i]) for v in ib.values() for i in v)
-    del ib
+    del rb, ib
 
-
-def differ(a, b, notequal=False, sort=True, reverse=False, rep_rate=0.6, na_val=None, **kw):
-    d = idiff(a, b, notequal=notequal, rep_rate=rep_rate, na_val=na_val, **kw)
     if sort:
         def indexsort(x):
             i, j = x[1:3]
             return ([i, j][i == na_val], [j, 0][j == na_val])
+        result.sort(key=indexsort, reverse=reverse)
 
-        return xsorted(d, key=indexsort, reverse=reverse)
-    return d
+    return result
 
+def to_excel(rows, outputfile, sheetname="Sheet1",
+            header = True, startrow=0, startcol=0, conditional_value=" ---> "):
+    import xlsxwriter
+
+    i = startrow
+    j = startcol
+
+    with xlsxwriter.Workbook(outputfile) as wb:
+        ws = wb.add_worksheet(sheetname)
+        write = ws.write_row
+
+        if header:
+            if hasattr(rows, "__next__"):
+                row = next(rows)
+            else:
+                row, *rows = rows
+            props_h = dict(border=1, bold=True, align="center", valign="center")
+            write(i, startcol, row, wb.add_format(props_h))
+            i += 1
+
+        border = wb.add_format(dict(border=1, valign="center"))
+
+        for row in rows:
+            write(i, startcol, row, border)
+            icol = startcol + len(row) - 1
+            if j < icol:
+                j = icol
+            i += 1
+
+        ws.autofilter(startrow, startcol, i, j)
+
+        redfm = wb.add_format(
+            dict(bg_color='#FFC7CE',
+                font_color='#9C0006')
+        )
+
+        ws.conditional_format(startrow, startcol, i, j,
+            dict(type='text',
+                criteria='containing',
+                value=conditional_value,
+                format=redfm)
+        )
+
+def to_csv(rows, outputfile, encoding, lineterminator="\r\n"):
+    sep = '","'
+    with codecs.open(outputfile, "w", encoding=encoding) as f:
+        for row in rows:
+            f.write('"{}"{}'.format(sep.join(map(str,row)), lineterminator))
+
+def to_tsv(rows, outputfile, encoding, lineterminator="\r\n"):
+    sep = '\t'
+    with codecs.open(outputfile, "w", encoding=encoding) as f:
+        for row in rows:
+            f.write('{}{}'.format(sep.join(map(str,row)), lineterminator))
 
 def main():
     import sys
     import os
     from argparse import ArgumentParser
     from util import Path
-    from util.dfutil import pd
 
     ps = ArgumentParser(prog="differ",
                         description="2 file diff compare program\n")
@@ -219,6 +291,8 @@ def main():
          help='output filepath (default `stdout`)')
     padd('-e', '--encoding', type=str, default="cp932",
          help='output fileencoding (default `cp932`)')
+    padd('-l', '--lineterminator', type=str, default="\r\n",
+         help='output fileencoding (default `\\r\\n`)')
     padd('-n', '--noheader', action="store_true", default=False,
          help='file no header (default `False`)')
     padd('-N', '--navalue', type=str, default="-",
@@ -238,6 +312,7 @@ def main():
     diffonly = not args.all
     header = not args.noheader
     encoding = args.encoding
+    lineterminator = args.lineterminator
     conditional_value = args.condition_value
 
     a = p1.readlines(return_target=sheetname_compare)
@@ -245,47 +320,31 @@ def main():
 
     it = differ(
         a, b,
-        notequal=diffonly,
+        diffonly=diffonly,
         na_val=na_value,
         conditional_value=conditional_value
     )
 
-    df = pd.DataFrame(it, dtype=object)
-
-    df.columns = ["tag", "index_a", "index_b", *map("col{:03d}".format, range(len(df.columns)-3))]
-
     outputfile = Path(args.outfile) if args.outfile else sys.stdout
     if outputfile is sys.stdout:
-        return df.to_csv(outputfile, index=False, header=header, encoding="cp932" if os.name == "nt" else "utf8")
+        return to_csv(it, outputfile, encoding="cp932" if os.name == "nt" else "utf8")
 
     ext = outputfile.ext.startswith
     if ext(".xls"):
-        df.to_excel_plus(outputfile, index=False, header=header, conditional_value=conditional_value)
-    elif ext(".csv"):
-        df.to_csv(outputfile, index=False, header=header, encoding=encoding)
-    elif ext(".htm"):
-        df.to_html(outputfile, index=False, header=header)
+        to_excel(it, outputfile, header=header, conditional_value=conditional_value)
     elif ext(".tsv"):
-        df.to_csv(outputfile, sep="\t", index=False, header=header, encoding=encoding)
-    elif ext(".json"):
-        df.to_json(outputfile, index=False, header=header)
+        to_tsv(it, outputfile, encoding=encoding, lineterminator=lineterminator)
     else:
-        df.to_csv(outputfile, index=False, header=header, encoding=encoding)
+        to_csv(it, outputfile, encoding=encoding, lineterminator=lineterminator)
 
 def test():
     from util.core import tdir
     from util import Path
-    from io import StringIO
 
     from datetime import datetime as dt
     import sys
+    from io import StringIO
 
-
-    def test_flatten():
-        assert(flatten([0,[1,2],[[3,4]]]) == [0, 1, 2, 3, 4])
-        assert(flatten([]) == [])
-        assert(flatten(1) == [1])
-        assert(flatten("abc") == ["abc"])
 
     def test_sanitize():
         assert(sanitize(None, 1) == "ADD ---> 1")
@@ -304,35 +363,42 @@ def test():
         assert(deephash("a") == (hash("a"),))
         assert(deephash(["0",["1","2"],[["3", "4"]]]) == (hash("0"),(hash("1"),hash("2")),((hash("3"), hash("4")),)))
 
-    def test_hashidx():
-        assert(hashidx("abc") == {(hash("a"),): [0], (hash("b"),): [1], (hash("c"),): [2]})
-
     def test_similar():
-        assert(1 > similar(tuple("abc"), tuple("abb")) > 0.7)
-        assert(similar(("abc",), ("abb",)) == 0.0)
+        assert(1 > similar(deephash("abc"), deephash("abb")) > 0.7)
+        assert(similar(deephash(("abc",)), deephash(("abb",))) == 0.0)
 
-    def testidiff1d():
+    def test_idiff1d():
         a = "abc"
         b = "bcd"
-        assert(set(map(tuple,idiff(a, b))) == {('equal', 1, 0, 'b'), ('equal', 2, 1, 'c'), ('insert', None, 2, 'd'), ('delete', 0, None, 'a')} )
+        assert(set(map(tuple,differ(a, b))) == {('equal', 1, 0, 'b'), ('equal', 2, 1, 'c'), ('insert', None, 2, 'd'), ('delete', 0, None, 'a')} )
 
     def test_differ1d():
         a = "abc"
         b = "bcd"
-        assert(list(differ(a, b)) == [['delete', 0, None, 'a'], ['equal', 1, 0, 'b'], ['equal', 2, 1, 'c'], ['insert', None, 2, 'd']])
+        assert(list(differ(a, b)) == [('delete', 0, None, 'a'), ('equal', 1, 0, 'b'), ('equal', 2, 1, 'c'), ('insert', None, 2, 'd')])
         a = list(range(1,3))
         b = list(range(2, 4))
-        assert(list(differ(a, b)) == [['delete', 0, None, 1], ['equal', 1, 0, 2], ['insert', None, 1, 3]])
+        assert(list(differ(a, b)) == [('delete', 0, None, 1), ('equal', 1, 0, 2), ('insert', None, 1, 3)])
 
     def test_differ2d():
         a = [list("abc"), list("abc")]
         b = [list("abc"),list("acc"), list("xtz")]
-        assert(list(differ(a, b)) == [['equal', 0, 0, 'a', 'b', 'c'], ['replace', 1, 1, 'a', 'b ---> c', 'c'], ['insert', None, 2, 'x', 't', 'z']])
+        assert(list(differ(a, b)) == [('equal', 0, 0, 'a', 'b', 'c'), ('replace', 1, 1, 'a', 'b ---> c', 'c'), ('insert', None, 2, 'x', 't', 'z')])
 
     def test_differcsv():
         a = Path(tdir+"diff1.csv").readlines()
         b = Path(tdir+"diff2.csv").readlines()
-        assert([x for x in differ(a,b) if x[0]!="equal"] == [['replace', 1, 1, 'b ---> 10', '8', '307', '130', '3504', '12', '70', '1', 'chevrolet chevelle malibue'], ['insert', None, 15, '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster'], ['insert', None, 23, '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'], ['replace', 37, 39, '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'], ['replace', 46, 48, '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'], ['delete', 55, None, '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop']])
+        assert([x for x in differ(a,b) if x[0]!="equal"] == [('replace', 1, 1, 'b ---> 10', '8', '307', '130', '3504', '12', '70', '1', 'chevrolet chevelle malibue'), ('insert', None, 15, '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster'), ('insert', None, 23, '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'), ('replace', 37, 39, '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'), ('replace', 46, 48, '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'), ('delete', 55, None, '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop')])
+
+    def test_benchmark():
+        f1 = tdir+"diff2.xlsx"
+        f2 = tdir+"diff3.xlsx"
+        a = Path(f1).readlines()
+        b = Path(f2).readlines()
+
+        t = dt.now()
+        differ(a, b, sort=False)
+        print("test_nosort_differ: time {}".format(dt.now() - t))
 
     def stdoutcapture(*args):
         sio = StringIO()
@@ -373,27 +439,11 @@ def test():
     def test_main_outfile_csv():
         pass
 
-    def test_main_outfile_html():
-        pass
-
-    def test_main_outfile_json():
-        pass
-
     def test_main_outfile_tsv():
         pass
 
     def test_main_outfile_txt():
         pass
-
-    def test_benchmark():
-        f1 = tdir+"diff2.xlsx"
-        f2 = tdir+"diff3.xlsx"
-        a = Path(f1).readlines()
-        b = Path(f2).readlines()
-
-        t = dt.now()
-        list(differ(a, b, sort=False))
-        print("test_nosort_differ: time {}".format(dt.now() - t))
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
@@ -401,8 +451,6 @@ def test():
             func()
             t2 = dt.now()
             print("{} : time {}".format(x, t2-t1),file=sys.stderr)
-
-
 
 if __name__ == "__main__":
 #    test()
