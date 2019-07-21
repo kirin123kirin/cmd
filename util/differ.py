@@ -143,7 +143,7 @@ def groupby(seq, func=None, return_index=False):
                 result[key] = [i]
     return result
 
-def differ(a, b, diffonly=False, sort=True, reverse=False, rep_rate=0.6, na_val=None, **kw):
+def differ(a, b, header=False, diffonly=False, sort=True, reverse=False, rep_rate=0.6, na_val=None, **kw):
     result = []
 
     ca = countby(a, deephash)
@@ -214,6 +214,10 @@ def differ(a, b, diffonly=False, sort=True, reverse=False, rep_rate=0.6, na_val=
             return ([i, j][i == na_val], [j, 0][j == na_val])
         result.sort(key=indexsort, reverse=reverse)
 
+    if header:
+        maxcol = max(map(len, result)) - 3
+        head = [["tag", "index_a", "index_b", *map("col_{:02d}".format, range(maxcol))]]
+        result = head + result
     return result
 
 def to_excel(rows, outputfile, sheetname="Sheet1",
@@ -320,6 +324,7 @@ def main():
 
     it = differ(
         a, b,
+        header=header,
         diffonly=diffonly,
         na_val=na_value,
         conditional_value=conditional_value
