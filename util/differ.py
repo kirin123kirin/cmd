@@ -72,23 +72,25 @@ except:
             Return:
                 float (0.0 < return <= 1.000000000002)
         """
+        prod = 0.0
         ca = {}
-        _count_elements(ca, a)
         cb = {}
-        cab = {}
+        _count_elements(ca, a)
+        _count_elements(cb, b)
 
-        for k in b:
-            if k in cb:
-                cb[k] += 1
-            else:
-                cb[k] = 1
+        if ca and cb:
+            in_b = cb.__contains__
 
-            if k in ca:
-                cab[k] = ca[k] + cb[k]
+            for k, na in ca.items():
+                if in_b(k):
+                    nb = cb[k]
+                    if na <= nb:
+                        prod += na
+                    else:
+                        prod += nb
 
-        if cab:
-            agg = len(a) + len(b)
-            return sum(cab.values()) / agg
+            if prod:
+                return 2*prod / (len(a) + len(b))
         return 0.0
 
 def countby(seq, func=None, return_index=False):
@@ -319,8 +321,8 @@ def main():
     lineterminator = args.lineterminator
     conditional_value = args.condition_value
 
-    a = p1.readlines(return_target=sheetname_compare)
-    b = p2.readlines(return_target=sheetname_compare)
+    a = p1.readlines()
+    b = p2.readlines()
 
     it = differ(
         a, b,
@@ -369,7 +371,7 @@ def test():
         assert(deephash(["0",["1","2"],[["3", "4"]]]) == (hash("0"),(hash("1"),hash("2")),((hash("3"), hash("4")),)))
 
     def test_similar():
-        assert(1 > similar(deephash("abc"), deephash("abb")) > 0.7)
+        assert(1 > similar(deephash("abc"), deephash("abb")) > 0.6)
         assert(similar(deephash(("abc",)), deephash(("abb",))) == 0.0)
 
     def test_idiff1d():
