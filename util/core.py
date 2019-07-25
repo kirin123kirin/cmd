@@ -1134,7 +1134,6 @@ class Path(type(pathlib.Path())):
              quoting=0,
              skipinitialspace=False,
              strict=False,
-             return_target=True,
              ):
         """
         TODO
@@ -1165,7 +1164,7 @@ class Path(type(pathlib.Path())):
                 return csvreader(m, encoding=enc, **kw)
 
             if ext in olst:
-                return office.iterlines(arch.opened, return_target=return_target)
+                return office.iterlines(arch.opened)
 
             return arch.opened.__iter__()
 
@@ -1194,7 +1193,7 @@ class Path(type(pathlib.Path())):
 
                 elif ext in olst:
                     self._file = io.open(name, "rb", buffering, errors, newline)
-                    self._rows = office.iterlines(name, return_target=return_target)
+                    self._rows = office.iterlines(name)
 
                 else:
                     self._file = io.open(name, "r", buffering, encoding or self.encoding, errors, newline)
@@ -2382,7 +2381,7 @@ if __name__ == "__main__":
             assert(Path(tdir+"test.csv.xz").readlines() == ans)
             assert(Path(tdir+"test.csv.bz2").readlines() == ans)
             assert(Path(tdir+"test.csv.gz").readlines() == ans)
-            assert(Path(tdir+"test.xls").readlines() == [('test', 'n', 'aa'), ('test', 1.0, 1.0), ('test', 2.0, 'あ')])
+            assert(Path(tdir+"test.xls").readlines() == [['test', 'n', 'aa'], ['test', 1.0, 1.0], ['test', 2.0, 'あ']])
 
         def test_PathList():
             p = Path(tdir+"diff*")
