@@ -48,26 +48,28 @@ cpdef double similar(tuple a, tuple b):
         Return:
             float (0.0 < return <= 1.000000000002)
     """
-
+    cdef double prod = 0.0
+    cdef int na, nb
+    #cdef long long k #why slow?
+    
     ca = {}
-    _count_elements(ca, a)
     cb = {}
-    cab = {}
-    cdef double prod = 0.0, v
-
-    for k in b:
-        if k in cb:
-            cb[k] += 1.0
-        else:
-            cb[k] = 1.0
-
-        if k in ca:
-            cab[k] = c_add(ca[k], cb[k])
-
-    if cab:
-        for v in cab.values():
-            prod += v
-        return c_div(prod , c_add(len(a), len(b)))
+    _count_elements(ca, a)
+    _count_elements(cb, b)
+    
+    if ca and cb:
+        in_b = cb.__contains__
+        
+        for k, na in ca.items():
+            if in_b(k):
+                nb = cb[k]
+                if na <= nb:
+                    prod += na
+                else:
+                    prod += nb
+        
+        if prod:
+            return c_div(2*prod, c_add(len(a), len(b)))
     return 0.0
 
 cdef inline double c_div(double a, double b):
