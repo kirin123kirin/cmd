@@ -880,6 +880,7 @@ class Path(type(pathlib.Path())):
         '_file',
         '_rows',
         '_rowsbuf',
+        '_groupby',
         'content',
     )
 
@@ -931,6 +932,7 @@ class Path(type(pathlib.Path())):
         self._file = None
         self._rows = None
         self._rowsbuf = []
+        self._groupby = None
 
     @property
     def fullpath(self):
@@ -988,6 +990,13 @@ class Path(type(pathlib.Path())):
             self._rowsbuf = list(self.iterlines(*arg, **kw))
         return self._rowsbuf
 
+    def groupbylines(self, *arg, **kw):
+        if self._groupby is None:
+            self.open(*arg, **kw)
+            if self._groupby is None:
+                raise ValueError("Not Support file type.")
+        return self._groupby
+    
     def delete(self):
         return self.unlink()
 
@@ -1164,7 +1173,7 @@ class Path(type(pathlib.Path())):
                 return csvreader(m, encoding=enc, **kw)
 
             if ext in olst:
-                return office.iterlines(arch.opened)
+                return office.reader(arch.opened)
 
             return arch.opened.__iter__()
 
@@ -1179,7 +1188,7 @@ class Path(type(pathlib.Path())):
                 self._rows = ziped_rows(self._file)
             else:
                 self._file = PathList(lst)
-                self._rows = (y for x in self._file for y in ziped_rows(self._file))
+                self._rows = (y for x in self._file for y in ziped_rows(self._file))#TODO groupby
         else:
             if mode and "b" in mode:
                 self._file = io.open(name, mode, buffering=buffering, errors=errors, newline=newline)
@@ -1193,7 +1202,8 @@ class Path(type(pathlib.Path())):
 
                 elif ext in olst:
                     self._file = io.open(name, "rb", buffering, errors, newline)
-                    self._rows = office.iterlines(name)
+                    self._rows = (x.value for x in office.reader(name))
+                    self._groupby = office.reader_groupby(name)
 
                 else:
                     self._file = io.open(name, "r", buffering, encoding or self.encoding, errors, newline)

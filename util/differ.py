@@ -17,6 +17,9 @@ __all__ = ["differ"]
 from functools import  lru_cache
 from itertools import zip_longest
 import codecs
+import re
+from operator import itemgetter
+import sys
 
 try:
     from similar import similar, flatten, sanitize, deephash
@@ -267,9 +270,13 @@ def to_excel(rows, outputfile, sheetname="Sheet1",
 
 def to_csv(rows, outputfile, encoding, lineterminator="\r\n"):
     sep = '","'
-    with codecs.open(outputfile, "w", encoding=encoding) as f:
+    if hasattr(outputfile, "write"):
         for row in rows:
-            f.write('"{}"{}'.format(sep.join(map(str,row)), lineterminator))
+            outputfile.write('"{}"{}'.format(sep.join(map(str,row)), lineterminator))
+    else:
+        with codecs.open(outputfile, "w", encoding=encoding) as f:
+            for row in rows:
+                f.write('"{}"{}'.format(sep.join(map(str,row)), lineterminator))
 
 def to_tsv(rows, outputfile, encoding, lineterminator="\r\n"):
     sep = '\t'
@@ -277,8 +284,54 @@ def to_tsv(rows, outputfile, encoding, lineterminator="\r\n"):
         for row in rows:
             f.write('{}{}'.format(sep.join(map(str,row)), lineterminator))
 
+def selector(key, start=0, tar="target"):
+    if not key:
+        return
+    if isinstance(key, (list, tuple, range)):
+        ret = key
+    elif re.search("[^0-9,\-]", key):
+        ret = key.split(",")
+    else:
+        ret = []
+        for x in key.split(","):
+            if "-" in x:
+                s,e = x.split("-")
+                ret.extend([i + (start * -1) for i in range(int(s),int(e)+1)])
+            else:
+                ret.append(int(x) + (start * -1))
+
+    try:
+        num = list(map(int, ret))
+        it = itemgetter(*num)
+        if tar:
+            def getter(x):
+                if hasattr(x, "__next__"):
+                    x = list(x)
+                if len(num) == 1 or len(x) == 1:
+                    return [it(x)]
+                return it(x)
+            return getter
+        else:
+            def getter(x):
+                return map(it, x)
+            return getter
+
+    except ValueError:
+        if tar:
+            def getter(x):
+                if hasattr(x, "__next__"):
+                    x = list(x)
+                dic = [getattr(xx, tar) for xx in x]
+                return (x[dic.index(r)] for r in ret)
+        else:
+            def getter(x):
+                if hasattr(x, "__next__"):
+                    x = list(x)
+                it = itemgetter(*map(x[0].index, ret))
+                return map(it, x)
+        return  getter
+
 def main():
-    import sys
     import os
     from argparse import ArgumentParser
     from util import Path
@@ -303,34 +356,57 @@ def main():
          help='file no header (default `False`)')
     padd('-N', '--navalue', type=str, default="-",
          help='output index N/A value (default `-`)')
-    padd('-S', '--sheetnames_ignore', action='store_true', default=False,
-         help='Compare with sheet names (default True)')
     padd('-C', '--condition_value', type=str, default=" ---> ",
          help='Delimiter String of Replace Value (default ` ---> `)')
+
+    padd('-t', '--target', type=selector, default=None,
+         help='target table names or sheetname (ex. Sheet1, Sheet3)')
+    padd('-t1', '--target1', type=selector, default=None,
+         help='target table names or sheetname of filename1 (ex. Sheet1, Sheet3)')
+    padd('-t2', '--target2', type=selector, default=None,
+         help='target table names or sheetname of filename2 (ex. Sheet1, Sheet3)')
 
     args = ps.parse_args()
 
     p1 = Path(args.file1[0])
     p2 = Path(args.file2[0])
 
-    sheetname_compare = not args.sheetnames_ignore
     na_value = args.navalue
     diffonly = not args.all
     header = not args.noheader
     encoding = args.encoding
     lineterminator = args.lineterminator
+
     conditional_value = args.condition_value
 
-    a = p1.readlines()
-    b = p2.readlines()
+    tar1select = args.target1 or args.target
+    tar2select = args.target2 or args.target
 
-    it = differ(
-        a, b,
-        header=header,
-        diffonly=diffonly,
-        na_val=na_value,
-        conditional_value=conditional_value
-    )
+
+    try:
+        #TODO sheet name similar
+        a = tar1select(p1.groupbylines()) if tar1select else p1.groupbylines()
+        b = tar2select(p2.groupbylines()) if tar2select else p2.groupbylines()
+
+        it = ([sanitize(aa.target, bb.target), *d] for aa, bb in zip(a, b) for d in differ(
+            aa.value, bb.value,
+            header=header,
+            diffonly=diffonly,
+            na_val=na_value,
+            conditional_value=conditional_value
+        ))
+
+    except ValueError:
+        a = p1.readlines()
+        b = p2.readlines()
+
+        it = differ(
+            a, b,
+            header=header,
+            diffonly=diffonly,
+            na_val=na_value,
+            conditional_value=conditional_value
+        )
 
     outputfile = Path(args.outfile) if args.outfile else sys.stdout
     if outputfile is sys.stdout:
@@ -349,7 +425,6 @@ def test():
     from util import Path
 
     from datetime import datetime as dt
-    import sys
     from io import StringIO
 
 
@@ -397,6 +472,20 @@ def test():
         b = Path(tdir+"diff2.csv").readlines()
         assert([x for x in differ(a,b) if x[0]!="equal"] == [('replace', 1, 1, 'b ---> 10', '8', '307', '130', '3504', '12', '70', '1', 'chevrolet chevelle malibue'), ('insert', None, 15, '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster'), ('insert', None, 23, '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'), ('replace', 37, 39, '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'), ('replace', 46, 48, '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'), ('delete', 55, None, '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop')])
 
+    def test_selector():
+        dat = [list("abc"), list("edf")]
+        test1 = list(selector("1,0",tar=None)(dat))
+        assert(test1 == [('b', 'a'), ('d', 'e')])
+        test2 = list(selector("1,0")(dat))
+        assert(test2 == [dat[1], dat[0]])
+        test3 = list(selector("b,a", tar=None)(dat))
+        assert(test3 == [('b', 'a'), ('d', 'e')])
+        from collections import namedtuple
+        t = namedtuple("d", ["path", "target", "value"])
+        dat = [t("aam", "a", 1), t("aam", "b", 2), t("aam", "c", 3)]
+        test4 = list(selector("b,a")(dat))
+        assert(test4 == [dat[1], dat[0]])
+
     def test_benchmark():
         f1 = tdir+"diff2.xlsx"
         f2 = tdir+"diff3.xlsx"
@@ -404,10 +493,10 @@ def test():
         b = Path(f2).readlines()
 
         t = dt.now()
-        differ(a, b, sort=False)
+        print(differ(a, b, sort=False))
         print("test_nosort_differ: time {}".format(dt.now() - t))
 
-    def stdoutcapture(*args):
+    def stdoutcapture(args):
         sio = StringIO()
         sys.stdout = sio
         del sys.argv[1:]
@@ -417,10 +506,10 @@ def test():
         sys.stdout = sys.__stdout__
         return sio
 
-    def _test_default_main():
+    def test_default_main():
         from collections import Counter as cc
-        sio = stdoutcapture("-n", tdir+"diff1.csv", tdir+"diff2.csv")
-        assert(cc(x.split(",")[0] for x in sio) == cc({"replace": 3, "insert": 2, "delete": 1}))
+        sio = stdoutcapture(["-n", tdir+"diff1.xlsx", tdir+"diff2.xlsx"])
+        assert(cc(x.replace('"', '').split(",")[1] for x in sio) == cc({"replace": 3, "insert": 2, "delete": 1}))
 
     def test_main_encoding():
         pass
@@ -451,6 +540,27 @@ def test():
 
     def test_main_outfile_txt():
         pass
+
+    def test_target():
+        sio = stdoutcapture("-t 0".split(" ") + [tdir+"diff1.xlsx", tdir+"diff2.xlsx"])
+        assert(sio.getvalue().count("\n") == 7)
+
+    def test_target1_2():
+        sio = stdoutcapture("-t1 0 -t2 0".split(" ") + [tdir+"diff1.xlsx", tdir+"diff2.xlsx"])
+        assert(sio.getvalue().count("\n") == 7)
+        sio = stdoutcapture("-t1 0 -t2 1".split(" ") + [tdir+"diff2.xlsx", tdir+"diff3.xlsx"])
+        assert(sio.getvalue().count("\n") == 7)
+
+    def test_target_sheetname():
+        try:
+            stdoutcapture("-t diff1".split(" ") + [tdir+"diff1.xlsx", tdir+"diff2.xlsx"])
+            raise(AssertionError)
+        except ValueError:
+            pass
+
+    def test_target1_target2():
+        sio = stdoutcapture("-t1 diff1 -t2 diff2".split(" ") + [tdir+"diff1.xlsx", tdir+"diff2.xlsx"])
+        assert(sio.getvalue().count("\n") == 7)
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
