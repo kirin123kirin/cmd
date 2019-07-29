@@ -162,8 +162,8 @@ def differ(a, b, header=False, diffonly=False, sort=True, reverse=False, rep_rat
     rb = {k:gb[k] for k in (gb.keys() - cab)}
 
     for k in cab:
-        val = ia[k]
         if not diffonly:
+            val = ia[k]
             result.extend([flatten(("equal", x, y, val)) for x, y in zip(ga[k], gb[k])])
 
         i, j = ca[k], cb[k]
@@ -213,16 +213,17 @@ def differ(a, b, header=False, diffonly=False, sort=True, reverse=False, rep_rat
 
     del rb, ib
 
-    if sort:
-        def indexsort(x):
-            i, j = x[1:3]
-            return ([i, j][i == na_val], [j, 0][j == na_val])
-        result.sort(key=indexsort, reverse=reverse)
-
-    if header:
-        maxcol = max(map(len, result)) - 3
-        head = [["tag", "index_a", "index_b", *map("col_{:02d}".format, range(maxcol))]]
-        result = head + result
+    if result:
+        if sort:
+            def indexsort(x):
+                i, j = x[1:3]
+                return ([i, j][i == na_val], [j, 0][j == na_val])
+            result.sort(key=indexsort, reverse=reverse)
+    
+        if header:
+            maxcol = max(map(len, result)) - 3
+            head = [["tag", "index_a", "index_b", *map("col_{:02d}".format, range(maxcol))]]
+            result = head + result
     return result
 
 def to_excel(rows, outputfile, sheetname="Sheet1",
