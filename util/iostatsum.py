@@ -28,7 +28,7 @@ def devices_summary(data, filterdev=None):
     num = len(devhead)
     if filterdev:
         fd = re.compile(filterdev)
-    
+
     for dev in devices:
         if filterdev and not fd.search(dev[0]):
             continue
@@ -61,7 +61,7 @@ def parser_rollup(filepath, header, indateform, outdateform, callable=average):
         k = convert_dt(r["datetime"], indateform, outdateform)
         for h in header:
             ret[k][h].append(r[h])
-    
+
     for k in sorted(ret) if sys.version_info[0] == 2 else ret:
         y = [k]
         for h in header:
@@ -75,10 +75,10 @@ def main():
 
     padd('-f', '--field',help='output target field of iostat log.   (choise: tps,kB_read/s,kB_wrtn/s,kB_read,kB_wrtn',
          default="datetime,tps,kB_read/s,kB_wrtn/s")
-    
+
     padd('-s', '--separator',help='output field separate charcter  (ex. \\t)',
          default=",")
-    
+
     padd('-I', '--inputdateform',help='iostat datetime format define  (ex. %%Y-%%m-%%d %%H:%%M:%%S)',
          default="%Y年%m月%d日 %H時%M分%S秒")
 
@@ -87,10 +87,10 @@ def main():
 
     padd('-o', '--outputfile',help='output file default `stdout`',
          default=None)
-    
+
     padd('-a', '--aggregatefunc',help='aggregate function name (ex. `average`, `sum`)  and groupby outputdateform setting',
          default=None)
-    
+
     padd('filepath', nargs="+", help='Target iostat Log Files (WildCard Path OK)   (ex. hoge/*.log')
     args = p.parse_args()
 
@@ -103,8 +103,8 @@ def main():
         parser = parser_simple
     else:
         parser = lambda *k, **v: parser_rollup(*k, callable=globals()[args.aggregatefunc], **v)
-    
-    
+
+
     with  open(args.outputfile, "w") if args.outputfile else sys.stdout as w:
         i = 0
         for file in files:
@@ -120,5 +120,5 @@ def test():
     main()
 
 if __name__ == "__main__":
-	#test()
-	main()
+	test()
+#	main()

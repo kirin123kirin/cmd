@@ -20,6 +20,7 @@ import codecs
 import re
 from operator import itemgetter
 import sys
+from itertools import tee
 
 try:
     from similar import similar, flatten, sanitize, deephash
@@ -151,8 +152,18 @@ def groupby(seq, func=None, return_index=False):
 def differ(a, b, header=False, diffonly=False, sort=True, reverse=False, rep_rate=0.6, na_val=None, **kw):
     result = []
 
-    ca = countby(a, deephash)
-    cb = countby(b, deephash)
+    if hasattr(a, "__next__"):
+        a, _a = tee(a)
+        ca = countby(_a, deephash)
+    else:
+        ca = countby(a, deephash)
+
+    if hasattr(b, "__next__"):
+        b, _b = tee(b)
+        cb = countby(_b, deephash)
+    else:
+        cb = countby(b, deephash)
+
     ga, ia = groupby(a, deephash, return_index=True)
     gb, ib = groupby(b, deephash, return_index=True)
 
@@ -219,7 +230,7 @@ def differ(a, b, header=False, diffonly=False, sort=True, reverse=False, rep_rat
                 i, j = x[1:3]
                 return ([i, j][i == na_val], [j, 0][j == na_val])
             result.sort(key=indexsort, reverse=reverse)
-    
+
         if header:
             maxcol = max(map(len, result)) - 3
             head = [["tag", "index_a", "index_b", *map("col_{:02d}".format, range(maxcol))]]
@@ -334,8 +345,10 @@ def selector(key, start=0, tar="target"):
 
 def main():
     import os
+    from pathlib import Path
     from argparse import ArgumentParser
-    from util import Path
+    from util.io import grouprow
+
 
     ps = ArgumentParser(prog="differ",
                         description="2 file diff compare program\n")
@@ -369,8 +382,8 @@ def main():
 
     args = ps.parse_args()
 
-    p1 = Path(args.file1[0])
-    p2 = Path(args.file2[0])
+    p1 = grouprow(args.file1[0])
+    p2 = grouprow(args.file2[0])
 
     na_value = args.navalue
     diffonly = not args.all
@@ -386,8 +399,8 @@ def main():
 
     try:
         #TODO sheet name similar
-        a = tar1select(p1.groupbylines()) if tar1select else p1.groupbylines()
-        b = tar2select(p2.groupbylines()) if tar2select else p2.groupbylines()
+        a = tar1select(p1) if tar1select else p1
+        b = tar2select(p2) if tar2select else p2
 
         it = ([sanitize(aa.target, bb.target), *d] for aa, bb in zip(a, b) for d in differ(
             aa.value, bb.value,
@@ -398,22 +411,22 @@ def main():
         ))
 
     except ValueError:
-        a = p1.readlines()
-        b = p2.readlines()
-
         it = differ(
-            a, b,
+            p1, p2,
             header=header,
             diffonly=diffonly,
             na_val=na_value,
             conditional_value=conditional_value
         )
 
+
     outputfile = Path(args.outfile) if args.outfile else sys.stdout
     if outputfile is sys.stdout:
         return to_csv(it, outputfile, encoding="cp932" if os.name == "nt" else "utf8")
 
-    ext = outputfile.ext.startswith
+
+
+    ext = outputfile.suffix.startswith
     if ext(".xls"):
         to_excel(it, outputfile, header=header, conditional_value=conditional_value)
     elif ext(".tsv"):
@@ -423,7 +436,7 @@ def main():
 
 def test():
     from util.core import tdir
-    from util import Path
+    from util.io import readrow
 
     from datetime import datetime as dt
     from io import StringIO
@@ -469,8 +482,8 @@ def test():
         assert(list(differ(a, b)) == [('equal', 0, 0, 'a', 'b', 'c'), ('replace', 1, 1, 'a', 'b ---> c', 'c'), ('insert', None, 2, 'x', 't', 'z')])
 
     def test_differcsv():
-        a = Path(tdir+"diff1.csv").readlines()
-        b = Path(tdir+"diff2.csv").readlines()
+        a = (x.value for x in readrow(tdir+"diff1.csv"))
+        b = (x.value for x in readrow(tdir+"diff2.csv"))
         assert([x for x in differ(a,b) if x[0]!="equal"] == [('replace', 1, 1, 'b ---> 10', '8', '307', '130', '3504', '12', '70', '1', 'chevrolet chevelle malibue'), ('insert', None, 15, '22', '6', '198', '95', '2833', '15.5', '70', '1', 'plymouth duster'), ('insert', None, 23, '26', '4', '121', '113', '2234', '12.5', '70', '2', 'bmw 2002'), ('replace', 37, 39, '14', '9 ---> 8', '351', '153', '4154', '13.5', '71', '1', 'ford galaxie 500'), ('replace', 46, 48, '23', '4', '122', '86', '2220', '14', '71', '1', 'mercury capri 2001 ---> mercury capri 2000'), ('delete', 55, None, '25', '4', '97.5', '80', '2126', '17', '72', '1', 'dodge colt hardtop')])
 
     def test_selector():
@@ -490,11 +503,11 @@ def test():
     def test_benchmark():
         f1 = tdir+"diff2.xlsx"
         f2 = tdir+"diff3.xlsx"
-        a = Path(f1).readlines()
-        b = Path(f2).readlines()
+        a = readrow(f1)
+        b = readrow(f2)
 
         t = dt.now()
-        print(differ(a, b, sort=False))
+        differ(a, b, sort=False)
         print("test_nosort_differ: time {}".format(dt.now() - t))
 
     def stdoutcapture(args):

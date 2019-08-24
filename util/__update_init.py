@@ -6,15 +6,12 @@ from io import StringIO
 
 # target module
 import_module = [
-    "core",
-    "dfutil",
-    "differ",
+    "filetype",
+    "io",
+    "utils",
     "profiler",
-    "dbutil",
-    "dmltocsv",
-    "locate",
+    "differ",
     "lslog",
-    "sankey",
 ]
 
 
@@ -41,6 +38,9 @@ def {func}():
 """
 
 ret = StringIO("""
+
+from util.core import *
+
 # Lazy and self destructive containers for speeding up module import.
 # Copyright 2015-2016, the xonsh developers. All rights reserved.
 import os
