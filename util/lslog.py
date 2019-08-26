@@ -16,7 +16,6 @@ from glob import  glob
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
-from dateutil.parser._parser import parser, parserinfo
 from posixpath import basename, normpath, join as pathjoin
 
 try:
@@ -24,26 +23,7 @@ try:
 except:
     sys.stderr.write("Please install joblib:\npip3 install joblib\n")
 
-class _jpinfo(parserinfo):
-    WEEKDAYS = [
-            ("Mon", "/曜日", "/曜", "Monday"),
-            ("Tue", "火曜日", "火曜", "火", "Tuesday"),
-            ("Wed", "水曜日", "水曜", "水", "Wednesday"),
-            ("Thu", "木曜日", "木曜", "木", "Thursday"),
-            ("Fri", "金曜日", "金曜", "金", "Friday"),
-            ("Sat", "土曜日", "土曜", "土", "Saturday"),
-            ("Sun", "日曜日", "日曜", "日", "Sunday")]
-    HMS = [
-            ("h", "時", "hour", "hours"),
-            ("m", "分", "minute", "minutes"),
-            ("s", "秒", "second", "seconds")]
-    AMPM = [
-            ("am", "ａｍ", "午前", "a"),
-            ("pm", "ｐｍ", "午後", "p")]
-
-def to_datetime(timestr, parserinfo=_jpinfo(), **kwargs):
-    timestr = timestr.replace("年", "/").replace("月", "/")
-    return parser(info=parserinfo).parse(timestr, **kwargs)
+from util.utils import to_datetime
 
 
 def parse_date(s,

@@ -28,6 +28,7 @@ from itertools import combinations
 from pathlib import Path
 
 from util.io import readrow, grouprow
+from util.filetype import guesstype
 
 BASE_TYPE = [type(None), int, float, str, bytes, bytearray, bool]
 def deeptuple(x):
@@ -130,6 +131,9 @@ def profiler(
     head = []
 
     try:
+        if guesstype(path_or_buffer) in ["ppt","doc","csv","txt","html"]:
+            raise ValueError
+
         rows = grouprow(path_or_buffer)
 
         if headerout:
