@@ -46,10 +46,14 @@ def buildhtml(
     trace,
     layout,
     template = join(dirname(sys.argv[0]),"libs/sankey.js.xz"),
-    outpath = join(gettempdir(), "temp-plot.html")):
+    outpath = join(gettempdir(), "temp-plot.html"),
+    updatejs = False
+    ):
 
-    with LZMAFile(template, 'rb') as fp, open(join(gettempdir(),"sankey.js"), "wb") as wp:
-        wp.write(fp.read())
+    js = join(dirname(outpath),"sankey.js")
+    if updatejs or not os.path.exists(js):
+        with LZMAFile(template, 'rb') as fp, open(js, "wb") as wp:
+            wp.write(fp.read())
 
     html = tmpl.format(
         trace=json.dumps(trace),
@@ -73,7 +77,8 @@ def getsankeydict(
     links_source, links_target,
     links_value, links_label,
     title="", width = None, height = None,
-    orientation = "h", valueformat = ".0f", valuesuffix = ""):
+    orientation = "h", valueformat = ".0f", valuesuffix = ""
+    ):
 
     trace = dict(
         type='sankey',
@@ -127,7 +132,8 @@ def sankey_flatten(
     height = None,
     orientation = "h",
     valueformat = ".0f",
-    valuesuffix = ""):
+    valuesuffix = ""
+    ):
 
     nodes = sorted(x for x in set(flatten(table)) if x)
     colors = ["green"] * len(nodes)
@@ -151,7 +157,8 @@ def sankey_table(
     height = None,
     orientation = "h",
     valueformat = ".0f",
-    valuesuffix = ""):
+    valuesuffix = ""
+    ):
 
     head, table = table[0], table[1:]
 
@@ -190,12 +197,15 @@ def sankey_table(
 
 def render(
     path_or_buffer=None,
+    outpath = join(gettempdir(), "temp-plot.html"),
     title="",
     width = None,
     height = None,
     orientation = "h",
     valueformat = ".0f",
-    valuesuffix = ""):
+    valuesuffix = "",
+    updatejs=False,
+    ):
 
     if path_or_buffer:
         table = readrow.csv(path_or_buffer)
@@ -212,7 +222,7 @@ def render(
     else:
         snkdic = sankey_flatten(table)
 
-    buildhtml(**snkdic)
+    buildhtml(**snkdic, outpath=outpath, updatejs=updatejs)
 
 
 def main():
@@ -229,18 +239,24 @@ def main():
 
     padd('-t', '--title', type=str, default="",
          help='output HTML title string')
+    padd('-o', '--outpath', type=str, default=join(gettempdir(), "temp-plot.html"),
+         help='output file PATH string `default $TMP/temp-plot.html`')
     padd('-W', '--width', type=int, default=None,
          help='output HTML width pixel')
     padd('-H', '--height', type=int, default=None,
          help='output HTML height pixel')
+    padd('-U', '--updatejs', action="store_true", default=False,
+         help='update javascript sankey.js')
 
     args = ps.parse_args()
 
     render(
         path_or_buffer = args.file,
+        outpath = args.outpath,
         title = args.title,
         width = args.width,
         height = args.height,
+        updatejs = args.updatejs
     )
 
 
