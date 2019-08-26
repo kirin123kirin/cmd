@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 import os
 import re
-from dateutil.parser._parser import parser, parserinfo
 from datetime import datetime
-import locale
-locale.setlocale(locale.LC_ALL, '')
+
+from dateutil.parser._parser import parser, parserinfo
+
 
 __all__ = [
     "isposix",
@@ -425,13 +425,29 @@ class lazydate(object):
     }
 
     didx = list(d2g)
-    gidx = {g: d.year-1 for d, g in d2g.items()}
-    g2d = [(re.compile(r"(?:" + g + r"[\.,\- ]?)((?:[0-9]{1,2}|元|[０-９]{1,2}))(年?)"), dy) for g, dy in gidx.items()]
-
+    rsp = re.compile(r"\s\s+")
+    isdirty = re.compile(r"[^\d\s/\-:]").search
+    is4num = re.compile("\d{4}").match
+    
     def __init__(self, timestr):
-        ts = timestr.strip().replace("年", "/").replace("月", "/").replace("_", "-")
-        self.timestr = self.__repairstr(re.sub("\s\s+", "", ts))
+        if not timestr:
+            raise ValueError(timestr)
+        ts = __class__.rsp.sub("", to_hankaku(timestr).strip().replace("年", "/").replace("月", "/").replace("_", "-"))
+        self.timestr = self.__repairstr(ts) if __class__.isdirty(ts) else ts
         self._dt = None
+
+    def __repairstr(self, timestr):
+        for dy, g in __class__.d2g.items():
+            i = dy.year - 1
+            pattern = r"(?:" + g + r"[\.,\- ]?)((?:[0-9]{1,2}|元))\s?(年?)"
+            
+            reret = re.search(pattern, timestr)
+            if reret:
+                n = reret.group(1)
+                edit = "{}{}".format(int("1" if n == "元" else n) + i, reret.group(2))
+                return timestr.replace(reret.group(0), edit)
+        else:
+            return timestr
 
     @property
     def dt(self):
@@ -440,24 +456,28 @@ class lazydate(object):
         return self._dt
 
     def to_datetime(self, form=None):
+        if __class__.is4num(self.timestr):
+            ts = str(datetime.now().year) + self.timestr
+            try:
+                __class__.parse(ts)
+            except ValueError:
+                pass
+            else:
+                self.timestr = ts
+        
         if form is None:
             return __class__.parse(self.timestr)
         return __class__.parse(self.timestr).strftime(form)
 
-    def __repairstr(self, timestr):
-        for rg, i in __class__.g2d:
-            reret = rg.search(timestr)
-            if reret:
-                n = reret.group(1)
-                edit = "{}{}".format(int(to_hankaku("1" if n == "元" else n)) + i, reret.group(2))
-                return to_hankaku(timestr.replace(reret.group(0), edit))
-        else:
-            return timestr
-
     def to_gengo(self, form="年%m月%d日 %H:%M:%S"):
         item = self.dt
+        if os.name == "nt":
+            strftime = lambda x: x.strftime(form.encode('unicode-escape').decode()).encode().decode("unicode-escape")
+        else:
+            strftime = lambda x: x.strftime(form)
+            
         try:
-            return "{}{}{}".format(__class__.d2g[item], 1, item.strftime(form))
+            return "{}{}{}".format(__class__.d2g[item], "元", strftime(item))
         except KeyError:
             if type(item) in (str, int):
                 item = datetime(item, 1, 1)
@@ -466,16 +486,18 @@ class lazydate(object):
                     try:
                         end = __class__.didx[i]
                         if start <= item and item < end:
-                            gengo = __class__.d2g[start]
+                            keyday = start
                             break
                     except IndexError:
-                        gengo =  __class__.d2g[__class__.didx[-1]]
-
-                gy = item.year - __class__.gidx[gengo]
-                if gy < 0:
+                        keyday = __class__.didx[-1]
+                
+                gengo =  __class__.d2g[keyday]
+                gy = item.year - keyday.year - 1
+                if gy < 1:
                     raise ValueError("Unknown Gengo Name. Too old year.", item)
-
-                return "{}{}{}".format(gengo, gy, item.strftime(form))
+                elif gy == 1:
+                    gy = "元"
+                return "{}{}{}".format(gengo, gy, strftime(item))
 
             else:
                 raise KeyError(item)
@@ -501,3 +523,5 @@ class _tmpdir(TemporaryDirectory):
         self.cleanup()
 _tmp = _tmpdir()
 TMPDIR = _tmp.name
+
+
