@@ -48,29 +48,32 @@ from urllib.parse import quote_plus
 import struct
 from pickle import load as pkload
 
+class NotInstalledModuleError(Exception):
+    def stderr(self):
+        raise __class__("** {} **".format(*self.args)) if self.args else __class__
+    def __call__(self, *args, **kw): self.stderr()
+    def __getattr__(self, *args, **kw): self.stderr()
+
 #3rd party
 
 ## pptx
 try:
     from pptx import Presentation
 except ModuleNotFoundError:
-    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install python-pptx\n")
-    Presentation = ImportError
+    Presentation = NotInstalledModuleError("Please Install command: pip3 install python-pptx")
 
 ## ppt(OLE)
 try:
     from msodumper import globals as mgl
     from msodumper.pptstream import PPTFile
 except ModuleNotFoundError:
-    sys.stderr.write("** No module warning **\nPlease git clone: pip3 install git+https://github.com/kirin123kirin/mso-dumper.git\n")
-    mgl = PPTFile = ImportError
+    mgl = PPTFile = NotInstalledModuleError("Please git clone: pip3 install git+https://github.com/kirin123kirin/mso-dumper.git")
 
 ## xls/xlsx
 try:
     import xlrd
 except ModuleNotFoundError:
-    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install xlrd\n")
-    xlrd = ImportError
+    xlrd = NotInstalledModuleError("Please Install command: pip3 install xlrd")
 
 ## docx
 try:
@@ -78,8 +81,7 @@ try:
     from docx.oxml.text.run import CT_Text, CT_Br
     from docx.oxml.section import CT_PageMar
 except ModuleNotFoundError:
-    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install python-docx\n")
-    Document = CT_Text = CT_Br = CT_PageMar = ImportError
+    Document = CT_Text = CT_Br = CT_PageMar = NotInstalledModuleError("Please Install command: pip3 install python-docx")
 
 ## doc(OLE)
 try:
@@ -331,8 +333,7 @@ try:
                 dat = dat.replace(k, v)
             return dat
 except ModuleNotFoundError:
-    sys.stderr.write("** No module warning **\nPlease git clone: pip3 install olefile\n")
-    olefile = MSWordOLE = ImportError
+    olefile = MSWordOLE = NotInstalledModuleError("Please Install command: pip3 install olefile")
 
 try:
     from pdfminer.pdfparser import PDFParser, PDFDocument
@@ -340,35 +341,26 @@ try:
     from pdfminer.converter import PDFPageAggregator
     from pdfminer.layout import LAParams, LTTextBox, LTTextLine
 except ModuleNotFoundError:
-    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install pdfminer3k\n")
-    PDFParser = ImportError
-    PDFDocument = ImportError
-    PDFResourceManager = ImportError
-    PDFPageInterpreter = ImportError
-    PDFPageAggregator = ImportError
-    LAParams = ImportError
-    LTTextBox = ImportError
-    LTTextLine = ImportError
+    PDFParser = PDFDocument = PDFResourceManager = PDFPageInterpreter = PDFPageAggregator = \
+    LAParams = LTTextBox = LTTextLine = NotInstalledModuleError("Please Install command: pip3 install pdfminer3k")
 
 try:
     from pyperclip import paste as getclip
 except ModuleNotFoundError:
-    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install pyperclip\n")
-    getclip = ImportError
+    getclip = NotInstalledModuleError("Please Install command: pip3 install pyperclip")
 
 try:
     from sqlalchemy import create_engine, Table, MetaData
 except:
-    sys.stderr.write("** No module warning **\nPlease Install command: pip3 install sqlalchemy\n")
-    create_engine = Table = MetaData = ImportError
+    create_engine = Table = MetaData = NotInstalledModuleError("Please Install command: pip3 install sqlalchemy")
 
 try:
     import pyodbc
 except:
     if os.name == 'posix':
-        sys.stderr.write("** No module warning **\nPlease Install command: \nubuntu => apt-get install unixodbc-dev;pip3 install pyodbc\nredhat => yum install unixODBC unixODBC-devel;pip3 install pyodbc\n")
+        pyodbc = NotInstalledModuleError("Please Install command: \nubuntu => apt-get install unixodbc-dev;pip3 install pyodbc\nredhat => yum install unixODBC unixODBC-devel;pip3 install pyodbc\n")
     else:
-        sys.stderr.write("** No module warning **\nPlease Install command: \npip3 install pyodbc\n")
+        pyodbc = NotInstalledModuleError("Please Install command: pip3 install pyodbc")
 
 from util.filetype import guesstype
 from util.core import binopen, opener, getencoding, binchunk

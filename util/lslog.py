@@ -18,10 +18,17 @@ from io import StringIO
 from pathlib import Path
 from posixpath import basename, normpath, join as pathjoin
 
+class NotInstalledModuleError(Exception):
+    def stderr(self):
+        raise __class__("** {} **".format(*self.args)) if self.args else __class__
+    def __call__(self, *args, **kw): self.stderr()
+    def __getattr__(self, *args, **kw): self.stderr()
+
+
 try:
     from joblib import Parallel, delayed
 except:
-    sys.stderr.write("Please install joblib:\npip3 install joblib\n")
+    Parallel = delayed = NotInstalledModuleError("Please install joblib")
 
 from util.utils import to_datetime
 

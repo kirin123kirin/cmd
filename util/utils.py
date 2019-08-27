@@ -65,7 +65,7 @@ import gzip
 from subprocess import getstatusoutput
 try:
     import cloudpickle as pickle
-except ImportError:
+except ModuleNotFoundError:
     import pickle
 
 from dateutil.parser._parser import parser, parserinfo

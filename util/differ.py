@@ -347,7 +347,9 @@ def main():
     import os
     from pathlib import Path
     from argparse import ArgumentParser
-    from util.io import grouprow
+    from operator import attrgetter
+    from util.io import readrow, grouprow
+    from util.filetype import guesstype
 
 
     ps = ArgumentParser(prog="differ",
@@ -382,8 +384,8 @@ def main():
 
     args = ps.parse_args()
 
-    p1 = grouprow(args.file1[0])
-    p2 = grouprow(args.file2[0])
+    p1 = args.file1[0]
+    p2 = args.file2[0]
 
     na_value = args.navalue
     diffonly = not args.all
@@ -393,14 +395,16 @@ def main():
 
     conditional_value = args.condition_value
 
-    tar1select = args.target1 or args.target
-    tar2select = args.target2 or args.target
-
-
     try:
+        notarget = ["ppt","doc","csv","txt","html","pickle"]
+        if guesstype(p1) in notarget or guesstype(p2) in notarget:
+            raise ValueError
+
         #TODO sheet name similar
-        a = tar1select(p1) if tar1select else p1
-        b = tar2select(p2) if tar2select else p2
+        tar1select = args.target1 or args.target
+        tar2select = args.target2 or args.target
+        a = tar1select(grouprow(p1)) if tar1select else grouprow(p1)
+        b = tar2select(grouprow(p2)) if tar2select else grouprow(p2)
 
         it = ([sanitize(aa.target, bb.target), *d] for aa, bb in zip(a, b) for d in differ(
             aa.value, bb.value,
@@ -411,14 +415,16 @@ def main():
         ))
 
     except ValueError:
+        a = map(attrgetter("value"), readrow(p1))
+        b = map(attrgetter("value"), readrow(p2))
+
         it = differ(
-            p1, p2,
+            a, b,
             header=header,
             diffonly=diffonly,
             na_val=na_value,
             conditional_value=conditional_value
         )
-
 
     outputfile = Path(args.outfile) if args.outfile else sys.stdout
     if outputfile is sys.stdout:

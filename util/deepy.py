@@ -27,11 +27,17 @@ from keras.models import Model, Sequential, model_from_json
 from keras.layers.recurrent import LSTM
 import keras.backend.tensorflow_backend as KTF
 
+class NotInstalledModuleError(Exception):
+    def stderr(self):
+        raise __class__("** {} **".format(*self.args)) if self.args else __class__
+    def __call__(self, *args, **kw): self.stderr()
+    def __getattr__(self, *args, **kw): self.stderr()
+
 import tensorflow as tf
 try:
     import matplotlib.pyplot as plt
 except ImportError:
-    plt = None
+    plt = NotInstalledModuleError("Please Install matplotlib")
 import pandas as pd
 import os
 from functools import reduce
@@ -93,11 +99,11 @@ def hotone(uniq, idx, na_value=None):
         k = tuple(x[:-1])
         c[k].append(x[-1])
         l[k] += 1
-    
+
     if c:
         m = np.full([len(c), max(l.values())], -1)
         for i, v in enumerate(c.values()):
-            
+
             if len(v) > 1:
                 m[i, :len(v)] = v
             else:
