@@ -131,7 +131,7 @@ def profiler(
     head = []
 
     try:
-        if guesstype(path_or_buffer) in ["ppt","doc","csv","txt","html"]:
+        if guesstype(path_or_buffer) in ["ppt","doc","csv","txt","html","pickle"]:
             raise ValueError
 
         rows = grouprow(path_or_buffer)

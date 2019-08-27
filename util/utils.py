@@ -15,7 +15,6 @@ CHUNKSIZE = int(BUF / (64 * 40))
 __all__ = [
     'command',
     'which',
-    'lsdir',
     'compressor',
     'decompressor',
     'geturi',
@@ -54,7 +53,6 @@ import re
 import sys
 from datetime import datetime
 from itertools import chain, zip_longest
-from glob import glob
 from io import IOBase, StringIO, BytesIO
 import fnmatch
 from copy import deepcopy
@@ -98,13 +96,6 @@ def which(executable):
         else:
             return next((which(executable + ext) for ext in exc), None)
 
-
-def lsdir(path, recursive=True):
-    func = "rglob" if recursive else "glob"
-    for p in map(Path, glob(str(path))):
-        yield p
-        for r in p.__getattribute__(func)("*"):
-            yield r
 
 def compressor(obj, compresslevel=9):
     return gzip.compress(pickle.dumps(obj, protocol=-1), compresslevel=compresslevel)
@@ -869,38 +860,11 @@ def back_to_path(uri:str):
 
 
 
-
-
 if __name__ == "__main__":
 
     def test():
         from pathlib import Path
         from util.core import tdir, TMPDIR
-
-        def test_lsdir():
-            def _testargs(func, pathstr, *args):
-                #TODO assert
-                ret = [
-                    func(pathstr, *args),
-                    func(Path(pathstr), *args),
-                    func(Path(pathstr), *args),
-                ]
-                try:
-                    with open(pathstr) as f:
-                        ret.append(func(f, *args))
-                except Exception as e:
-                    ret.append(e)
-                return ret
-            _testargs(lsdir, tdir)
-            _testargs(lsdir, tdir + "diff*")
-            _testargs(lsdir, tdir+"test.csv")
-            _testargs(lsdir, tdir+"*est.csv")
-            _testargs(lsdir, tdir+"ddfghjdtui")
-            _testargs(lsdir, tdir, False)
-            _testargs(lsdir, tdir + "diff*", False)
-            _testargs(lsdir, tdir+"test.csv", False)
-            _testargs(lsdir, tdir+"*est.csv", False)
-            _testargs(lsdir, tdir+"ddfghjdtui", False)
 
         def test_getencoding():
             with open(tdir+"diff1.csv", "rb") as f:
@@ -1048,16 +1012,6 @@ if __name__ == "__main__":
         def test_vmfree():
             assert(vmfree() > 0)
 
-#        def test_compute_object_size():
-#            assert(compute_object_size(_handler_zopen.archived_magic_numbers) > 0)
-
-#        def test_islarge():
-#            assert(islarge([]) is False)
-#            global BUF
-#            BUF = 10
-#            assert(islarge(_handler_zopen.archived_magic_numbers) is True)
-#            BUF = 128 * 1024 ** 2
-
 
         def test_in_glob():
             assert(in_glob(["abc.txt", "hoge.csv"], "*.txt") == ["abc.txt"])
@@ -1173,28 +1127,6 @@ if __name__ == "__main__":
             assert(kwtolist("1,2,3") == [0,1,2])
             assert(kwtolist("1-3,5") == [0,1,2,4])
             assert(kwtolist("1-3,5",0) == [1,2,3,5])
-
-        def __test_wrap(wrapobj):
-            assert(len(list(wrapobj.lsdir()))>0)
-            assert(len(list(wrapobj.tree_file()))>0)
-            wrapobj.tree_dir()
-            for infile in wrapobj:
-                anser = b'n,aa\r\n1,1\r\n2,\x82\xa0\r\n'
-                assert(infile.read() == anser)
-                infile.seek(0)
-                assert(infile.read_bytes() == anser)
-                infile.seek(0)
-                assert(infile.read_text() == anser.decode("cp932"))
-                assert(isinstance(infile.getinfo(),fifo))
-                assert(isinstance(infile.getinfo(True), fkifo))
-                infile.seek(0)
-                assert(infile.encoding)
-                assert(getencoding(infile.read()))
-                infile.seek(0)
-                infile.extract(TMPDIR)
-                with open(Path(TMPDIR).joinpath("test.csv"),"rb") as f:
-                    assert(f.read() == anser)
-
 
         t0 = datetime.now()
         for x, func in list(locals().items()):

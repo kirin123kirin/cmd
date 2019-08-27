@@ -11,12 +11,14 @@ __date__    = 'Wed Jul 31 17:35:47 2019'
 __version__ = '0.0.1'
 
 __all__ = [
+    "lsdir",
     "readrow",
     "grouprow",
     "getinfo",
     "getsize",
     "DBrow",
     "DBgrouprow",
+    "Path",
 ]
 
 SAMPLEBYTE = 1024
@@ -25,7 +27,7 @@ import os
 import re
 import sys
 import pathlib
-import csv
+import csv as _csv
 import codecs
 from io import StringIO, BytesIO
 from tarfile import TarFile
@@ -44,6 +46,7 @@ from collections import namedtuple
 from functools import lru_cache
 from urllib.parse import quote_plus
 import struct
+from pickle import load as pkload
 
 #3rd party
 
@@ -368,7 +371,14 @@ except:
         sys.stderr.write("** No module warning **\nPlease Install command: \npip3 install pyodbc\n")
 
 from util.filetype import guesstype
-from util.core import binopen, getencoding, binchunk
+from util.core import binopen, opener, getencoding, binchunk
+
+def lsdir(path, recursive=True):
+    func = "rglob" if recursive else "glob"
+    for p in map(pathlib.Path, glob(str(path))):
+        yield p
+        for r in p.__getattribute__(func)("*"):
+            yield r
 
 def pathbin(path_or_buffer):
     fp = binopen(path_or_buffer)
@@ -706,13 +716,13 @@ class readrow:
 
         e = getencoding(dat)
         txt = dat.decode(e)
-        dialect = csv.Sniffer().sniff(txt)
+        dialect = _csv.Sniffer().sniff(txt)
 
-        for row in csv.reader(StringIO(txt), dialect=dialect):
+        for row in _csv.reader(StringIO(txt), dialect=dialect):
             yield pinfo(path, None, row)
 
         it = _iterdecoder(fp, e)
-        for row in csv.reader(it, dialect=dialect):
+        for row in _csv.reader(it, dialect=dialect):
             yield pinfo(path, None, row)
 
         if not hasattr(path_or_buffer, "close"):
@@ -987,6 +997,14 @@ class readrow:
                 for row in con.execute("SELECT * FROM "+ table):
                     yield pinfo(path, table, list(row))
 
+    @staticmethod
+    def pickle(path_or_buffer):
+        path, fp = pathbin(path_or_buffer)
+
+        yield pinfo(path, None, pkload(fp))
+
+        if not hasattr(path_or_buffer, "close"):
+            fp.close()
 
     @staticmethod
     def clipboard(ftype="csv"):
@@ -1110,12 +1128,12 @@ class grouprow(readrow):
 
         e = getencoding(dat)
         txt = dat.decode(e)
-        dialect = csv.Sniffer().sniff(txt)
+        dialect = _csv.Sniffer().sniff(txt)
 
-        tmp = list(csv.reader(StringIO(txt), dialect=dialect))
+        tmp = list(_csv.reader(StringIO(txt), dialect=dialect))
 
         it = _iterdecoder(fp, e)
-        yield pinfo(path, None, tmp + list(csv.reader(it, dialect=dialect)))
+        yield pinfo(path, None, tmp + list(_csv.reader(it, dialect=dialect)))
 
         if not hasattr(path_or_buffer, "close"):
             fp.close()
@@ -1750,10 +1768,392 @@ class DBgrouprow(DBrow):
                 rows = map(list, con.execute("SELECT * FROM "+ table))
                 yield pinfo(server, schema_table, list(rows))
 
+class Path(type(pathlib.Path())):
+
+    __slots__ = (
+        '_accessor',
+        '_closed',
+        '_encoding',
+        '_ext',
+        '_info',
+        '_fullpath',
+        '_file',
+        '_type',
+        '_rows',
+    )
+
+    def _init(self, *args, **kw):
+        super()._init(*args, **kw)
+        self._fullpath = None
+        self._rows = None
+        self._type = None
+        self._file = None
+        self._info = None
+
+    @property
+    def fullpath(self):
+        if self._fullpath is None:
+            self._fullpath = self.__str__() #self.joinpath(self.__str__(), self.content)
+        return self._fullpath
+
+    @property
+    def info(self):
+        if self._info is None:
+            self._info = getinfo.binaryfile(self)
+        return self._info
+
+    def read_bytes(self, n=-1):
+        """
+        Open the file in bytes mode, read it, and close the file.
+        """
+        with open(self.__str__(), mode='rb') as f:
+            return f.read(n)
+
+    def read_text(self, n=-1, encoding=None, errors=None):
+        """
+        Open the file in text mode, read it, and close the file.
+        """
+        with open(self.__str__(), mode='r', encoding=encoding or self.encoding, errors=errors) as f:
+            return f.read(n)
+    read = read_text
+
+    def readlines(self, *arg, **kw):
+        return list(readrow(self, *arg, **kw))
+
+    def groupbylines(self, *arg, **kw):
+        return list(grouprow(self, *arg, **kw))
+
+    def delete(self):
+        return self.unlink()
+
+    def lsdir(self, recursive=True):
+        return [__class__(x) for x in lsdir(self, recursive)]
+
+    def exists(self):
+        try:
+            return super().exists()
+        except OSError:
+            return False
+
+    @property
+    def encoding(self):
+        return getencoding(self.read_bytes(SAMPLEBYTE))
+
+    @property
+    def ext(self):
+        return self.info.ext
+
+    @property
+    def lineterminator(self):
+        return getLF(self.read_bytes(SAMPLEBYTE))
+
+    @property
+    def owner(self):
+        return self.info.owner
+
+    @property
+    def group(self):
+        return self.info.group
+
+    @property
+    def permission(self):
+        return self.info.permission
+
+    @property
+    def mtime(self):
+        return self.info.mtime
+
+    @property
+    def ctime(self):
+        return self.info.ctime
+
+    @property
+    def atime(self):
+        return self.info.atime
+
+    @property
+    def size(self):
+        return self.info.size
+
+    def wordcount(self, word, buf_size = 1024 ** 2):
+        with open(self.__str__(), mode="rb") as f:
+            read_f = f.read # loop optimization
+            if isinstance(word, str):
+                if self.encoding:
+                    word = word.encode(self.encoding)
+                else:
+                    word = word.encode()
+            elif isinstance(word, (int, float)):
+                word = bytes(str(word))
+
+            pos = f.tell()
+            if pos != 0:
+                f.seek(0)
+
+            buf = read_f(buf_size)
+
+            words = 0
+            while buf:
+                words += buf.count(word)
+                buf = read_f(buf_size)
+
+            f.seek(pos)
+            return words
+
+    def linecount(self, buf_size = 1024 ** 2):
+        return self.wordcount(word=b"\n", buf_size = buf_size)
+
+    def uncompressedsize(self):
+        size = getsize(self.__str__())
+        if hasattr(size, "__next__"):
+            return sum(s.size for s in size if s.target)
+        return size
+
+    def guesstype(self):
+        if self._type is None:
+            self._type = guesstype(self.__str__())
+        return self._type
+
+    def tree_file(self, recursive:bool=True, dotfile:bool=False):
+        if dotfile:
+            for r in self.lsdir(recursive):
+                if r.is_file():
+                    yield r
+        else:
+            for r in self.lsdir(recursive):
+                if not r.is_file() or any(x.startswith(".") for x in r.parts):
+                    continue
+                yield r
+
+    def tree_dir(self, recursive:bool=True, dotfile:bool=False):
+        if dotfile:
+            for r in self.lsdir(recursive):
+                if r.is_dir():
+                    yield r
+        else:
+            for r in self.lsdir(recursive):
+                if not r.is_dir() or any(x.startswith(".") for x in r.parts):
+                    continue
+                yield r
+
+    def is_compress(self):
+        return self.guesstype() in ["zip", "gz", "bz2", "xz", "lha", "rar"]
+
+    def open(self, *args, **kw):
+
+        def pptx(path_or_buffer, *args, **kw):
+            return Presentation(binopen(path_or_buffer), *args, **kw)
+
+        def ppt(path_or_buffer, *args, **kw):
+            with binopen(path_or_buffer) as fp:
+
+                mgl.textdump = b""
+                mgl.params.noStructOutput = True
+                mgl.params.dumpText = True
+                mgl.params.noRawDumps = True
+                mgl.params.showSectorChain = True
+
+                return PPTFile(fp.read(), mgl.params, *args, **kw)
+
+
+        def docx(path_or_buffer, *args, **kw):
+            return Document(binopen(path_or_buffer), *args, **kw)
+
+        def doc(path_or_buffer, *args, **kw):
+            return MSWordOLE(binopen(path_or_buffer), *args, **kw)
+
+        def xlsx(path_or_buffer, *args, **kw):
+            with binopen(path_or_buffer) as fp:
+                return xlrd.open_workbook(file_contents=fp.read(), *args, **kw)
+
+        xls = xlsx
+
+        def pdf(path_or_buffer, *args, **kw):
+            ps = PDFParser(binopen(path_or_buffer), *args, **kw)
+            doc = PDFDocument()
+            ps.set_document(doc)
+            doc.set_parser(ps)
+            doc.initialize('')
+            return doc
+
+        def csv(path_or_buffer, *args, **kw):
+            with binopen(path_or_buffer) as fp:
+                dat = fp.read(SAMPLEBYTE) + fp.readline()
+                e = getencoding(dat)
+                txt = dat.decode(e)
+                dialect = _csv.Sniffer().sniff(txt)
+
+            return _csv.reader(opener(path_or_buffer, encoding=e), dialect=dialect, *args, **kw)
+
+        def dml(path_or_buffer, excludes = ["^;?\n", "^;$", "^\s*//.*$"], lvsep = "  "):
+            with binopen(path_or_buffer) as fp:
+                dat = fp.read()
+            ret = []
+            e = getencoding(dat)
+
+            lines = list(enumerate((dat.decode(e) if e else dat.decode()).splitlines(),1))
+            maxlen = max(x.count(lvsep) for i,x in lines)
+
+            rec = [""] * maxlen
+
+            for i, line in reversed(lines):
+
+                if line and all(not re.match(x, line) for x in excludes):
+                    row = line.rstrip().split(lvsep)
+                    name = row[-1]
+                    if name.startswith("end"):
+                        recordname = name.replace("end", "").strip("[; ]")
+                        rec[row.index(name)] = recordname
+                    elif name.startswith("record"):
+                        for x in range(row.index(name), maxlen):
+                            rec[x] = ""
+                    else:
+                        ret.append([i, ".".join(rec).strip("."), line.strip()])
+
+            for i, rec, line in reversed(ret):
+                yield rec, line
+
+        txt = opener
+
+        def zip(path_or_buffer, *args, **kw):
+            return ZipFile(binopen(path_or_buffer), *args, **kw)
+
+        def gz(path_or_buffer, *args, **kw):
+            return GzipFile(fileobj=binopen(path_or_buffer), *args, **kw)
+
+        def bz2(path_or_buffer, *args, **kw):
+            return BZ2File(binopen(path_or_buffer), *args, **kw)
+
+        def xz(path_or_buffer, *args, **kw):
+            return LZMAFile(binopen(path_or_buffer), *args, **kw)
+
+        def tar(path_or_buffer, mode="r", *args, **kw):
+            return TarFile.open(mode=mode, fileobj=binopen(path_or_buffer), *args, **kw)
+
+        def lha(path_or_buffer, *args, **kw):
+            return LhaFile(binopen(path_or_buffer), *args, **kw)
+
+        def rar(path_or_buffer, *args, **kw):
+            return RarFile(binopen(path_or_buffer), *args, **kw)
+
+        def locate(path_or_buffer):
+            fp = binopen(path_or_buffer)
+
+            fp.read(8) # magic number
+            conf_size = struct.unpack(">i", fp.read(4))[0]
+            fp.read(4 + conf_size) # dbconf
+
+            for entry in binchunk(fp, sep=b"\x00\x02"):
+                raw = entry[16:].rstrip()
+                raw = raw.replace(b"\x00\x00", b"\vfile\t").replace(b"\x00\x01", b"\vdir\t")
+
+                root = ""
+                for e in raw.decode("utf-8").split("\v"):
+                    try:
+                        tp, name = e.split("\t")
+                        if name == "/":
+                            tp = "dir"
+                        else:
+                            name = root + "/" + name
+                            if name in ("/etc/init.d", "/etc/rc0.d", "/etc/rc1.d", "/etc/rc2.d", "/etc/rc3.d", "/etc/rc4.d", "/etc/rc5.d", "/etc/rc6.d", "/etc/ssl/certs", "/etc/xdg/systemd/user", "/lib", "/lib64", "/sbin", "/usr/lib64/go/4.8.5", "/usr/libexec/gcc/x86_64-redhat-linux/4.8.5", "/bin", "/usr/include/c++/4.8.5", "/usr/lib/debug/bin", "/usr/lib/debug/lib", "/usr/lib/debug/lib64", "/usr/lib/debug/sbin", "/usr/lib/gcc/x86_64-redhat-linux/4.8.5", "/usr/lib/go/4.8.5", "/usr/lib/terminfo", "/usr/share/doc/git-1.8.3.1/contrib/hooks", "/usr/share/doc/redhat-release", "/usr/share/doc/vim-common-7.4.160/docs", "/usr/share/gcc-4.8.5", "/usr/share/gccxml-0.9/GCC/5.0", "/usr/share/gccxml-0.9/GCC/5.1", "/usr/share/gccxml-0.9/GCC/5.2", "/usr/share/gccxml-0.9/GCC/5.3", "/usr/share/gdb/auto-load/lib64", "/usr/share/groff/current", "/usr/tmp", "/var/lock", "/var/mail", "/var/run"):
+                                tp = "dir"
+
+                        yield tp, name
+
+                    except ValueError:
+                        root = e
+
+        def json(path_or_buffer, *args, **kw):
+            with binopen(path_or_buffer) as fp:
+                return jsonlib.loads(fp.read(), *args, **kw)
+
+        def html(path_or_buffer, *args, **kw):
+            with binopen(path_or_buffer) as fp:
+                dat = fp.read()
+            return _HTMLParser(dat, getencoding(dat), *args, **kw)
+
+        def xml(path_or_buffer, *args, **kw):
+            with binopen(path_or_buffer) as fp:
+                dat = fp.read()
+            return xmlparse(dat, getencoding(dat), *args, **kw)
+
+        def mdb(path_or_buffer, uid="", passwd="", *args, **kw):
+            with binopen(path_or_buffer) as fp:
+                path = os.path.abspath(fp.name)
+            try:
+                driver = next(x for x in pyodbc.drivers() if x.startswith("Microsoft Access Driver "))
+            except StopIteration:
+                raise RuntimeError("Not Installed Microsoft Access Driver")
+
+            dsnstr = r'DRIVER={{{}}};DBQ={};UID="{}";PWD="{}";'
+            return pyodbc.connect(dsnstr.format(driver, path, uid, passwd), *args, **kw)
+
+        accdb = mdb
+
+        def sqlite3(path_or_buffer, *args, **kw):
+            with binopen(path_or_buffer) as fp:
+                path = os.path.abspath(fp.name)
+            return create_engine(r"sqlite:///{}".format(path), *args, **kw)
+
+        def pickle(path_or_buffer, *args, **kw):
+            with binopen(path_or_buffer) as fp:
+                return pkload(fp, *args, **kw)
+
+        return locals().get(guesstype(self.__str__()), open)(self.__str__(), *args, **kw)
+
+
+    def close(self):
+        if hasattr(self._file, "close") and self._file.closed is False:
+            self._file.close()
+            self._file = None
+            self._rows = None
+
+    def __next__(self):
+        return next(self.__iter__())
+
+    def __iter__(self):
+        if self._rows is None:
+            self._rows = readrow(self)
+        return self._rows
+
+    def __enter__(self):
+        if self._closed:
+            self._raise_closed()
+        return self.open()
+
+    def __exit__(self, t, v, tb):
+        self.close()
+
+
 def test():
     from util.core import tdir
     from glob import glob
     from datetime import datetime as dt
+
+    def test_lsdir():
+        def _testargs(func, pathstr, *args):
+            #TODO assert
+            ret = [
+                func(pathstr, *args),
+                func(pathlib.Path(pathstr), *args),
+                func(pathlib.Path(pathstr), *args),
+            ]
+            try:
+                with open(pathstr) as f:
+                    ret.append(func(f, *args))
+            except Exception as e:
+                ret.append(e)
+            return ret
+        _testargs(lsdir, tdir)
+        _testargs(lsdir, tdir + "diff*")
+        _testargs(lsdir, tdir+"test.csv")
+        _testargs(lsdir, tdir+"*est.csv")
+        _testargs(lsdir, tdir+"ddfghjdtui")
+        _testargs(lsdir, tdir, False)
+        _testargs(lsdir, tdir + "diff*", False)
+        _testargs(lsdir, tdir+"test.csv", False)
+        _testargs(lsdir, tdir+"*est.csv", False)
+        _testargs(lsdir, tdir+"ddfghjdtui", False)
 
     def test_readrow():
         for g in glob(tdir+"*.*"):
@@ -1813,6 +2213,43 @@ def test():
                 print(" None")
             except Exception as e:
                 print(" ERROR", e)
+
+    def test_Path_init():
+        for g in glob(tdir+"*.*"):
+            n = os.path.basename(g)
+
+            sys.stdout.write("test_Path : " + n)
+            try:
+                p = Path(g)
+                assert p
+                assert p.size > 0
+                assert "LazyInfo" in str(type(p.info))
+                assert type(p.encoding) in [str, type(None)]
+                p.guesstype()
+                dat = p.read_bytes(SAMPLEBYTE)
+                if b"\x00" not in dat:
+                    assert p.read_text(10)
+                assert p.readlines()
+                assert p.groupbylines()
+
+                assert(type(p.is_compress()) is bool)
+                assert p.uncompressedsize() > 0
+                assert next(p)
+                p._rows = None
+                assert list(p)
+                assert p.open()
+                with p as f:
+                    assert f
+                p.close()
+
+                print(" ok ")
+            except NotImplementedError as e:
+                print(" skip", e)
+            except TypeError as e:
+                print(" None", e)
+            except Exception as e:
+                print(" ",e.__class__.__name__, e)
+
 
     t0 = dt.now()
     for x, func in list(locals().items()):
@@ -1980,3 +2417,5 @@ def main():
 if __name__ == "__main__":
 #    test()
     main()
+
+

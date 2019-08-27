@@ -144,7 +144,7 @@ match = { # bytes regex match define
 	      [re.compile(b'RIFF....WEBP').match, 'webp']],
 
   b'\xff\xd8': [
-          [re.compile(b'\xff\xd8\xff\xdb\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\xff\xd8\xff\xee\xff\xd8\xff\xe1..Exif\x00\x00').match, 'jpg']]
+          [re.compile(b'\xff\xd8\xff\xdb\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\xff\xd8\xff\xee\xff\xd8\xff\xe1..Exif\x00\x00').match, 'jpg']],
  }
 
 start = { # bytes startswith define
@@ -243,6 +243,10 @@ start = { # bytes startswith define
   b'{\\': [[b'{\\rtf1', 'rtf']],
   b'\x7fE': [[b'\x7fELF', 'Executable and Linkable Format']],
   b'\x80*': [[b'\x80*_\xd7', 'Kodak Cineon image']],
+  b'\x80\x02': [[b'\x80\x02', 'pickle']],
+  b'\x80\x03': [[b'\x80\x03', 'pickle']],
+  b'\x80\x04': [[b'\x80\x04', 'pickle']],
+  b'\x80\x05': [[b'\x80\x05', 'pickle']],
   b'\x89P': [[b'\x89PNG\r\n\x1a\n', 'Image encoded in the Portable Network Graphics format']],
   b'\x89H': [[b'\x89HDF\r\n\x1a\n', 'hdf5']],
   b'\xa1\xb2': [[b'\xa1\xb2\xc3\xd4\xd4\xc3\xb2\xa1', 'Libpcap File Format']],
