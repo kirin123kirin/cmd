@@ -109,6 +109,8 @@ def opener(f, mode="r", *args, **kw):
             r.seek(p)
             return r
     elif isinstance(f, str) or hasattr(f, "joinpath"):
+        with open(f, "rb") as fp:
+            kw["encoding"] = getencoding(fp.read(92160))
         return codecs.open(f, mode=mode.replace("b", ""), *args, **kw)
     else:
         raise ValueError("Unknown Object. filename or filepointer buffer")

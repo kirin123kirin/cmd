@@ -364,20 +364,36 @@ def load_module_in_background(name, package=None, debug='DEBUG', env=None,
 
 
 @lazyobject
-def is_json():
-    return getattr(__import__('util.filetype', fromlist=['is_json']), 'is_json')
-
-@lazyobject
 def is_bin():
     return getattr(__import__('util.filetype', fromlist=['is_bin']), 'is_bin')
+
+@lazyobject
+def is_text():
+    return getattr(__import__('util.filetype', fromlist=['is_text']), 'is_text')
+
+@lazyobject
+def is_tar():
+    return getattr(__import__('util.filetype', fromlist=['is_tar']), 'is_tar')
+
+@lazyobject
+def is_csv():
+    return getattr(__import__('util.filetype', fromlist=['is_csv']), 'is_csv')
+
+@lazyobject
+def is_xls():
+    return getattr(__import__('util.filetype', fromlist=['is_xls']), 'is_xls')
 
 @lazyobject
 def is_doc():
     return getattr(__import__('util.filetype', fromlist=['is_doc']), 'is_doc')
 
 @lazyobject
-def is_xls():
-    return getattr(__import__('util.filetype', fromlist=['is_xls']), 'is_xls')
+def is_ppt():
+    return getattr(__import__('util.filetype', fromlist=['is_ppt']), 'is_ppt')
+
+@lazyobject
+def guesstype():
+    return getattr(__import__('util.filetype', fromlist=['guesstype']), 'guesstype')
 
 @lazyobject
 def is_xml():
@@ -388,108 +404,84 @@ def is_html():
     return getattr(__import__('util.filetype', fromlist=['is_html']), 'is_html')
 
 @lazyobject
-def is_dml():
-    return getattr(__import__('util.filetype', fromlist=['is_dml']), 'is_dml')
-
-@lazyobject
 def is_office():
     return getattr(__import__('util.filetype', fromlist=['is_office']), 'is_office')
 
 @lazyobject
-def is_csv():
-    return getattr(__import__('util.filetype', fromlist=['is_csv']), 'is_csv')
+def is_dml():
+    return getattr(__import__('util.filetype', fromlist=['is_dml']), 'is_dml')
 
 @lazyobject
-def is_ppt():
-    return getattr(__import__('util.filetype', fromlist=['is_ppt']), 'is_ppt')
+def is_json():
+    return getattr(__import__('util.filetype', fromlist=['is_json']), 'is_json')
 
 @lazyobject
 def is_lha():
     return getattr(__import__('util.filetype', fromlist=['is_lha']), 'is_lha')
 
 @lazyobject
-def is_text():
-    return getattr(__import__('util.filetype', fromlist=['is_text']), 'is_text')
-
-@lazyobject
-def guesstype():
-    return getattr(__import__('util.filetype', fromlist=['guesstype']), 'guesstype')
-
-@lazyobject
-def is_tar():
-    return getattr(__import__('util.filetype', fromlist=['is_tar']), 'is_tar')
-
-@lazyobject
-def DBgrouprow():
-    return getattr(__import__('util.io', fromlist=['DBgrouprow']), 'DBgrouprow')
+def getsize():
+    return getattr(__import__('util.io', fromlist=['getsize']), 'getsize')
 
 @lazyobject
 def grouprow():
     return getattr(__import__('util.io', fromlist=['grouprow']), 'grouprow')
 
 @lazyobject
+def lsdir():
+    return getattr(__import__('util.io', fromlist=['lsdir']), 'lsdir')
+
+@lazyobject
 def readrow():
     return getattr(__import__('util.io', fromlist=['readrow']), 'readrow')
 
 @lazyobject
-def getinfo():
-    return getattr(__import__('util.io', fromlist=['getinfo']), 'getinfo')
-
-@lazyobject
-def Path():
-    return getattr(__import__('util.io', fromlist=['Path']), 'Path')
+def DBgrouprow():
+    return getattr(__import__('util.io', fromlist=['DBgrouprow']), 'DBgrouprow')
 
 @lazyobject
 def DBrow():
     return getattr(__import__('util.io', fromlist=['DBrow']), 'DBrow')
 
 @lazyobject
-def lsdir():
-    return getattr(__import__('util.io', fromlist=['lsdir']), 'lsdir')
+def Path():
+    return getattr(__import__('util.io', fromlist=['Path']), 'Path')
 
 @lazyobject
-def getsize():
-    return getattr(__import__('util.io', fromlist=['getsize']), 'getsize')
+def getinfo():
+    return getattr(__import__('util.io', fromlist=['getinfo']), 'getinfo')
 
 @lazyobject
-def values_not():
-    return getattr(__import__('util.utils', fromlist=['values_not']), 'values_not')
+def isdataframe():
+    return getattr(__import__('util.utils', fromlist=['isdataframe']), 'isdataframe')
 
 @lazyobject
-def which():
-    return getattr(__import__('util.utils', fromlist=['which']), 'which')
-
-@lazyobject
-def isposkey():
-    return getattr(__import__('util.utils', fromlist=['isposkey']), 'isposkey')
+def vmfree():
+    return getattr(__import__('util.utils', fromlist=['vmfree']), 'vmfree')
 
 @lazyobject
 def path_norm():
     return getattr(__import__('util.utils', fromlist=['path_norm']), 'path_norm')
 
 @lazyobject
-def geturi():
-    return getattr(__import__('util.utils', fromlist=['geturi']), 'geturi')
-
-@lazyobject
-def is1darray():
-    return getattr(__import__('util.utils', fromlist=['is1darray']), 'is1darray')
-
-@lazyobject
-def sortedrows():
-    return getattr(__import__('util.utils', fromlist=['sortedrows']), 'sortedrows')
-
-@lazyobject
-def compute_object_size():
-    return getattr(__import__('util.utils', fromlist=['compute_object_size']), 'compute_object_size')
-
-@lazyobject
 def timestamp2date():
     return getattr(__import__('util.utils', fromlist=['timestamp2date']), 'timestamp2date')
 
 @lazyobject
-def iterhead():
-    return getattr(__import__('util.utils', fromlist=['iterhead']), 'iterhead')
+def islarge():
+    return getattr(__import__('util.utils', fromlist=['islarge']), 'islarge')
+
+@lazyobject
+def values_at():
+    return getattr(__import__('util.utils', fromlist=['values_at']), 'values_at')
+
+@lazyobject
+def getdialect():
+    return getattr(__import__('util.utils', fromlist=['getdialect']), 'getdialect')
+
+@lazyobject
+def sortedrows():
+    return getattr(__import__('util.utils', fromlist=['sortedrows']), 'sortedrows')
 
 @lazyobject
 def is2darray():
@@ -500,20 +492,16 @@ def lazydate():
     return getattr(__import__('util.utils', fromlist=['lazydate']), 'lazydate')
 
 @lazyobject
-def Counter():
-    return getattr(__import__('util.utils', fromlist=['Counter']), 'Counter')
+def compute_object_size():
+    return getattr(__import__('util.utils', fromlist=['compute_object_size']), 'compute_object_size')
 
 @lazyobject
-def values_at():
-    return getattr(__import__('util.utils', fromlist=['values_at']), 'values_at')
+def to_datetime():
+    return getattr(__import__('util.utils', fromlist=['to_datetime']), 'to_datetime')
 
 @lazyobject
-def csvreader():
-    return getattr(__import__('util.utils', fromlist=['csvreader']), 'csvreader')
-
-@lazyobject
-def getdialect():
-    return getattr(__import__('util.utils', fromlist=['getdialect']), 'getdialect')
+def in_glob():
+    return getattr(__import__('util.utils', fromlist=['in_glob']), 'in_glob')
 
 @lazyobject
 def back_to_path():
@@ -524,73 +512,73 @@ def command():
     return getattr(__import__('util.utils', fromlist=['command']), 'command')
 
 @lazyobject
-def decompressor():
-    return getattr(__import__('util.utils', fromlist=['decompressor']), 'decompressor')
+def sorter():
+    return getattr(__import__('util.utils', fromlist=['sorter']), 'sorter')
+
+@lazyobject
+def iterhead():
+    return getattr(__import__('util.utils', fromlist=['iterhead']), 'iterhead')
+
+@lazyobject
+def csvreader():
+    return getattr(__import__('util.utils', fromlist=['csvreader']), 'csvreader')
 
 @lazyobject
 def compressor():
     return getattr(__import__('util.utils', fromlist=['compressor']), 'compressor')
 
 @lazyobject
-def isdataframe():
-    return getattr(__import__('util.utils', fromlist=['isdataframe']), 'isdataframe')
+def listlike():
+    return getattr(__import__('util.utils', fromlist=['listlike']), 'listlike')
 
 @lazyobject
-def sniffer():
-    return getattr(__import__('util.utils', fromlist=['sniffer']), 'sniffer')
+def which():
+    return getattr(__import__('util.utils', fromlist=['which']), 'which')
 
 @lazyobject
-def islarge():
-    return getattr(__import__('util.utils', fromlist=['islarge']), 'islarge')
+def Counter():
+    return getattr(__import__('util.utils', fromlist=['Counter']), 'Counter')
 
 @lazyobject
-def in_glob():
-    return getattr(__import__('util.utils', fromlist=['in_glob']), 'in_glob')
+def values_not():
+    return getattr(__import__('util.utils', fromlist=['values_not']), 'values_not')
+
+@lazyobject
+def isposkey():
+    return getattr(__import__('util.utils', fromlist=['isposkey']), 'isposkey')
 
 @lazyobject
 def isnamedtuple():
     return getattr(__import__('util.utils', fromlist=['isnamedtuple']), 'isnamedtuple')
 
 @lazyobject
-def to_datetime():
-    return getattr(__import__('util.utils', fromlist=['to_datetime']), 'to_datetime')
-
-@lazyobject
-def sorter():
-    return getattr(__import__('util.utils', fromlist=['sorter']), 'sorter')
-
-@lazyobject
-def vmfree():
-    return getattr(__import__('util.utils', fromlist=['vmfree']), 'vmfree')
-
-@lazyobject
-def iterrows():
-    return getattr(__import__('util.utils', fromlist=['iterrows']), 'iterrows')
+def decompressor():
+    return getattr(__import__('util.utils', fromlist=['decompressor']), 'decompressor')
 
 @lazyobject
 def kwtolist():
     return getattr(__import__('util.utils', fromlist=['kwtolist']), 'kwtolist')
 
 @lazyobject
-def listlike():
-    return getattr(__import__('util.utils', fromlist=['listlike']), 'listlike')
+def iterrows():
+    return getattr(__import__('util.utils', fromlist=['iterrows']), 'iterrows')
 
 @lazyobject
-def profile_data():
-    return getattr(__import__('util.profiler', fromlist=['profile_data']), 'profile_data')
+def sniffer():
+    return getattr(__import__('util.utils', fromlist=['sniffer']), 'sniffer')
 
 @lazyobject
-def profiler():
-    return getattr(__import__('util.profiler', fromlist=['profiler']), 'profiler')
+def geturi():
+    return getattr(__import__('util.utils', fromlist=['geturi']), 'geturi')
 
 @lazyobject
-def differ():
-    return getattr(__import__('util.differ', fromlist=['differ']), 'differ')
+def is1darray():
+    return getattr(__import__('util.utils', fromlist=['is1darray']), 'is1darray')
 
 @lazyobject
-def parse_date():
-    return getattr(__import__('util.lslog', fromlist=['parse_date']), 'parse_date')
+def parse_lslR():
+    return getattr(__import__('util.lslog', fromlist=['parse_lslR']), 'parse_lslR')
 
 @lazyobject
-def lstab():
-    return getattr(__import__('util.lslog', fromlist=['lstab']), 'lstab')
+def parse_lsl():
+    return getattr(__import__('util.lslog', fromlist=['parse_lsl']), 'parse_lsl')

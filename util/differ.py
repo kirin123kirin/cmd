@@ -367,7 +367,7 @@ def main():
     padd('-e', '--encoding', type=str, default="cp932",
          help='output fileencoding (default `cp932`)')
     padd('-l', '--lineterminator', type=str, default="\r\n",
-         help='output fileencoding (default `\\r\\n`)')
+         help='output llineterminator (default `\\r\\n`)')
     padd('-n', '--noheader', action="store_true", default=False,
          help='file no header (default `False`)')
     padd('-N', '--navalue', type=str, default="-",
