@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "0.3.0"
+__version__ = "0.2.0"
 __author__ = "m.yama"
 
 
@@ -18,7 +18,13 @@ from util.utils import to_datetime
 from util.core import opener
 
 
-def split_ls(line, parent=None, base_date=None, mod_sp = re.compile(" +")):
+def split_ls(
+    line,
+    parent=None,
+    base_date=None,
+    mod_sp = re.compile(" +")
+    ):
+    
     if line.startswith("l"):
         p, _, o, g, size, *d, name, _, ln = mod_sp.split(line)
     else:
@@ -54,25 +60,38 @@ def split_ls(line, parent=None, base_date=None, mod_sp = re.compile(" +")):
     return [*ret, ln, fullpath, *map("/".__add__, diritem)]
 
 
-def parse_lslR(path_or_buffer, parent=None, base_date=None):
+def parse(
+    path_or_buffer,
+    recursive=False,
+    parent=None,
+    base_date=None
+    ):
+    
+    prefix = "-dlcb"
+    
     with opener(path_or_buffer) as fp:
-        for x in fp:
-            line = x.rstrip()
-            if line == "":
-                continue
-            
-            if line.endswith(":"):
-                parent = line.rstrip(":")
-            
-            if parent and line[0] in "-dlcb":
-                yield split_ls(line, parent)
+        if recursive:
+            for x in fp:
+                line = x.rstrip()
+                if line == "":
+                    continue
+                
+                if line.endswith(":"):
+                    parent = line.rstrip(":")
+                
+                if parent and line[0] in prefix:
+                    yield split_ls(line, parent)
+        else:
+            for x in fp:
+                line = x.rstrip()
+                if line and line[0] in prefix:
+                    yield split_ls(line, parent=parent, base_date=base_date)
 
-def parse_lsl(path_or_buffer, parent=None, base_date=None):
-    with opener(path_or_buffer) as fp:
-        for x in fp:
-            line = x.rstrip()
-            if line and line[0] in "-dlcb":
-                yield split_ls(line, parent=parent, base_date=base_date)
+def lslR(path_or_buffer, parent=None, base_date=None):
+    return parse(path_or_buffer, recursive=True, parent=parent, base_date=base_date)
+
+def lsl(path_or_buffer, parent=None, base_date=None):
+    return parse(path_or_buffer, recursive=False, parent=parent, base_date=base_date)
 
 def to_csv(
     iteratable,
@@ -134,6 +153,8 @@ def main():
     ps = ArgumentParser(usage)
     padd = ps.add_argument
 
+    padd('-r', '--recursive', action="store_true", default=False,
+         help='input file is recursive?(ls -lR) (default False')
     padd('-o', '--outfile', type=str, default=sys.stdout,
          help='output filepath (default `stdout`)')
     padd('-b', '--basedate', type=str, default=None,
@@ -150,6 +171,7 @@ def main():
     args = ps.parse_args()
 
     outfile = args.outfile
+    recursive = args.recursive
     sep = args.sep
     BASE_DATE = args.basedate
     PARENT = args.currentdirectory
@@ -158,7 +180,7 @@ def main():
     if not files:
         raise RuntimeError("Not found files {}".format(args.filename))
 
-    rows = (row for f in files for row in parse_lslR(f, parent=PARENT, base_date=BASE_DATE))
+    rows = (row for f in files for row in parse(f, recursive=recursive, parent=PARENT, base_date=BASE_DATE))
 
     ext = str(outfile).lower().rsplit(".", 1)[1]
 
@@ -174,7 +196,10 @@ def main():
 def test(path):
     
     def test_parse_lslR():
-        assert len(list(parse_lslR(path))) == 7
+        assert len(list(parse(path, True))) == 7
+    
+    def test_parse_lsl():
+        assert len(list(parse(path))) == 29
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
@@ -184,6 +209,6 @@ def test(path):
             print("{} : time {}".format(x, t2-t1))
      
 if __name__ == "__main__":
-#    test("C:/temp/lsdir.log")
-    main()
+    test("C:/temp/lsdir.log")
+#    main()
 

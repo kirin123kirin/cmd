@@ -121,12 +121,12 @@ def countby(seq, func=None, return_index=False):
         _count_elements(result, seq)
     return result
 
-def groupby(seq, func=None, return_index=False):
+def groupby(seq, func=None, return_index=False, startidx=0):
     result = {}
     if func:
         if return_index:
             indexes = {}
-            for i, value in enumerate(seq):
+            for i, value in enumerate(seq, startidx):
                 key = func(value)
                 if key in result:
                     result[key].append(i)
@@ -149,7 +149,7 @@ def groupby(seq, func=None, return_index=False):
                 result[key] = [i]
     return result
 
-def differ(a, b, header=False, diffonly=False, sort=True, reverse=False, rep_rate=0.6, na_val=None, **kw):
+def differ(a, b, header=False, diffonly=False, sort=True, reverse=False, rep_rate=0.6, na_val=None, startidx=0, **kw):
     result = []
 
     if hasattr(a, "__next__"):
@@ -164,8 +164,8 @@ def differ(a, b, header=False, diffonly=False, sort=True, reverse=False, rep_rat
     else:
         cb = countby(b, deephash)
 
-    ga, ia = groupby(a, deephash, return_index=True)
-    gb, ib = groupby(b, deephash, return_index=True)
+    ga, ia = groupby(a, deephash, return_index=True, startidx=startidx)
+    gb, ib = groupby(b, deephash, return_index=True, startidx=startidx)
 
     cab = ca.keys() & cb.keys()
 
@@ -406,11 +406,12 @@ def main():
         a = tar1select(grouprow(p1)) if tar1select else grouprow(p1)
         b = tar2select(grouprow(p2)) if tar2select else grouprow(p2)
 
-        it = ([sanitize(aa.target, bb.target), *d] for aa, bb in zip(a, b) for d in differ(
+        it = (["targetname" if i == 0 and d[0] == "tag" else sanitize(aa.target, bb.target), *d] for i, (aa, bb) in enumerate(zip(a, b)) for d in differ(
             aa.value, bb.value,
-            header=header,
+            header= i==0 and header is True,
             diffonly=diffonly,
             na_val=na_value,
+            startidx=1,
             conditional_value=conditional_value
         ))
 
@@ -423,6 +424,7 @@ def main():
             header=header,
             diffonly=diffonly,
             na_val=na_value,
+            startidx=1,
             conditional_value=conditional_value
         )
 
@@ -469,15 +471,11 @@ def test():
         assert(1 > similar(deephash("abc"), deephash("abb")) > 0.6)
         assert(similar(deephash(("abc",)), deephash(("abb",))) == 0.0)
 
-    def test_idiff1d():
-        a = "abc"
-        b = "bcd"
-        assert(set(map(tuple,differ(a, b))) == {('equal', 1, 0, 'b'), ('equal', 2, 1, 'c'), ('insert', None, 2, 'd'), ('delete', 0, None, 'a')} )
-
     def test_differ1d():
         a = "abc"
         b = "bcd"
         assert(list(differ(a, b)) == [('delete', 0, None, 'a'), ('equal', 1, 0, 'b'), ('equal', 2, 1, 'c'), ('insert', None, 2, 'd')])
+        assert(differ(a, b, startidx=1) == [('delete', 1, None, 'a'), ('equal', 2, 1, 'b'), ('equal', 3, 2, 'c'), ('insert', None, 3, 'd')])
         a = list(range(1,3))
         b = list(range(2, 4))
         assert(list(differ(a, b)) == [('delete', 0, None, 1), ('equal', 1, 0, 2), ('insert', None, 1, 3)])
@@ -486,6 +484,7 @@ def test():
         a = [list("abc"), list("abc")]
         b = [list("abc"),list("acc"), list("xtz")]
         assert(list(differ(a, b)) == [('equal', 0, 0, 'a', 'b', 'c'), ('replace', 1, 1, 'a', 'b ---> c', 'c'), ('insert', None, 2, 'x', 't', 'z')])
+        assert(differ(a, b, startidx=1) == [('equal', 1, 1, 'a', 'b', 'c'), ('replace', 2, 2, 'a', 'b ---> c', 'c'), ('insert', None, 3, 'x', 't', 'z')])
 
     def test_differcsv():
         a = (x.value for x in readrow(tdir+"diff1.csv"))
@@ -590,5 +589,5 @@ def test():
             print("{} : time {}".format(x, t2-t1),file=sys.stderr)
 
 if __name__ == "__main__":
-#    test()
-    main()
+    test()
+#    main()
