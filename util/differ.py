@@ -408,7 +408,7 @@ def main():
 
         it = (["targetname" if i == 0 and d[0] == "tag" else sanitize(aa.target, bb.target), *d] for i, (aa, bb) in enumerate(zip(a, b)) for d in differ(
             aa.value, bb.value,
-            header= i==0 and header is True,
+            header= header is True and i==0,
             diffonly=diffonly,
             na_val=na_value,
             startidx=1,
@@ -589,5 +589,5 @@ def test():
             print("{} : time {}".format(x, t2-t1),file=sys.stderr)
 
 if __name__ == "__main__":
-    test()
-#    main()
+#    test()
+    main()
