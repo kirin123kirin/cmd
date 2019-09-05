@@ -51,17 +51,17 @@ del python\NEWS.txt
 move python\api-*.dll python\DLLs\
 move python\ucrtbase.dll python\DLLs\
 
-copy Y:\usr\local\python\*._pth python\
+copy Y:\usr\local\python\*pth python\
 copy Y:\usr\local\python\Lib\site-packages\custom.pth python\Lib\site-packages\
 
-rd /s /q Y:\usr\local\python
-move python Y:\usr\local\
+REM rd /s /q Y:\usr\local\python
+REM move python Y:\usr\local\
 
 rem wget https://www.python.org/ftp/python/%VERSION%/python-%VERSION%-embed-amd64.zip
 
 wget --no-check-certificate https://raw.githubusercontent.com/pypa/get-pip/master/get-pip.py
-python get-pip.py
-del get-pip.py
+REM python get-pip.py
+REM del get-pip.py
 
-pip install -r %APPROOT%\dotfile\python\requirements.txt
-pip install -r %APPROOT%\dotfile\python\requirements_win.txt
+REM pip install -r %APPROOT%\dotfile\python\requirements.txt
+REM pip install -r %APPROOT%\dotfile\python\requirements_win.txt

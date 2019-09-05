@@ -100,13 +100,13 @@ def is_bin(b:bytes):
     return b"\x00" in b
 
 def is_xml(b:bytes):
-    return is_text(b) and b.lstrip()[:13] == b"<?xml version" and b.rstrip()[-1] == b">"
+    return is_text(b) and b.lstrip(b"\xef\xbb\xbf")[:13] == b"<?xml version" and b.rstrip()[-1] == b">"
 
 def is_html(b:bytes):
-    return is_text(b) and b.lstrip()[0] == b"<" and b"<html" in b or b"<!doctype" in b and  b.rstrip()[-1] == b">"
+    return is_text(b) and b.lstrip(b"\xef\xbb\xbf")[0] == b"<" and b"<html" in b or b"<!doctype" in b and  b.rstrip()[-1] == b">"
 
 def is_json(b:bytes):
-    return is_text(b) and b.lstrip()[0] == b"{" and b":" in b and b.rstrip()[-1] == b"}"
+    return is_text(b) and b.lstrip(b"\xef\xbb\xbf")[0] == b"{" and b":" in b and b.rstrip()[-1] == b"}"
 
 def is_csv(b:bytes):
     try:

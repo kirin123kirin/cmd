@@ -24,7 +24,7 @@ def split_ls(
     base_date=None,
     mod_sp = re.compile(" +")
     ):
-    
+
     if line.startswith("l"):
         p, _, o, g, size, *d, name, _, ln = mod_sp.split(line)
     else:
@@ -47,7 +47,7 @@ def split_ls(
         size = int(size)
     except ValueError:
         pass
-    
+
     ret = [p, o, g, size, *dt, name.split(".")[-1] if "." in name else "", name]
 
     if not parent or parent == ".":
@@ -66,19 +66,19 @@ def parse(
     parent=None,
     base_date=None
     ):
-    
+
     prefix = "-dlcb"
-    
+
     with opener(path_or_buffer) as fp:
         if recursive:
             for x in fp:
                 line = x.rstrip()
                 if line == "":
                     continue
-                
+
                 if line.endswith(":"):
                     parent = line.rstrip(":")
-                
+
                 if parent and line[0] in prefix:
                     yield split_ls(line, parent)
         else:
@@ -178,7 +178,7 @@ def main():
 
     files = [g for fn in args.filename for g in glob(fn)]
     if not files:
-        raise RuntimeError("Not found files {}".format(args.filename))
+        raise FileNotFoundError("Not found files {}".format(args.filename))
 
     rows = (row for f in files for row in parse(f, recursive=recursive, parent=PARENT, base_date=BASE_DATE))
 
@@ -194,10 +194,10 @@ def main():
         to_csv(rows, outfile, sep=sep)
 
 def test(path):
-    
+
     def test_parse_lslR():
         assert len(list(parse(path, True))) == 7
-    
+
     def test_parse_lsl():
         assert len(list(parse(path))) == 29
 
@@ -207,7 +207,7 @@ def test(path):
             func()
             t2 = datetime.now()
             print("{} : time {}".format(x, t2-t1))
-     
+
 if __name__ == "__main__":
     test("C:/temp/lsdir.log")
 #    main()
