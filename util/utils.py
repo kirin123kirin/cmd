@@ -77,7 +77,7 @@ def command(cmd):
     if code == 0:
         return dat
     else:
-        raise RuntimeError(dat)
+        raise RuntimeError(code, dat)
 
 def which(executable):
     env = os.environ['PATH'].split(os.pathsep)

@@ -100,13 +100,13 @@ def is_bin(b:bytes):
     return b"\x00" in b
 
 def is_xml(b:bytes):
-    return is_text(b) and b.lstrip(b"\xef\xbb\xbf")[:13] == b"<?xml version" and b.rstrip()[-1] == b">"
+    return is_text(b) and b.lstrip(b"\xef\xbb\xbf")[:13] == b"<?xml version" and b.rstrip()[-1] == 62 # 62 is `>`
 
 def is_html(b:bytes):
-    return is_text(b) and b.lstrip(b"\xef\xbb\xbf")[0] == b"<" and b"<html" in b or b"<!doctype" in b and  b.rstrip()[-1] == b">"
+    return is_text(b) and b.lstrip(b"\xef\xbb\xbf")[0] == b"<" and b"<html" in b or b"<!doctype" in b and  b.rstrip()[-1] == 62 # 62 is `>`
 
 def is_json(b:bytes):
-    return is_text(b) and b.lstrip(b"\xef\xbb\xbf")[0] == b"{" and b":" in b and b.rstrip()[-1] == b"}"
+    return is_text(b) and b.lstrip(b"\xef\xbb\xbf")[0] == b"{" and b":" in b and b.rstrip()[-1] == 125 # 125 is `}`
 
 def is_csv(b:bytes):
     try:
@@ -249,6 +249,7 @@ start = { # bytes startswith define
   b'\x80\x05': [[b'\x80\x05', 'pickle']],
   b'\x89P': [[b'\x89PNG\r\n\x1a\n', 'Image encoded in the Portable Network Graphics format']],
   b'\x89H': [[b'\x89HDF\r\n\x1a\n', 'hdf5']],
+  b'\x96\xd5': [[b'\x96\xd5u!', 'sarbin']],
   b'\xa1\xb2': [[b'\xa1\xb2\xc3\xd4\xd4\xc3\xb2\xa1', 'Libpcap File Format']],
   b'\xbe\xba': [[b'\xbe\xba\xfe\xca', 'palmcalenderdata']],
   b'\xca\xfe': [[b'\xca\xfe\xba\xbe', 'javaclass']],
