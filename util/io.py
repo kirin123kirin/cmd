@@ -12,6 +12,7 @@ __version__ = '0.0.1'
 
 __all__ = [
     "lsdir",
+    "xmltodict",
     "readrow",
     "grouprow",
     "getinfo",
@@ -41,6 +42,12 @@ import json as jsonlib
 from html.parser import HTMLParser
 from xml.parsers.expat import ParserCreate
 from datetime import datetime
+try:
+    from lxml import etree
+    from lxml.etree import _Element as Element
+except ModuleNotFoundError:
+    from xml.etree import ElementTree as etree
+    from xml.etree.ElementTree import Element
 
 from collections import namedtuple
 from functools import lru_cache
@@ -558,7 +565,7 @@ class _XMLHandler(object):
             return self.force_list(self.path[:-1], key, value)
 
 
-def xmlparse(data:bytes, encoding=None, namespaces=False, nssep=':', comments=False, **kw):
+def xmltodict(data:bytes, encoding=None, namespaces=False, nssep=':', comments=False, **kw):
     hl = _XMLHandler(nssep=nssep, **kw)
     ps = ParserCreate(encoding, nssep or None)
     ps.ordered_attributes = True
@@ -942,15 +949,65 @@ class readrow:
         del p
 
     @staticmethod
-    def xml(path_or_buffer):
-        path, fp = pathbin(path_or_buffer)
+    def xml(
+        path_or_buffer_or_elem,
+        parenttag=None,
+        na_val=None,
+        return_docinfo=True,
+        comment=True,
+        callback_attr = lambda x: ", ".join(["{}={}".format(k, repr(v)) for k, v in x]),
+        dinfo = namedtuple("docinfo", ['doctype', 'encoding', 'externalDTD', 'internalDTD', 'public_id', 'root_name', 'standalone', 'system_url', 'xml_version']),
+        einfo = namedtuple("elementinfo", ['tagpath', 'attr', 'value']),
+        filename = None,
+        ):
 
-        dat = fp.read()
-        if not hasattr(path_or_buffer, "close"):
+        if parenttag is None:
+            parenttag = [""]
+
+        if isinstance(path_or_buffer_or_elem, Element):
+            e = path_or_buffer_or_elem
+        else:
+            try:
+                filename, fp = pathbin(path_or_buffer_or_elem)
+                tree = etree.parse(fp)
+            except FileNotFoundError:
+                tree = etree.fromstring(path_or_buffer_or_elem)
+
+            if return_docinfo:
+                docinfo = tree.docinfo
+
+                yield pinfo(filename, "/", dinfo(*[getattr(docinfo, x) for x in dinfo._fields]))
+
+                if comment:
+                    for c in tree.xpath("/comment()"):
+                        yield pinfo(filename, "/#comment", einfo("/", None, c.text))
+
+            e = tree.getroot()
+
+        parenttag.append("#comment" if e.tag is etree.Comment else e.tag)
+        pt = "/".join(parenttag)
+
+        try:
+            val = e.text.replace("\xa0", "")
+        except AttributeError:
+            val = na_val
+
+        attr = e.items() or na_val
+        if attr and callback_attr:
+            attr = callback_attr(attr)
+
+        yield pinfo(filename, pt, einfo(pt, attr, val))  #, (e.sourceline, etree.tostring(e)))
+
+        for child in e:
+            if not comment and child.tag is etree.Comment:
+                continue
+
+            for r in __class__.xml(child, parenttag.copy(), filename=filename):
+                yield r
+
+        if not isinstance(path_or_buffer_or_elem, Element) and not hasattr(path_or_buffer_or_elem, "close"):
             fp.close()
 
-        e = getencoding(dat)
-        yield pinfo(path, None, xmlparse(dat, e))
 
     @staticmethod
     def mdb(path_or_buffer, targets=[], uid="", passwd=""):
@@ -1230,6 +1287,17 @@ class grouprow(readrow):
                 #columns = Table(table, MetaData(), autoload=True, autoload_with=engine).columns
                 yield pinfo(path, table, list(map(list, con.execute("SELECT * FROM "+ table))))
 
+    @staticmethod
+    def xml(path_or_buffer):
+        ret = {}
+        for path, target, value in readrow.xml(path_or_buffer):
+            if target in ret:
+                ret[target].append(value)
+            else:
+                ret[target] = [value]
+
+        for k, v in ret.items():
+            yield pinfo(path, k, v)
 
 @lru_cache()
 def ts2date(x):#, dfm = "%Y/%m/%d %H:%M"):
@@ -2067,7 +2135,7 @@ class Path(type(pathlib.Path())):
         def xml(path_or_buffer, *args, **kw):
             with binopen(path_or_buffer) as fp:
                 dat = fp.read()
-            return xmlparse(dat, getencoding(dat), *args, **kw)
+            return xmltodict(dat, getencoding(dat), *args, **kw)
 
         def mdb(path_or_buffer, uid="", passwd="", *args, **kw):
             with binopen(path_or_buffer) as fp:
@@ -2300,6 +2368,18 @@ def main_row():
     i = None
     write = sys.stdout.buffer.write
 
+    def oneliner(b:str):
+        if b is None:
+            return ""
+        try:
+            if "\r" in b:
+                b = b.replace("\r", "\\r")
+            if "\n" in b:
+                b = b.replace("\n", "\\n")
+            return b
+        except TypeError:
+            return str(b)
+
     for i, f in enumerate(walk(args)):
         for x in readrow(f):
             if filename:
@@ -2309,10 +2389,11 @@ def main_row():
             try:
                 write((x.value + lineterminator).encode(encoding))
             except TypeError:
-                write((sep.join(map(str,x.value)) + lineterminator).encode(encoding))
+                write((sep.join(map(oneliner,x.value)) + lineterminator).encode(encoding))
 
     if i is None:
         raise FileNotFoundError(str(args.files))
+
 
 def main_info():
     from argparse import ArgumentParser
@@ -2400,7 +2481,11 @@ def main_size():
         raise FileNotFoundError(str(args.files))
 
 def main():
-    subcmd = sys.argv.pop(1)
+    try:
+        subcmd = sys.argv.pop(1)
+    except IndexError:
+        sys.stderr.write("Not Found subcommand.\nPlease input subcommand(`row` or `info` or `size`)")
+        sys.exit(1)
     if subcmd in ["row", "info", "size"]:
         eval("main_" + subcmd)()
     else:
@@ -2409,5 +2494,3 @@ def main():
 if __name__ == "__main__":
 #    test()
     main()
-
-
