@@ -366,6 +366,8 @@ def main():
          help='output filepath (default `stdout`)')
     padd('-e', '--encoding', type=str, default="cp932",
          help='output fileencoding (default `cp932`)')
+    padd('-r', '--rate', type=float, default=0.6,
+         help='matched score rate (default `0.6`)')
     padd('-l', '--lineterminator', type=str, default="\r\n",
          help='output llineterminator (default `\\r\\n`)')
     padd('-n', '--noheader', action="store_true", default=False,
@@ -392,6 +394,7 @@ def main():
     header = not args.noheader
     encoding = args.encoding
     lineterminator = args.lineterminator
+    rep_rate = args.rate
 
     conditional_value = args.condition_value
 
@@ -410,6 +413,7 @@ def main():
             aa.value, bb.value,
             header= header is True and i==0,
             diffonly=diffonly,
+            rep_rate=rep_rate,
             na_val=na_value,
             startidx=1,
             conditional_value=conditional_value
@@ -423,6 +427,7 @@ def main():
             a, b,
             header=header,
             diffonly=diffonly,
+            rep_rate=rep_rate,
             na_val=na_value,
             startidx=1,
             conditional_value=conditional_value
