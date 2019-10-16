@@ -26,7 +26,7 @@ ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", 
 
 def getipinfo(
     string,
-    callback=lambda x: "{nwadr}\t{netmask}(/{bitmask})".format(**x._asdict()),
+    callback=lambda x: "{nwadr}\t{netmask}\t/{bitmask}".format(**x._asdict()),
     ):
 
     if not string:
@@ -86,7 +86,7 @@ def main():
 
     padd('-V','--version', action='version', version='%(prog)s ' + __version__)
     
-    padd('-f', '--form', type=str, default="{nwadr}\t{netmask}(/{bitmask})",
+    padd('-f', '--form', type=str, default="{nwadr}\t{netmask}\t/{bitmask}",
          help='Usable Keyword formating {}'.format(tuple("{" + x + "}" for x in ipinfo._fields)))
     
     args = ps.parse_args()
