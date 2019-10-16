@@ -18,9 +18,8 @@ from tempfile import gettempdir
 from subprocess import getstatusoutput
 from hashlib import md5
 
-from util.io import readrow
 from util.core import flatten
-
+from util.io import readrow
 
 join, dirname = os.path.join, os.path.dirname
 
@@ -168,14 +167,14 @@ def sankey_table(
     for t in table:
         s = dict(zip(head, t))
         try:
-            src = s["source"]
-            nd[src] = colorcode(s["source_group"] if "source_group" in s else src)
+            src = s["from"]
+            nd[src] = colorcode(s["fromgroup"] if "fromgroup" in s else src)
         except KeyError:
             pass
 
         try:
-            tar = s["target"]
-            nd[tar] = colorcode(s["target_group"] if "target_group" in s else tar)
+            tar = s["to"]
+            nd[tar] = colorcode(s["togroup"] if "togroup" in s else tar)
         except KeyError:
             pass
 
@@ -208,17 +207,18 @@ def render(
     ):
 
     if path_or_buffer:
-        table = readrow.csv(path_or_buffer)
+        reader = readrow.csv(path_or_buffer)
     else:
-        table = [x.value for x in readrow.clipboard()]
+        reader = readrow.clipboard()
+    table = [[x for x in r.value if x] for r in reader]
 
-    header = ["source", "target", "source_group", "target_group", "value"]
-    chk = [x in header for x in table[0]]
-
-    if all(chk):
+    header = ["from", "to", "fromgroup", "togroup", "value"]
+    chk = len(set(header) & set(table[0]))
+    
+    if chk >= 4:
         snkdic = sankey_table(table)
-    elif any(chk):
-        raise ValueError("Unknown header Values (`{}`)".format(", ".join(header)))
+    elif chk >= 2:
+        raise ValueError("Unknown header Values (valid is `{}`)".format(", ".join(header)))
     else:
         snkdic = sankey_flatten(table)
 
