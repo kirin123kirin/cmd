@@ -24,11 +24,7 @@ rev4 = re.compile("([\d\.\:]{7,})[^\d]*([\d\.\:]{1,15})")
 
 ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast"])
 
-def getipinfo(
-    string,
-    callback=lambda x: "{nwadr}\t{netmask}\t/{bitmask}".format(**x._asdict()),
-    ):
-
+def normip(string):
     if not string:
         raise ValueError("Nothing data.")
 
@@ -37,11 +33,28 @@ def getipinfo(
         raise ValueError("Not IPaddress string. -> `{}`".format(string))
 
     try:
-        iface = ip_interface("{}/{}".format(*rev4.findall(s)[0]))
+        return ip_interface("{}/{}".format(*rev4.findall(s)[0]))
     except (IndexError, ValueError):
-        iface = ip_interface(s)
+        return ip_interface(s)
 
-    bit = int(str(iface).split("/")[1])
+def isin_nw(ipadr, nwadr):
+    ip = normip(ipadr).ip
+    nw = normip(nwadr).network
+    
+    if ip == nw.network_address:
+        raise ValueError("IP address is Network Address?")
+    
+    return ip in nw
+
+def getipinfo(
+    string,
+    callback=lambda x: "{nwadr}\t{netmask}\t/{bitmask}".format(**x._asdict()),
+    ):
+    
+    iface = normip(string)
+    s = str(iface)
+
+    bit = int(s.split("/")[1])
     ipa = str(iface.ip)
     nw = iface.network
     nwa = str(nw.network_address)
@@ -62,7 +75,6 @@ def getipinfo(
         return callback(ret)
     else:
         return ret
-
 
 def test():
     assert getipinfo("192.168.1.1/27")
@@ -104,9 +116,11 @@ def main():
             ret.append(getipinfo(line, callback=func))
         except ValueError as e:
             ret.append(e.args[0])
-
-    clip("\r\n".join(ret))
+    if os.name == "nt":
+        clip("\r\n".join(ret))
+    else:
+        clip("\n".join(ret))
 
 if __name__ == "__main__":
-#    test()
-    main()
+    test()
+#    main()
