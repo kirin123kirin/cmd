@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-# The _XMLHandler class is:
-# Copyright (c) Martin Blech
 # Released under the MIT license.
 # see https://opensource.org/licenses/MIT
+
 __author__  = 'm.yama'
 __license__ = 'MIT'
-__date__    = 'Wed Jul 31 17:35:47 2019'
-__version__ = '0.0.1'
+__date__    = 'Oct 18 17:35:47 2019'
+__version__ = '0.0.2'
 
 from collections import namedtuple
 from ipaddress import ip_interface
 import re
+from itertools import zip_longest
+
+FORMAT = "{ipadr}\t{nwadr}\t{netmask}\t/{bitmask}"
 
 ZEN = "".join(chr(0xff01 + i) for i in range(94))
 HAN = "".join(chr(0x21 + i) for i in range(94))
@@ -20,9 +21,10 @@ HAN = "".join(chr(0x21 + i) for i in range(94))
 def to_hankaku(s):
     return s.translate(str.maketrans(ZEN, HAN))
 
-rev4 = re.compile("([\d\.\:]{7,})[^\d]*([\d\.\:]{1,15})")
+rev4 = re.compile(r"(?:(?:[1-9]?\d|1\d{2}|2[0-4]\d|25[0-5])\.){3}(?:[1-9]?\d|1\d{2}|2[0-4]\d|25[0-5])(?:[/:][\.:\d]+)?")
 
 ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast"])
+
 
 def normip(string):
     if not string:
@@ -40,17 +42,14 @@ def normip(string):
 def isin_nw(ipadr, nwadr):
     ip = normip(ipadr).ip
     nw = normip(nwadr).network
-    
+
     if ip == nw.network_address:
         raise ValueError("IP address is Network Address?")
-    
+
     return ip in nw
 
-def getipinfo(
-    string,
-    callback=lambda x: "{nwadr}\t{netmask}\t/{bitmask}".format(**x._asdict()),
-    ):
-    
+def getipinfo(string, callback=None):
+
     iface = normip(string)
     s = str(iface)
 
@@ -76,6 +75,30 @@ def getipinfo(
     else:
         return ret
 
+def tokenip(
+        data,
+        callback=lambda x: FORMAT.format(**x._asdict())):
+
+    nons, mats = rev4.split(data), rev4.findall(data)
+
+    for non, mat in zip_longest(nons, mats, fillvalue=""):
+        try:
+            yield non, getipinfo(mat, callback), None
+        except ValueError as e:
+            yield non, mat, e.args[0]
+
+def formatip(data,
+    callback=lambda x: FORMAT.format(**x._asdict())):
+
+    ret = ""
+    for n, m, err in tokenip(data, callback=callback):
+        ret += n + m
+    return ret
+
+
+extractip = rev4.findall
+
+
 def test():
     assert getipinfo("192.168.1.1/27")
     assert getipinfo("192.168.1.1/255.255.255.240")
@@ -86,9 +109,21 @@ def test():
     except ValueError:
         pass
 
+    r=formatip(data = "hoge server 192.168.1.1 192.168.1.0/24")
+    assert r.startswith("hoge server ")
+
+    r = formatip("""Ethernet adapter ローカル エリア接続:
+
+        Connection-specific DNS Suffix  . : example.co.jp
+        IP Address. . . . . . . . . . . . : 192.168.1.40
+        Subnet Mask . . . . . . . . . . . : 255.255.255.0 ……サブネットマスク
+        Default Gateway . . . . . . . . . : 192.168.1.2/24""")
+    assert "ローカル エリア接続" in r
+
 def main():
     import os
     import sys
+    from io import StringIO
     from pyperclip import paste as getclip, copy as clip
     from argparse import ArgumentParser
 
@@ -97,30 +132,36 @@ def main():
     padd = ps.add_argument
 
     padd('-V','--version', action='version', version='%(prog)s ' + __version__)
-    
-    padd('-f', '--form', type=str, default="{nwadr}\t{netmask}\t/{bitmask}",
-         help='Usable Keyword formating {}'.format(tuple("{" + x + "}" for x in ipinfo._fields)))
-    
-    args = ps.parse_args()
-    
-    form = args.form
 
-    func = lambda x: form.format(**x._asdict())
-    
-    lines = getclip().splitlines()
-    
-    ret = []
-    
-    for line in lines:
-        try:
-            ret.append(getipinfo(line, callback=func))
-        except ValueError as e:
-            ret.append(e.args[0])
-    if os.name == "nt":
-        clip("\r\n".join(ret))
-    else:
-        clip("\n".join(ret))
+    padd('-f', '--form', type=str, default=FORMAT,
+         help='Usable Keyword formating {}'.format(tuple("{" + x + "}" for x in ipinfo._fields)))
+
+    padd('-w', '--withorgdata', action="store_true", default=False,
+         help='Output data with original data')
+
+    args = ps.parse_args()
+
+    callback = lambda x: args.form.format(**x._asdict())
+
+    with StringIO() as ret:
+
+        lines = StringIO(getclip())
+
+        if args.withorgdata:
+            for line in lines:
+                for n, m, err in tokenip(line, callback=callback):
+                    if err is None or err.startswith("Nothing data"):
+                        ret.write("{}{}".format(n, m))
+                    else:
+                        ret.write("{}{}\t<- [ERROR]{}".format(n, m, err))
+
+        else:
+            for line in lines:
+                for n, m, err in tokenip(line, callback=callback):
+                    print("[ERR] " + err if err else m, file=ret)
+
+        clip(ret.getvalue())
 
 if __name__ == "__main__":
-    test()
-#    main()
+#    test()
+    main()
