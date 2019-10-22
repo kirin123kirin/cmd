@@ -164,6 +164,7 @@ def dirstree(fn, exclude=None, followlinks=False, header=True):
 
 def main():
     from argparse import ArgumentParser
+    import io
     import codecs
 
     parser = ArgumentParser(description="main templace")
@@ -206,12 +207,15 @@ def main():
     )
 
     args = parser.parse_args()
+
     func = dict(f=filestree, d=dirstree)[args.type.lower()[0]]
 
+    kw = dict(encoding=args.encoding, errors="replace")
+
     if args.outfile:
-        outfile = codecs.open(args.outfile, mode="w", encoding=args.encoding, errors="replace")
+        outfile = codecs.open(args.outfile, mode="w", **kw)
     else:
-        outfile = sys.stdout
+        outfile = io.TextIOWrapper(sys.stdout.buffer, **kw)
 
     with outfile:
         for i, filename in enumerate(args.filename):
@@ -231,6 +235,7 @@ def test():
             func()
             t2 = datetime.now()
             print("{} : time {}".format(x, t2-t1))
+
 
 if __name__ == '__main__':
 #    test()
