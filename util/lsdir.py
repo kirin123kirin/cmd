@@ -8,23 +8,21 @@ MIT License
 
 """
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 __author__ = "m.yama"
 
 
-__all__ = ["fwalk", "dwalk", "filestree", "dirstree"]
+__all__ = ["fwalk", "dwalk", "filestree", "dirstree", "filemode"]
 
 
 import sys
-import re
-from glob import glob
-
 import os
-from os.path import basename, dirname, splitext, abspath, isdir
+from os.path import basename, splitext, abspath, isdir
 from os import scandir, fspath, readlink
 
 from datetime import datetime
 from functools import lru_cache
+from glob import glob
 
 if os.name == "posix":
     from pwd import getpwuid
@@ -50,15 +48,9 @@ else:
         return ""
 
 @lru_cache()
-def ts2date(x):#, dfm = "%Y/%m/%d %H:%M"):
-    return datetime.fromtimestamp(x)#.strftime(dfm)
+def ts2date(x, dfm = "%Y/%m/%d %H:%M"):
+    return datetime.fromtimestamp(x).strftime(dfm)
 
-@lru_cache()
-def oct2perm(x):
-    return oct(x)[-3:]
-
-
-sps = re.compile(r"[\\/]+")
 
 def fwalk(top, exclude=None, followlinks=False):
     scandir_it = scandir(fspath(top))
@@ -109,23 +101,52 @@ def dwalk(top, exclude=None, followlinks=False):
                 else:
                     yield from dwalk(entry.path, exclude, followlinks)
 
-def fileattr(f, stat=None, return_type=str):
+_filemode_table = (
+    ((0o120000,         "l"),
+     (0o140000,        "s"),  # Must appear before IFREG and IFDIR as IFSOCK == IFREG | IFDIR
+     (0o100000,         "-"),
+     (0o060000,         "b"),
+     (0o040000,         "d"),
+     (0o020000,         "c"),
+     (0o010000,         "p")),
+
+    ((0o0400,         "r"),),
+    ((0o0200,         "w"),),
+    ((0o0100|0o4000, "s"),
+     (0o4000,         "S"),
+     (0o0200,         "x")),
+
+    ((0o0040,         "r"),),
+    ((0o0200,         "w"),),
+    ((0o0010|0o2000, "s"),
+     (0o2000,         "S"),
+     (0o0010,         "x")),
+
+    ((0o0004,         "r"),),
+    ((0o0002,         "w"),),
+    ((0o0001|0o1000, "t"),
+     (0o1000,         "T"),
+     (0o0001,         "x"))
+)
+
+@lru_cache()
+def filemode(mode):
+    perm = []
+    add = perm.append
+    for table in _filemode_table:
+        for bit, char in table:
+            if mode & bit == bit:
+                add(char)
+                break
+        else:
+            add("-")
+    return "".join(perm)
+
+
+def fileattr(f, stat=None):
     stat = stat or os.stat(f)
-    if return_type:
-        return (
-            return_type(oct2perm(stat.st_mode)),
-            getuser(stat.st_uid),
-            getgroup(stat.st_gid),
-            return_type(ts2date(stat.st_mtime)),
-            return_type(stat.st_size),
-            splitext(f)[1],
-            basename(f),
-            f,
-            *sps.split(dirname(f).strip("\\/")),
-            )
-    else:
-        return (
-            oct2perm(stat.st_mode),
+    return (
+            filemode(stat.st_mode),
             getuser(stat.st_uid),
             getgroup(stat.st_gid),
             ts2date(stat.st_mtime),
@@ -133,14 +154,14 @@ def fileattr(f, stat=None, return_type=str):
             splitext(f)[1],
             basename(f),
             f,
-            *sps.split(dirname(f).strip("\\/")),
+            *f.replace("\\", "/").strip("/").split("/"),
             )
 
 def _tree(func, fn, exclude=None, followlinks=False, header=True):
 
     i = 0
 
-    for g in glob(abspath(fn)):
+    for g in glob(abspath(fn)):#TODO readlink?
         if i == 0 and header:
             yield ["mode", "uname", "gname", "mtime", "size", "ext", "name", "fullpath", "link", "dirnest"]
 
@@ -171,10 +192,11 @@ def main():
     padd = parser.add_argument
 
     padd('-o', '--outfile',
-         type=str,
+         type=lambda f: lambda e: codecs.open(f, mode="w", encoding=e, errors="replace"),
          help='outputfile path',
-         default=None,
+         default=lambda e: io.TextIOWrapper(sys.stdout.buffer, encoding=e, errors="replace"),
     )
+    
     padd('-t',
         '--type',
         help='filter file type , file=>f or dir=>d (default file)',
@@ -210,14 +232,7 @@ def main():
 
     func = dict(f=filestree, d=dirstree)[args.type.lower()[0]]
 
-    kw = dict(encoding=args.encoding, errors="replace")
-
-    if args.outfile:
-        outfile = codecs.open(args.outfile, mode="w", **kw)
-    else:
-        outfile = io.TextIOWrapper(sys.stdout.buffer, **kw)
-
-    with outfile:
+    with args.outfile(args.encoding) as outfile:
         for i, filename in enumerate(args.filename):
             for row in func(filename, exclude=args.exclude, header=args.noheader and i == 0):
                 print(args.sep.join(row), file=outfile)
