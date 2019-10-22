@@ -1,5 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+
+list directory infomation tools
+
+MIT License
+
+"""
+
+__version__ = "0.0.2"
+__author__ = "m.yama"
+
+
+__all__ = ["fwalk", "dwalk", "filestree", "dirstree"]
+
+
 import sys
 import re
 from glob import glob
@@ -192,14 +207,16 @@ def main():
 
     args = parser.parse_args()
     func = dict(f=filestree, d=dirstree)[args.type.lower()[0]]
+
     if args.outfile:
         outfile = codecs.open(args.outfile, mode="w", encoding=args.encoding, errors="replace")
     else:
         outfile = sys.stdout
 
-    for i, filename in enumerate(args.filename):
-        for row in func(filename, exclude=args.exclude, header=args.noheader and i == 0):
-            print(args.sep.join(row), file=outfile)
+    with outfile:
+        for i, filename in enumerate(args.filename):
+            for row in func(filename, exclude=args.exclude, header=args.noheader and i == 0):
+                print(args.sep.join(row), file=outfile)
 
 
 def test():
