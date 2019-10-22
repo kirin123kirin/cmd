@@ -167,10 +167,14 @@ def _tree(func, fn, exclude=None, followlinks=False, header=True):
 
         if isdir(g):
             for f in func(g, exclude, followlinks):
+                if func is fwalk and f.name.startswith("~$"):
+                    continue
                 yield fileattr(f.path, f.stat())
                 i += 1
 
         else:
+            if func is fwalk and basename(g).startswith("~$"):
+                continue
             yield fileattr(g)
             i += 1
 
