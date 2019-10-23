@@ -17,7 +17,7 @@ __all__ = ["fwalk", "dwalk", "filestree", "dirstree", "filemode"]
 
 import sys
 import os
-from os.path import basename, splitext, abspath, isdir, islink, dirname
+from os.path import basename, splitext, abspath, isdir, dirname
 from os import scandir, fspath
 
 from datetime import datetime
@@ -341,23 +341,6 @@ def _UnpackUnicodeZ (fmt, buf) :
     fmtlen = struct.calcsize(fmt)
     return struct.unpack (fmt, buf[0:fmtlen])
 
-
-def readlink(path, default="", ignore_error=True):
-    if ignore_error:
-        try:
-            if path.endswith(".lnk"):
-                return str(MSShortcut(path).targetPath)
-            if is_posix and islink(path):
-                return os.readlink(path)
-        except (ValueError, OSError) as e:
-            return "[{}]: {}".format(type(e).__name__, e)
-    else:
-        if path.endswith(".lnk"):
-            return str(MSShortcut(path).targetPath)
-        if is_posix and islink(path):
-            return os.readlink(path)
-    return default
-
 @lru_cache()
 def ts2date(x, dfm = "%Y/%m/%d %H:%M"):
     return datetime.fromtimestamp(x).strftime(dfm)
@@ -454,10 +437,21 @@ def filemode(mode):
     return "".join(perm)
 
 
-def fileattr(f, stat=None, link="", result_type=None):
+def fileattr(f, stat=None, followlinks=False, result_type=None):
     stat = stat or os.stat(f)
+    mode = stat.st_mode
+    link = ""
+    if followlinks is False:
+        try:
+            if f.endswith(".lnk"):
+                link = str(MSShortcut(f).targetPath)
+            elif mode & 0o120000 == 0o120000:
+                link = os.readlink(f)
+        except (ValueError, OSError) as e:
+                link = "[{}]: {}".format(type(e).__name__, e)
+    
     return (
-            filemode(stat.st_mode),
+            filemode(mode),
             getuser(stat.st_uid),
             getgroup(stat.st_gid),
             ts2date(stat.st_mtime),
@@ -473,7 +467,7 @@ def _tree(func, fn, exclude=None, followlinks=False, header=True):
 
     i = 0
 
-    for g in glob(abspath(fn)):#TODO readlink?
+    for g in glob(abspath(fn)):
         if i == 0 and header:
             yield ["mode", "uname", "gname", "mtime", "size", "ext", "name", "fullpath", "link", "dirnest"]
 
@@ -481,14 +475,15 @@ def _tree(func, fn, exclude=None, followlinks=False, header=True):
             for f in func(g, exclude, followlinks):
                 if func is fwalk and f.name.startswith("~$"):
                     continue
-
-                yield fileattr(f.path, f.stat(), link="" if followlinks else readlink(f.path), result_type=str)
+                
+                yield fileattr(f.path, f.stat(), followlinks=followlinks, result_type=str)
                 i += 1
 
+        elif func is fwalk and basename(g).startswith("~$"):
+            continue
+        
         else:
-            if func is fwalk and basename(g).startswith("~$"):
-                continue
-            yield fileattr(g, link="" if followlinks else readlink(g), result_type=str)
+            yield fileattr(g, followlinks=followlinks, result_type=str)
             i += 1
 
     if i == 0:
@@ -560,6 +555,7 @@ def test():
     def test_filestree():
         i = 0
         for i, x in enumerate(filestree(".")):
+            print(x)
             pass
 
         assert i > 0
