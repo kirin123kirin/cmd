@@ -17,7 +17,7 @@ __all__ = ["fwalk", "dwalk", "filestree", "dirstree", "filemode"]
 
 import sys
 import os
-from os.path import basename, splitext, abspath, isdir, dirname
+from os.path import basename, splitext, normpath, isdir, dirname
 from os import scandir, fspath
 
 from datetime import datetime
@@ -467,7 +467,7 @@ def _tree(func, fn, exclude=None, followlinks=False, header=True):
 
     i = 0
 
-    for g in glob(abspath(fn)):
+    for g in glob(normpath(fn)):
         if i == 0 and header:
             yield ["mode", "uname", "gname", "mtime", "size", "ext", "name", "fullpath", "link", "dirnest"]
 

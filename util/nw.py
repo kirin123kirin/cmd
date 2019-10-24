@@ -21,7 +21,7 @@ HAN = "".join(chr(0x21 + i) for i in range(94))
 def to_hankaku(s):
     return s.translate(str.maketrans(ZEN, HAN))
 
-rev4 = re.compile(r"(?:(?:[1-9]?\d|1\d{2}|2[0-4]\d|25[0-5])\.){3}(?:[1-9]?\d|1\d{2}|2[0-4]\d|25[0-5])(?:[/:][\.:\d]+)?")
+rev4 = re.compile(r"(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)(?:[/:][\.:\d]+)?")
 
 ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast"])
 
@@ -136,29 +136,29 @@ def main():
     padd('-f', '--form', type=str, default=FORMAT,
          help='Usable Keyword formating {}'.format(tuple("{" + x + "}" for x in ipinfo._fields)))
 
-    padd('-w', '--withorgdata', action="store_true", default=False,
+    padd('-w', '--withorgdata', action="store_true",
          help='Output data with original data')
 
     args = ps.parse_args()
 
     callback = lambda x: args.form.format(**x._asdict())
 
+    wd = args.withorgdata
+
     with StringIO() as ret:
 
         lines = StringIO(getclip())
 
-        if args.withorgdata:
-            for line in lines:
-                for n, m, err in tokenip(line, callback=callback):
-                    if err is None or err.startswith("Nothing data"):
-                        ret.write("{}{}".format(n, m))
-                    else:
-                        ret.write("{}{}\t<- [ERROR]{}".format(n, m, err))
+        for line in lines:
+            for n, m, err in tokenip(line, callback=callback):
+                if err is None or err.startswith("Nothing data"):
+                    ret.write("{}{}".format(n if wd else "", m))
+                else:
+                    ret.write("{}{}\t<- [ERROR]{}".format(n if wd else "", m, err))
 
-        else:
-            for line in lines:
-                for n, m, err in tokenip(line, callback=callback):
-                    print("[ERR] " + err if err else m, file=ret)
+            if not wd:
+                ret.write("\n") #TODO last line in "\n"
+
 
         clip(ret.getvalue())
 
