@@ -3,8 +3,8 @@ set WDIR=%TEMP%\pythonsrc
 set VERSION=%1
 
 if "%VERSION%" == "" (
-  echo "ˆø”‚ª‚ ‚è‚Ü‚¹‚ñBƒAƒbƒvƒf[ƒg‚µ‚½‚¢ƒo[ƒWƒ‡ƒ“‚ğw’è‚µ‚Ä‚­‚¾‚³‚¢B"
-  echo "—á: pythonupgrade.bat 3.7.2"
+  echo "å¼•æ•°ãŒã‚ã‚Šã¾ã›ã‚“ã€‚ã‚¢ãƒƒãƒ—ãƒ‡ãƒ¼ãƒˆã—ãŸã„ãƒãƒ¼ã‚¸ãƒ§ãƒ³ã‚’æŒ‡å®šã—ã¦ãã ã•ã„ã€‚"
+  echo "ä¾‹: pythonupgrade.bat 3.7.2"
   pause
   exit /b 1
 )
@@ -60,8 +60,8 @@ REM move python Y:\usr\local\
 rem wget https://www.python.org/ftp/python/%VERSION%/python-%VERSION%-embed-amd64.zip
 
 wget --no-check-certificate https://raw.githubusercontent.com/pypa/get-pip/master/get-pip.py
-REM python get-pip.py
-REM del get-pip.py
+python get-pip.py install pip
+del get-pip.py
 
-REM pip install -r %APPROOT%\dotfile\python\requirements.txt
-REM pip install -r %APPROOT%\dotfile\python\requirements_win.txt
+REM pip install -r Y:\dotfile\python\requirements.txt
+REM pip install -r Y:\dotfile\python\requirements_win.txt
