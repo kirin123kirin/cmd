@@ -104,6 +104,7 @@ def parse(rows):
         dat = dict(zip(header, x.value))
         get = dat.get
 
+        group_id = get("group_id", "")
         nwname = get("network_id", "")
         server = get("_server_node_id")
         host = get("_host_node_id")
@@ -140,9 +141,9 @@ def parse(rows):
         # make dictionary
         key = (nwname, nwip)
         if key in networks:
-            networks[ key ].append( (node_id, ip) )
+            networks[ key ].append( (node_id, ip, group_id) )
         else:
-            networks[ key ] = [ (node_id, ip) ]
+            networks[ key ] = [ (node_id, ip, group_id) ]
 
     # create Diagram Object Data
     na = networks.copy().keys()
@@ -155,24 +156,41 @@ def parse(rows):
 
     # finalize make data
     ret = []
+    g = {}
+
     for (nwid, nwadr), nodes in networks.items():
 
         # many ip addresses
         n = {}
 
-        for node_id, ip in nodes:
+        for node_id, ip, gid in nodes:
             if node_id in n:
                 n[node_id].append(ip)
             else:
                 n[node_id] = [ip]
 
+            if gid and gid.strip():
+                if gid in g:
+                    g[gid].append(node_id)
+                else:
+                    g[gid] = [node_id]
+
+
         ret.append(
-            Network(
-                id=nwid,
-                stmts=[Attr(name='address', value=nwadr),
-                  *[Node(id=nid, attrs=[Attr(name='address', value=", ".join(ips))]) for nid, ips in n.items()]
+            Network(id=nwid, stmts=[
+                Attr(name='address', value=nwadr),
+                    *[Node(id=nid, attrs=[Attr(name='address', value=", ".join(ips))]) for nid, ips in n.items()]
             ])
         )
+
+    if g:
+        return [
+            Group(id=gi, stmts=[
+                Attr(name='label', value=gi),
+                Attr(name='fontsize', value="16"),
+                Attr(name='textcolor', value="#FF0000"),
+                    *[Node(id=nd, attrs=[]) for nd in ni]]) for gi, ni in g.items()
+                ] + ret
 
     return ret
 
@@ -197,8 +215,16 @@ def render(rows, outpath=None, outtype="SVG", autoopen=True):
 
         subprocess.check_call(cmd + app.options.output, shell=True)
 
+def test(diag):
+    app = NwdiagApp()
+    app.writediag(diag, outpath=None)
+    subprocess.check_call("start " + app.options.output, shell=True)
 
-if __name__ == "__main__":
+def main():
     rows = readrow.clipboard("csv")
     render(rows)
 
+if __name__ == "__main__":
+    main()
+#    diag = Diagram(id=['nwdiag', None], stmts=[Network(id='Sample_front', stmts=[Attr(name='address', value='"192.168.10.0/24"'), Group(id='web', stmts=[Node(id='web01', attrs=[Attr(name='address', value='".1"')]), Node(id='web02', attrs=[Attr(name='address', value='".2"')])])]), Network(id='Sample_back', stmts=[Attr(name='address', value='"192.168.20.0/24"'), Node(id='web01', attrs=[Attr(name='address', value='".1"')]), Node(id='web02', attrs=[Attr(name='address', value='".2"')]), Node(id='db01', attrs=[Attr(name='address', value='".101"')]), Node(id='db02', attrs=[Attr(name='address', value='".102"')]), Group(id='db', stmts=[Attr(name='label', value='hoge'), Node(id='db01', attrs=[]), Node(id='db02', attrs=[])])])])
+#    test(diag)
