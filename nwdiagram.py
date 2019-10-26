@@ -1,117 +1,204 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import pandas as pd
 import os
-import codecs
-import sys
-import traceback
 from tempfile import gettempdir
 import subprocess
-from pathlib import Path
+import types
 
-from blockdiag.command import BlockdiagApp
-from seqdiag.command import SeqdiagApp
-from actdiag.command import ActdiagApp
-from nwdiag.command import NwdiagApp
-from rackdiag.command import RackdiagApp
-from packetdiag.command import PacketdiagApp
+from blockdiag.utils.bootstrap import Application
+from blockdiag.utils.logging import error
+import nwdiag
+import nwdiag.builder
+import nwdiag.drawer
+import nwdiag.parser
+from nwdiag.parser import Diagram, Network, Group, Node, Attr, Edge, Peer, Route, Extension, Statements
+
+from util import readrow, to_hankaku
+from util.nw import getipinfo
 
 
-iswin = os.name == "nt"
+class NwdiagApp(Application):
+    module = nwdiag
+    code = ""
+    outtmp = os.path.join(gettempdir(), "tmp_nwdiag.")
+    _options = types.SimpleNamespace(
+        antialias=None,
+        config=None,
+        debug=None,
+        output=None,
+        font=[],
+        fontmap=None,
+        ignore_pil=False,
+        transparency=True,
+        size=None,
+        type="SVG",
+        nodoctype=None,
+        input="",
+        )
+
+    @property
+    def options(self):
+        op = self._options
+        if op.output is None:
+            op.output = self.outtmp + op.type.lower()
+        return op
+
+    def writediag(self, parsed_diag, outpath=None):
+        if outpath:
+            self.options.output = outpath
+
+        try:
+            self.create_fontmap()
+            self.setup()
+            return self.build_diagram(parsed_diag)
+        except SystemExit as e:
+            return e
+        except UnicodeEncodeError:
+            error("UnicodeEncodeError caught (check your font settings)")
+            return -1
+        finally:
+            self.cleanup()
 
 
+def _cleanse_header(header):
+    _cleansing = {
+        "システム": "group_id",
+        "system": "group_id",
 
-def render(func, diag, outtype="svg"):
-    p = Path(sys.argv[0])
-    f = os.path.join(gettempdir(), p.name + ".diag")
-    with codecs.open(f, "w", encoding="utf-8") as tmp:
-        tmp.write(diag)
-        out = "{}.{}".format(Path(f).stem, outtype)
+        "セグメント": "network_id",
+        "ネットワーク": "network_id",
+        "nw": "network_id",
+        "segment": "network_id",
 
-    try:
-        if os.path.exists(out):
-            os.remove(out)
-        func().run([f, "-T", outtype])
-    except:
-        traceback.print_exc()
+        "サーバ": "_server_node_id",
+        "server": "_server_node_id",
+
+        "ホスト": "_host_node_id",
+        "host": "_host_node_id",
+
+        "ipアドレス": "_ip",
+        "ip": "_ip",
+
+        "プレフィクス": "_prefix",
+        "ビットマスク": "_prefix",
+        "prefix": "_prefix",
+        "bitmask": "_prefix",
+
+        "サブネットマスク": "_subnet",
+        "サブネット": "_subnet",
+        "ネットマスク": "_subnet",
+        "subnetmask": "_subnet",
+        "subnet": "_subnet",
+        "netmask": "_subnet"
+    }
+
+    cleaned = [to_hankaku(x).lower().replace(" ", "").replace("名", "") for x in header]
+    return [_cleansing.get(h, h) for h in cleaned]
+
+def parse(rows):
+    header = _cleanse_header(next(rows).value)
+
+    networks = {}
+
+    for x in rows:
+        dat = dict(zip(header, x.value))
+        get = dat.get
+
+        nwname = get("network_id", "")
+        server = get("_server_node_id")
+        host = get("_host_node_id")
+        ip = get("_ip")
+        prefix = get("_prefix")
+        subnet = get("_subnet")
+
+        # server hostname normalize
+        if server and host:
+            node_id = "{}\n({})".format(server, host)
+        elif server and not host:
+            node_id = server
+        elif not server and host:
+            node_id = host
+        else:
+            node_id = None
+
+        # calculate NW address
+
+        if prefix and subnet:
+            ip_prefix = ip + "/" + prefix
+        elif prefix and not subnet:
+            ip_prefix = ip + "/" + prefix
+        elif not prefix and subnet:
+            ip_prefix = ip + "/" + subnet
+        else:
+            ip_prefix = ip
+
+        # calculate NW address
+        nwip = getipinfo(ip_prefix , lambda x: "{}/{}".format(x.nwadr, x.bitmask))
+        if subnet:
+            nwip += "\n({})".format(subnet)
+
+        # make dictionary
+        key = (nwname, nwip)
+        if key in networks:
+            networks[ key ].append( (node_id, ip) )
+        else:
+            networks[ key ] = [ (node_id, ip) ]
+
+    # create Diagram Object Data
+    na = networks.copy().keys()
+    nb = dict(na)
+    if len(na) > len(nb):
+        for k, v in na:
+            if k in nb:
+                new = ("{}\n({})".format(k, v) if k else v, None)
+                networks[new] = networks.pop((k, v))
+
+    # finalize make data
+    ret = []
+    for (nwid, nwadr), nodes in networks.items():
+
+        # many ip addresses
+        n = {}
+
+        for node_id, ip in nodes:
+            if node_id in n:
+                n[node_id].append(ip)
+            else:
+                n[node_id] = [ip]
+
+        ret.append(
+            Network(
+                id=nwid,
+                stmts=[Attr(name='address', value=nwadr),
+                  *[Node(id=nid, attrs=[Attr(name='address', value=", ".join(ips))]) for nid, ips in n.items()]
+            ])
+        )
+
+    return ret
+
+
+def render(rows, outpath=None, outtype="SVG", autoopen=True):
+    diag = Diagram(id=['nwdiag', None], stmts=parse(rows))
+
+    if diag.stmts:
+        NwdiagApp._options.type = outtype
+
+        app = NwdiagApp()
+        app.writediag(diag, outpath=outpath)
+
     else:
-        if iswin:
+        raise ValueError("empty input data?")
+
+    if autoopen:
+        if os.name == "nt":
             cmd = "start "
         else:
             cmd = "open "
-        subprocess.check_call(cmd + out, shell=True)
-    finally:
-        os.remove(f)
 
-
-def nwdiag(df, nw_name="ネットワーク名", nw_addr="ネットワークアドレス", host_name="ホスト名", ip_addr="IPアドレス", outtype="svg"):
-    tp = """nwdiag {{
-        {}
-    }}
-    """
-    
-    nw = """
-      network {} {{
-          address = "{}";
-          {}
-      }}
-    """
-    
-    ht = """
-          {} [address = "{}"];
-    """
-    
-    nws = ""
-    for (nwnm, nwad), gdf in df.groupby([nw_name, nw_addr]):
-        host = ""
-        for hostnm, ipdf in gdf.groupby([host_name]):
-            adr = ", ".join(ipdf[ip_addr].tolist()) 
-            host += ht.format(hostnm, adr)
-        nws += nw.format(nwnm, nwad, host)
-    diag = tp.format(nws)
-
-    render(NwdiagApp, diag, outtype)
-
-def blockdiag():
-    pass
-
-#blockdiag admin {
-#  index [label = "List of FOOs"];
-#  add [label = "Add FOO"];
-#  add_confirm [label = "Add FOO (confirm)"];
-#  edit [label = "Edit FOO"];
-#  edit_confirm [label = "Edit FOO (confirm)"];
-#  show [label = "Show FOO"];
-#  delete_confirm [label = "Delete FOO (confirm)"];
-#
-#  index -> add  -> add_confirm  -> index;
-#  index -> edit -> edit_confirm -> index;
-#  index -> show -> index;
-#  index -> delete_confirm -> index;
-#}
-
-
-
-def seqdiag():
-    pass
-
-def actdiag():
-    pass
-
-def rackdiag():
-    pass
-
-def packetdiag():
-    pass
-
-
+        subprocess.check_call(cmd + app.options.output, shell=True)
 
 
 if __name__ == "__main__":
-    outtype = "svg"
-    df = pd.read_clipboard(dtype="object", engine="python")
-    nwdiag(df, nw_name="ネットワーク名", nw_addr="ネットワークアドレス", host_name="ホスト名", ip_addr="IPアドレス", outtype=outtype)
-
-
-
+    rows = readrow.clipboard("csv")
+    render(rows)
 
