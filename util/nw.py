@@ -8,12 +8,19 @@ __license__ = 'MIT'
 __date__    = 'Oct 18 17:35:47 2019'
 __version__ = '0.0.2'
 
+__all__ = [
+    "isin_nw",
+    "getipinfo",
+    "tokenip",
+    "formatip",
+]
+
 from collections import namedtuple
 from ipaddress import ip_interface
 import re
 from itertools import zip_longest
 
-FORMAT = "{ipadr}\t{nwadr}\t{netmask}\t/{bitmask}"
+FORMAT = "{nwadr}/{bitmask}\t{netmask}"
 
 ZEN = "".join(chr(0xff01 + i) for i in range(94))
 HAN = "".join(chr(0x21 + i) for i in range(94))
@@ -124,7 +131,28 @@ def main():
     import os
     import sys
     from io import StringIO
-    from pyperclip import paste as getclip, copy as clip
+    try:
+        from pyperclip import paste as getclip, copy as setclip
+    except ModuleNotFoundError:
+        if os.name == "nt":
+            import tkinter as tk
+            def getclip():
+                a=tk.Tk()
+                return a.clipboard_get()
+
+            import subprocess
+            def setclip(text):
+                if not isinstance(text, (str, int, float, bool)):
+                    raise RuntimeError('only str, int, float, and bool values can be copied to the clipboard, not %s' % (text.__class__.__name__))
+                text = str(text)
+                p = subprocess.Popen(['clip.exe'],
+                                     stdin=subprocess.PIPE, close_fds=True)
+                p.communicate(input=text.encode("cp932"))
+
+        else:
+            getclip = ModuleNotFoundError("Please Install command: pip3 install pyperclip")
+            setclip = ModuleNotFoundError("Please Install command: pip3 install pyperclip")
+
     from argparse import ArgumentParser
 
     ps = ArgumentParser(prog=os.path.basename(sys.argv[0]),
@@ -160,7 +188,7 @@ def main():
                 ret.write("\n") #TODO last line in "\n"
 
 
-        clip(ret.getvalue())
+        setclip(ret.getvalue())
 
 if __name__ == "__main__":
 #    test()

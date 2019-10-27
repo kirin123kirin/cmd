@@ -352,9 +352,26 @@ except ModuleNotFoundError:
     LAParams = LTTextBox = LTTextLine = NotInstalledModuleError("Please Install command: pip3 install pdfminer3k")
 
 try:
-    from pyperclip import paste as getclip
+    from pyperclip import paste as getclip, copy as setclip
 except ModuleNotFoundError:
-    getclip = NotInstalledModuleError("Please Install command: pip3 install pyperclip")
+    if os.name == "nt":
+        import tkinter as tk
+        def getclip():
+            a=tk.Tk()
+            return a.clipboard_get()
+
+        import subprocess
+        def setclip(text):
+            if not isinstance(text, (str, int, float, bool)):
+                raise RuntimeError('only str, int, float, and bool values can be copied to the clipboard, not %s' % (text.__class__.__name__))
+            text = str(text)
+            p = subprocess.Popen(['clip.exe'],
+                                 stdin=subprocess.PIPE, close_fds=True)
+            p.communicate(input=text.encode("cp932"))
+
+    else:
+        getclip = NotInstalledModuleError("Please Install command: pip3 install pyperclip")
+        setclip = NotInstalledModuleError("Please Install command: pip3 install pyperclip")
 
 try:
     from sqlalchemy import create_engine, Table, MetaData

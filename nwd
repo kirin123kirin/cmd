@@ -1,0 +1,3 @@
+#!/bin/bash
+$PYTHONPATH/bin/python3 util/$0.py $@
+

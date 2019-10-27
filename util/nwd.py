@@ -134,9 +134,12 @@ def parse(rows):
             ip_prefix = ip
 
         # calculate NW address
-        nwip = getipinfo(ip_prefix , lambda x: "{}/{}".format(x.nwadr, x.bitmask))
-        if subnet:
-            nwip += "\n({})".format(subnet)
+        try:
+            nwip = getipinfo(ip_prefix , lambda x: "{}/{}".format(x.nwadr, x.bitmask))
+            if subnet:
+                nwip += "\n({})".format(subnet)
+        except Exception as e:
+            nwip = str(e)
 
         # make dictionary
         key = (nwname, nwip)
