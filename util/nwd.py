@@ -12,6 +12,7 @@ import nwdiag.builder
 import nwdiag.drawer
 import nwdiag.parser
 from nwdiag.parser import Diagram, Network, Group, Node, Attr, Edge, Peer, Route, Extension, Statements
+from functools import lru_cache
 
 from util import readrow, to_hankaku
 from util.nw import getipinfo
@@ -95,6 +96,10 @@ def _cleanse_header(header):
     cleaned = [to_hankaku(x).lower().replace(" ", "").replace("名", "") for x in header]
     return [_cleansing.get(h, h) for h in cleaned]
 
+@lru_cache()
+def getnwadr(ipa):
+    return getipinfo(ipa, lambda x: [x.nwadr, x.bitmask])
+
 def parse(rows):
     header = _cleanse_header(next(rows).value)
 
@@ -135,7 +140,7 @@ def parse(rows):
 
         # calculate NW address
         try:
-            nwip = getipinfo(ip_prefix , lambda x: "{}/{}".format(x.nwadr, x.bitmask))
+            nwip = getnwadr(ip_prefix)
             if subnet:
                 nwip += "\n({})".format(subnet)
         except Exception as e:
@@ -224,8 +229,26 @@ def test(diag):
     subprocess.check_call("start " + app.options.output, shell=True)
 
 def main():
+	from argparse import ArgumentParser
+
+    ps = ArgumentParser(prog=os.path.basename(sys.argv[0]),
+                        description="ipaddress to nwaddress infomation program\n")
+    padd = ps.add_argument
+
+    padd('-t', '--type', type=str, default="SVG",
+         help='output image file type SVG, or PNG or PDF')
+
+    padd('-o', '--outputfile', type=str, default=None,
+         help='Output data filepath')
+    
+    padd('-q', '--quiet', action="store_true", default=False,
+         help='quiet mode (Stop Auto open)')
+    
+    args = ps.parse_args()
+    
     rows = readrow.clipboard("csv")
-    render(rows)
+    
+    render(rows, type=args.type, outpath=args.outputfile, autoopen=not args.quiet)
 
 if __name__ == "__main__":
     main()

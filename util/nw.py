@@ -6,7 +6,7 @@
 __author__  = 'm.yama'
 __license__ = 'MIT'
 __date__    = 'Oct 18 17:35:47 2019'
-__version__ = '0.0.2'
+__version__ = '0.0.3'
 
 __all__ = [
     "isin_nw",
@@ -131,6 +131,8 @@ def main():
     import os
     import sys
     from io import StringIO
+    import codecs
+    
     try:
         from pyperclip import paste as getclip, copy as setclip
     except ModuleNotFoundError:
@@ -167,13 +169,18 @@ def main():
     padd('-w', '--withorgdata', action="store_true",
          help='Output data with original data')
 
+    padd('-o', '--outputfile', type=str, default=None,
+         help='Output data filepath')
+         
     args = ps.parse_args()
+    
+    outfile = args.outputfile
 
     callback = lambda x: args.form.format(**x._asdict())
 
     wd = args.withorgdata
 
-    with StringIO() as ret:
+    with codecs.open(outfile, "w", encoding="cp932") if outfile else StringIO() as ret:
 
         lines = StringIO(getclip())
 
@@ -187,7 +194,9 @@ def main():
             if not wd:
                 ret.write("\n") #TODO last line in "\n"
 
-
+        if not outfile:
+            print(ret.getvalue())
+            
         setclip(ret.getvalue())
 
 if __name__ == "__main__":
