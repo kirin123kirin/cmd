@@ -13,6 +13,8 @@ import nwdiag.drawer
 import nwdiag.parser
 from nwdiag.parser import Diagram, Network, Group, Node, Attr, Edge, Peer, Route, Extension, Statements
 from functools import lru_cache
+from itertools import groupby
+from operator import itemgetter, attrgetter
 
 from util import readrow, to_hankaku
 from util.nw import getipinfo
@@ -27,7 +29,7 @@ class NwdiagApp(Application):
         config=None,
         debug=None,
         output=None,
-        font=[],
+        font=[os.path.join(os.path.dirname(nwdiag.__file__), "tests", "VLGothic", "VL-Gothic-Regular.ttf")],
         fontmap=None,
         ignore_pil=False,
         transparency=True,
@@ -61,7 +63,7 @@ class NwdiagApp(Application):
             self.cleanup()
 
 
-def _cleanse_header(header):
+def cleansing(rows):
     _cleansing = {
         "システム": "group_id",
         "system": "group_id",
@@ -93,125 +95,154 @@ def _cleanse_header(header):
         "netmask": "_subnet"
     }
 
-    cleaned = [to_hankaku(x).lower().replace(" ", "").replace("名", "") for x in header]
-    return [_cleansing.get(h, h) for h in cleaned]
+    flagattr = False
+
+    if hasattr(rows, "__next__"):
+        _head = next(rows)
+    else:
+        _head = rows.pop(0)
+
+    if hasattr(_head, "value"):
+        _head = _head.value
+        flagattr = True
+
+    cleaned = [to_hankaku(h).lower().replace(" ", "").replace("名", "") for h in _head]
+    head = [_cleansing.get(h, h) for h in cleaned]
+    ret = []
+
+    for row in map(attrgetter("value"), rows) if flagattr else rows:
+        r = dict(zip(head, row))
+        get = lambda x: r.pop(x, "")
+
+        ip, subnet, pref = get("_ip"), get("_subnet"), get("_prefix")
+
+        r["node_id"] = "{}\n({})".format(get("_server_node_id"), get("_host_node_id")).replace("\n()", "")
+        r["node_value"] = ip
+
+        ipa = "{}/{}".format(ip, pref or subnet ).rstrip("/").replace("//", "/")
+        
+        try:
+            nwa = "/".join(map(str, getnwadr(ipa)))
+            r["network_id"] += "\n" + nwa
+            if subnet:
+                r["network_id"] += "\n({})".format(subnet)
+        except ValueError as e:
+            r["network_id"] += str(e)
+        
+        r["network_value"] = ""
+        
+        ret.append(r)
+
+    return ret
 
 @lru_cache()
 def getnwadr(ipa):
     return getipinfo(ipa, lambda x: [x.nwadr, x.bitmask])
 
 def parse(rows):
-    header = _cleanse_header(next(rows).value)
+    rows = cleansing(rows)
 
-    networks = {}
+    networks = []
 
-    for x in rows:
-        dat = dict(zip(header, x.value))
-        get = dat.get
+    groups = []
 
-        group_id = get("group_id", "")
-        nwname = get("network_id", "")
-        server = get("_server_node_id")
-        host = get("_host_node_id")
-        ip = get("_ip")
-        prefix = get("_prefix")
-        subnet = get("_subnet")
+    for (nwid, nwval), row in groupby(rows, itemgetter("network_id", "network_value")):
+        n = Network(id=nwid, stmts=[Attr(name='address', value=nwval)])
+        add = n.stmts.append
 
-        # server hostname normalize
-        if server and host:
-            node_id = "{}\n({})".format(server, host)
-        elif server and not host:
-            node_id = server
-        elif not server and host:
-            node_id = host
-        else:
-            node_id = None
+        for ndid, r in groupby(row, itemgetter("node_id")):
+            node = Node(id=ndid, attrs=[Attr(name="address", value=", ".join(x["node_value"] for x in r))])
+            add(node)
 
-        # calculate NW address
-
-        if prefix and subnet:
-            ip_prefix = ip + "/" + prefix
-        elif prefix and not subnet:
-            ip_prefix = ip + "/" + prefix
-        elif not prefix and subnet:
-            ip_prefix = ip + "/" + subnet
-        else:
-            ip_prefix = ip
-
-        # calculate NW address
-        try:
-            nwip = getnwadr(ip_prefix)
-            if subnet:
-                nwip += "\n({})".format(subnet)
-        except Exception as e:
-            nwip = str(e)
-
-        # make dictionary
-        key = (nwname, nwip)
-        if key in networks:
-            networks[ key ].append( (node_id, ip, group_id) )
-        else:
-            networks[ key ] = [ (node_id, ip, group_id) ]
-
-    # create Diagram Object Data
-    na = networks.copy().keys()
-    nb = dict(na)
-    if len(na) > len(nb):
-        for k, v in na:
-            if k in nb:
-                new = ("{}\n({})".format(k, v) if k else v, None)
-                networks[new] = networks.pop((k, v))
-
-    # finalize make data
-    ret = []
-    g = {}
-
-    for (nwid, nwadr), nodes in networks.items():
-
-        # many ip addresses
-        n = {}
-
-        for node_id, ip, gid in nodes:
-            if node_id in n:
-                n[node_id].append(ip)
-            else:
-                n[node_id] = [ip]
-
-            if gid and gid.strip():
-                if gid in g:
-                    g[gid].append(node_id)
-                else:
-                    g[gid] = [node_id]
-
-
-        ret.append(
-            Network(id=nwid, stmts=[
-                Attr(name='address', value=nwadr),
-                    *[Node(id=nid, attrs=[Attr(name='address', value=", ".join(ips))]) for nid, ips in n.items()]
-            ])
-        )
-
-    if g:
-        return [
-            Group(id=gi, stmts=[
-                Attr(name='label', value=gi),
+        networks.append(n)
+    
+    for gid, row in groupby(rows, itemgetter("group_id")):
+        groups.append(
+            Group(id=gid, stmts=[Attr(name='label', value=gid),
                 Attr(name='fontsize', value="16"),
                 Attr(name='textcolor', value="#FF0000"),
-                    *[Node(id=nd, attrs=[]) for nd in ni]]) for gi, ni in g.items()
-                ] + ret
+                *[Node(id=r["node_id"], attrs=[]) for r in row],
+            ]))
+    
+    if groups:
+        return Diagram(id=['nwdiag', None], stmts=[*groups, *networks])
+    else:
+        return Diagram(id=['nwdiag', None], stmts=networks)
 
-    return ret
+
+#def parse(rows):
+#    rows = cleansing(rows)
+
+
+#    networks = {}
+
+#    for r in rows:
+#        # make dictionary
+#        key = (r["network_id"], r["network_value"])
+#        val = (r["node_id"], r["node_value"], r["group_id"])
+#        if key in networks:
+#            networks[ key ].append( val )
+#        else:
+#            networks[ key ] = [ val ]
+
+#    # create Diagram Object Data
+#    na = networks.copy().keys()
+#    nb = dict(na)
+#    if len(na) > len(nb):
+#        for k, v in na:
+#            if k in nb:
+#                new = ("{}\n({})".format(k, v) if k else v, None)
+#                networks[new] = networks.pop((k, v))
+
+#    # finalize make data
+#    ret = []
+#    g = {}
+
+#    for (nwid, nwadr), nodes in networks.items():
+
+#        # many ip addresses
+#        n = {}
+
+#        for node_id, ip, gid in nodes:
+#            if node_id in n:
+#                n[node_id].append(ip)
+#            else:
+#                n[node_id] = [ip]
+
+#            if gid and gid.strip():
+#                if gid in g:
+#                    g[gid].append(node_id)
+#                else:
+#                    g[gid] = [node_id]
+
+
+#        ret.append(
+#            Network(id=nwid, stmts=[
+#                Attr(name='address', value=nwadr),
+#                    *[Node(id=nid, attrs=[Attr(name='address', value=", ".join(ips))]) for nid, ips in n.items()]
+#            ])
+#        )
+
+#    if g:
+#        return Diagram(id=['nwdiag', None], stmts=[
+#            Group(id=gi, stmts=[
+#                Attr(name='label', value=gi),
+#                Attr(name='fontsize', value="16"),
+#                Attr(name='textcolor', value="#FF0000"),
+#                    *[Node(id=nd, attrs=[]) for nd in ni]]) for gi, ni in g.items()
+#                ] + ret)
+
+#    return Diagram(id=['nwdiag', None], stmts=ret)
 
 
 def render(rows, outpath=None, outtype="SVG", autoopen=True):
-    diag = Diagram(id=['nwdiag', None], stmts=parse(rows))
+    diag = parse(rows)
 
     if diag.stmts:
-        NwdiagApp._options.type = outtype
-
         app = NwdiagApp()
+        app.options.type = outtype
         app.writediag(diag, outpath=outpath)
-
+        print("OUT: " + app.options.output)
     else:
         raise ValueError("empty input data?")
 
@@ -223,34 +254,46 @@ def render(rows, outpath=None, outtype="SVG", autoopen=True):
 
         subprocess.check_call(cmd + app.options.output, shell=True)
 
-def test(diag):
+def test():
+    rows = [['システム名', 'セグメント名', 'サーバ名', 'ホスト名', 'ipアドレス', 'プレフィクス', 'サブネットマスク'],
+ ['なんでやねｎ', 'seg', 'server1', 'host1', '10.111.111.0', '28', '255.255.255.0'],
+ ['nandeyanen', 'seg', 'server2', 'host2', '10.111.111.1', '28', '255.255.255.0'],
+ ['nandeyanen', 'seg', 'server2', 'host2', '10.111.111.2', '28', '255.255.255.0'],
+ ['nandeyanen', 'seg', 'server4', '', '10.111.111.3', '', '']]
+
+    diag = parse(rows)
+    test1(diag)
+
+def test1(diag):
+    import time
+    now = time.time()
     app = NwdiagApp()
-    app.writediag(diag, outpath=None)
-    subprocess.check_call("start " + app.options.output, shell=True)
+    app.options.type = "PNG"
+    app.writediag(diag, "./test.png")
+    assert(os.stat(app.options.output).st_mtime > now)
+    if os.name == "nt":
+        subprocess.check_call("start " + app.options.output, shell=True)
 
 def main():
-	from argparse import ArgumentParser
-
-    ps = ArgumentParser(prog=os.path.basename(sys.argv[0]),
-                        description="ipaddress to nwaddress infomation program\n")
+    import sys
+    from argparse import ArgumentParser
+    ps = ArgumentParser(prog=os.path.basename(sys.argv[0]), description="ipaddress to nwaddress infomation program\n")
     padd = ps.add_argument
-
     padd('-t', '--type', type=str, default="SVG",
          help='output image file type SVG, or PNG or PDF')
-
     padd('-o', '--outputfile', type=str, default=None,
          help='Output data filepath')
-    
+
     padd('-q', '--quiet', action="store_true", default=False,
          help='quiet mode (Stop Auto open)')
-    
+
     args = ps.parse_args()
-    
+
     rows = readrow.clipboard("csv")
-    
-    render(rows, type=args.type, outpath=args.outputfile, autoopen=not args.quiet)
+
+    render(rows, outpath=args.outputfile, outtype=args.type, autoopen=not args.quiet)
 
 if __name__ == "__main__":
     main()
-#    diag = Diagram(id=['nwdiag', None], stmts=[Network(id='Sample_front', stmts=[Attr(name='address', value='"192.168.10.0/24"'), Group(id='web', stmts=[Node(id='web01', attrs=[Attr(name='address', value='".1"')]), Node(id='web02', attrs=[Attr(name='address', value='".2"')])])]), Network(id='Sample_back', stmts=[Attr(name='address', value='"192.168.20.0/24"'), Node(id='web01', attrs=[Attr(name='address', value='".1"')]), Node(id='web02', attrs=[Attr(name='address', value='".2"')]), Node(id='db01', attrs=[Attr(name='address', value='".101"')]), Node(id='db02', attrs=[Attr(name='address', value='".102"')]), Group(id='db', stmts=[Attr(name='label', value='hoge'), Node(id='db01', attrs=[]), Node(id='db02', attrs=[])])])])
-#    test(diag)
+#    test()
+
