@@ -120,18 +120,16 @@ def cleansing(rows):
         r["node_value"] = ip
 
         ipa = "{}/{}".format(ip, pref or subnet ).rstrip("/").replace("//", "/")
-        
+        r["network_value"] = "\n"
         try:
             nwa = "/".join(map(str, getnwadr(ipa)))
             r["network_id"] += "\n" + nwa
             if subnet:
-                r["network_id"] += "\n({})".format(subnet)
+                r["network_value"] += "({})".format(subnet)
         except ValueError as e:
-            r["network_id"] += str(e)
-        
-        r["network_value"] = ""
-        
-        ret.append(r)
+            r["network_id"] += "\nERR: " + str(e)
+        if r["network_id"] and r["node_id"]:
+            ret.append(r)
 
     return ret
 
