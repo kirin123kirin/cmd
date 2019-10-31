@@ -4,11 +4,9 @@ import os
 from tempfile import gettempdir
 import subprocess
 import types
+
 import blockdiag
-import blockdiag.utils
-import blockdiag.utils.bootstrap
 _font = os.path.join(os.path.dirname(blockdiag.__file__), "tests", "VLGothic", "VL-Gothic-Regular.ttf")
-blockdiag.utils.bootstrap.detectfont = lambda x: _font
 
 from blockdiag.utils.bootstrap import Application
 from blockdiag.utils.logging import error
@@ -36,7 +34,7 @@ class NwdiagApp(Application):
         output=None,
         font=[_font],
         fontmap=None,
-        ignore_pil=True,
+        ignore_pil=False,
         transparency=True,
         size=None,
         type="SVG",
