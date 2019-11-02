@@ -130,7 +130,7 @@ def getnwadr(ip, sub=""):
 
 @lru_cache()
 def assert_subnet(prefix, subnet):
-    ret = "".join(bin(int(x)).strip("0b") for x in subnet.split("."))
+    ret = "".join(bin(int(x)).strip("0b") for x in subnet.strip("/").split("."))
     if ret.count("1") == len(ret) == int(prefix.strip("/")):
         return
     raise ValueError("サブネットマスクの {} と {} が矛盾してます".format(repr(prefix), repr(subnet)))
@@ -251,27 +251,39 @@ def render(rows, outpath=None, outtype="SVG", autoopen=True):
         subprocess.check_call(cmd + app.options.output, shell=True)
 
 def test():
-    rows = [['システム名', 'セグメント名', 'サーバ名', 'ホスト名', 'ipアドレス', 'プレフィクス', 'サブネットマスク'],
- ['なんでやねｎ', 'seg', 'server1', 'host1', '10.111.111.0', '28', '255.255.255.0'],
- ['nandeyanen', 'seg', 'server2', 'host2', '10.111.111.1', '28', '255.255.255.0'],
- ['nandeyanen', 'seg', 'server2', 'host2', '10.111.111.2', '28', '255.255.255.0'],
- ['', 'seg', 'server4', '', '10.111.111.3', '', '']]
+    from datetime import datetime
 
-    diag = parse(rows)
-    test1(diag)
+    rows = [
+        ['システム名', 'セグメント名', 'サーバ名', 'ホスト名', 'ipアドレス', 'プレフィクス', 'サブネットマスク'],
+        ['なんでやねｎ', 'seg', 'server1', 'host1', '10.111.111.0', '28', '255.255.255.0'],
+        ['nandeyanen', 'seg', 'server2', 'host2', '10.111.111.1', '28', '255.255.255.0'],
+        ['nandeyanen', 'seg', 'server2', 'host2', '10.111.111.2', '28', '255.255.255.0'],
+        ['', 'seg', 'server4', '', '10.111.111.3', '', '']]
 
-def test1(diag):
-    import time
-    now = time.time()
-    app = NwdiagApp()
-    app.writediag(diag, "./test.svg")
+    def test_writediag():
+        import time
+        now = time.time()
+        diag = parse(rows)
+        app = NwdiagApp()
+        app.writediag(diag, "./test.svg")
 
-    assert(os.stat(app.options.output).st_mtime > now)
-    if os.name == "nt":
-        subprocess.check_call("start " + app.options.output, shell=True)
+        assert(os.stat(app.options.output).st_mtime > now)
+        if os.name == "nt":
+            subprocess.check_call("start " + app.options.output, shell=True)
 
-def test2():
-    assert_subnet("23", "255.255.255.192")
+    def test_assert_subnet():
+        try:
+            assert_subnet("23", "255.255.255.192")
+        except ValueError:
+            pass
+
+
+    for x, func in list(locals().items()):
+        if x.startswith("test_") and callable(func):
+            t1 = datetime.now()
+            func()
+            t2 = datetime.now()
+            print("{} : time {}".format(x, t2-t1))
 
 def main():
     import sys
@@ -295,7 +307,7 @@ def main():
 if __name__ == "__main__":
 #    import sys
 #    sys.argv.append("-q")
+
 #    main()
     test()
-#    test2()
 
