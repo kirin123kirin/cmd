@@ -133,7 +133,7 @@ def assert_subnet(prefix, subnet):
     ret = "".join(bin(int(x)).strip("0b") for x in subnet.strip("/").split("."))
     if ret.count("1") == len(ret) == int(prefix.strip("/")):
         return
-    raise ValueError("サブネットマスクの {} と {} が矛盾してます".format(repr(prefix), repr(subnet)))
+    raise ValueError("サブネットマスクの\n{} と {}\nが矛盾してます".format(repr(prefix), repr(subnet)))
 
 def reformat(head, rows):
     for row in rows:
@@ -175,7 +175,7 @@ def reformat(head, rows):
                 assert_subnet(pref, subnet)
 
         except ValueError as e:
-            r["node_value"] = "[ERR]\n" + str(e)
+            r["node_value"] += "\n[ERR]\n" + str(e)
 
 
         if r["network_id"].strip() and r["node_id"].strip():
