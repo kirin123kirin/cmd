@@ -6,7 +6,10 @@ import subprocess
 import types
 
 import blockdiag
-_font = os.path.join(os.path.dirname(blockdiag.__file__), "tests", "VLGothic", "VL-Gothic-Regular.ttf")
+from blockdiag.imagedraw import textfolder
+_lines = lambda s: list(textfolder.splitlabel(s.string))
+textfolder.VerticalTextFolder._lines = _lines
+textfolder.HorizontalTextFolder._lines = _lines
 
 from blockdiag.utils.bootstrap import Application
 from blockdiag.utils.logging import error
@@ -20,7 +23,54 @@ from itertools import groupby
 from operator import itemgetter, attrgetter
 
 from util import readrow, to_hankaku
-from util.nw import getipinfo
+from util.nw import getipinfo, isin_nw
+
+_cleansing = {
+    "システム": "group_id",
+    "system": "group_id",
+
+    "セグメント": "network_id",
+    "ネットワーク": "network_id",
+    "nw": "network_id",
+    "segment": "network_id",
+
+    "デフォルトゲートウェイ": "_default_gw",
+    "ゲートウェイ": "_default_gw",
+    "デフォゲ": "_default_gw",
+    "defaultgateway": "_default_gw",
+    "defaultgw": "_default_gw",
+    "dgw": "_default_gw",
+    "gw": "_default_gw",
+
+    "サーバ": "_server_node_id",
+    "設備": "_server_node_id",
+    "装置": "_server_node_id",
+    "機器": "_server_node_id",
+    "端末": "_server_node_id",
+    "server": "_server_node_id",
+
+    "ホスト": "_host_node_id",
+    "host": "_host_node_id",
+
+    "ipアドレス": "_ip",
+    "ip": "_ip",
+
+    "networkaddress": "_network_address",
+    "ネットワークアドレス": "_network_address",
+
+    "プレフィクス": "_prefix",
+    "ビットマスク": "_prefix",
+    "prefix": "_prefix",
+    "bitmask": "_prefix",
+
+    "サブネットマスク": "_subnet",
+    "サブネット": "_subnet",
+    "ネットマスク": "_subnet",
+    "subnetmask": "_subnet",
+    "subnet": "_subnet",
+    "netmask": "_subnet"
+}
+_cleansing = {to_hankaku(k): v for k, v in _cleansing.items()}
 
 
 class NwdiagApp(Application):
@@ -32,7 +82,7 @@ class NwdiagApp(Application):
         config=None,
         debug=None,
         output=None,
-        font=[_font],
+        font=[os.path.join(os.path.dirname(blockdiag.__file__), "tests", "VLGothic", "VL-Gothic-Regular.ttf")],
         fontmap=None,
         ignore_pil=False,
         transparency=True,
@@ -69,70 +119,30 @@ class NwdiagApp(Application):
         finally:
             self.cleanup()
 
-def normadr(ip, sub=""):
-    r = "{}/{}".format(ip, sub).rstrip("/").replace("//", "/")
-    if r.startswith("/"):
-        return ""
-    return r
 
-def cleansing(rows):
-    _cleansing = {
-        "システム": "group_id",
-        "system": "group_id",
 
-        "セグメント": "network_id",
-        "ネットワーク": "network_id",
-        "nw": "network_id",
-        "segment": "network_id",
+@lru_cache()
+def getnwadr(ip, sub=""):
+    ipa = "{}/{}".format(ip, sub).rstrip("/").replace("//", "/")
+    if ipa.startswith("/"):
+        ipa = ""
+    return getipinfo(ipa, lambda x: "{}/{}".format(x.nwadr, x.bitmask))
 
-        "サーバ": "_server_node_id",
-        "server": "_server_node_id",
+@lru_cache()
+def assert_subnet(prefix, subnet):
+    ret = "".join(bin(int(x)).strip("0b") for x in subnet.split("."))
+    if ret.count("1") == len(ret) == int(prefix.strip("/")):
+        return
+    raise ValueError("サブネットマスクの {} と {} が矛盾してます".format(repr(prefix), repr(subnet)))
 
-        "ホスト": "_host_node_id",
-        "host": "_host_node_id",
-
-        "ipアドレス": "_ip",
-        "ip": "_ip",
-
-        "networkaddress": "_network_address",
-        "ネットワークアドレス": "_network_address",
-
-        "プレフィクス": "_prefix",
-        "ビットマスク": "_prefix",
-        "prefix": "_prefix",
-        "bitmask": "_prefix",
-
-        "サブネットマスク": "_subnet",
-        "サブネット": "_subnet",
-        "ネットマスク": "_subnet",
-        "subnetmask": "_subnet",
-        "subnet": "_subnet",
-        "netmask": "_subnet"
-    }
-
-    _cleansing = {to_hankaku(k): v for k, v in _cleansing.items()}
-
-    flagattr = False
-
-    if hasattr(rows, "__next__"):
-        _head = next(rows)
-    else:
-        _head = rows.pop(0)
-
-    if hasattr(_head, "value"):
-        _head = _head.value
-        flagattr = True
-
-    cleaned = [to_hankaku(h).lower().replace(" ", "").replace("名", "") for h in _head]
-    head = [_cleansing.get(h, h) for h in cleaned]
-    ret = []
-
-    for row in map(attrgetter("value"), rows) if flagattr else rows:
+def reformat(head, rows):
+    for row in rows:
         r = dict(zip(head, row))
-        get = lambda x: r.pop(x, "")
+        get = lambda x: r.pop(x, "").rstrip()
 
         ip, subnet, pref = get("_ip"), get("_subnet"), get("_prefix")
         server, host = get("_server_node_id"), get("_host_node_id")
+        gw = get("_default_gw")
 
         if not server and not host:
             continue
@@ -147,30 +157,46 @@ def cleansing(rows):
         try:
             nwa = get("_network_address")
             if nwa:
-                nwadr = getnwadr(normadr(nwa, pref or subnet))
+                nwadr = getnwadr(nwa, pref or subnet)
             else:
-                nwadr = getnwadr(normadr(ip, pref or subnet))
+                nwadr = getnwadr(ip, pref or subnet)
 
             r["network_id"] += "\n" + nwadr
             if subnet:
-                r["network_id"] += "\r\n" + subnet
+                r["network_id"] += "\n" + subnet
+
+            if gw and isin_nw(gw, nwadr):
+                r["network_id"] += "\nGW:" + gw
 
             if ip == nwadr.split("/")[0]:
-                raise ValueError("{} is Network Address.".format(ip))
+                raise ValueError("{}は\nネットワークアドレス".format(ip))
 
+            if pref and subnet:
+                assert_subnet(pref, subnet)
 
         except ValueError as e:
-            r["network_id"] = "ERR: " + str(e)
+            r["node_value"] = "[ERR]\n" + str(e)
 
 
         if r["network_id"].strip() and r["node_id"].strip():
-            ret.append(r)
+            yield r
 
-    return ret
 
-@lru_cache()
-def getnwadr(ipa):
-    return getipinfo(ipa, lambda x: "{}/{}".format(x.nwadr, x.bitmask))
+def cleansing(rows):
+    if hasattr(rows, "__next__"):
+        _head = next(rows)
+    else:
+        _head = rows.pop(0)
+
+    if hasattr(_head, "value"):
+        _head = _head.value
+        rows = map(attrgetter("value"), rows)
+
+    cleaned = [to_hankaku(h).lower().replace(" ", "").replace("名", "") for h in _head]
+    head = [_cleansing.get(h, h) for h in cleaned]
+
+    return list(reformat(head, rows))
+
 
 def parse(rows):
     rows = cleansing(rows)
@@ -194,7 +220,7 @@ def parse(rows):
             if gid:
                 groups.append(
                     Group(id=gid, stmts=[Attr(name='label', value=gid),
-                        Attr(name='fontsize', value="16"),
+                        Attr(name='fontsize', value="14"),
                         Attr(name='textcolor', value="#FF0000"),
                         *[Node(id=r["node_id"], attrs=[]) for r in row],
                     ]))
@@ -214,7 +240,7 @@ def render(rows, outpath=None, outtype="SVG", autoopen=True):
         app.writediag(diag, outpath=outpath)
         print("OUT: " + app.options.output)
     else:
-        raise ValueError("empty input data?")
+        raise ValueError("No clipboard data?")
 
     if autoopen:
         if os.name == "nt":
@@ -238,11 +264,14 @@ def test1(diag):
     import time
     now = time.time()
     app = NwdiagApp()
-    app.writediag(diag, "./test.png")
+    app.writediag(diag, "./test.svg")
 
     assert(os.stat(app.options.output).st_mtime > now)
     if os.name == "nt":
         subprocess.check_call("start " + app.options.output, shell=True)
+
+def test2():
+    assert_subnet("23", "255.255.255.192")
 
 def main():
     import sys
@@ -264,6 +293,9 @@ def main():
     render(rows, outpath=args.outputfile, outtype=args.type, autoopen=not args.quiet)
 
 if __name__ == "__main__":
-    main()
-#    test()
+#    import sys
+#    sys.argv.append("-q")
+#    main()
+    test()
+#    test2()
 
