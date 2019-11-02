@@ -308,6 +308,6 @@ if __name__ == "__main__":
 #    import sys
 #    sys.argv.append("-q")
 
-#    main()
-    test()
+    main()
+#    test()
 
