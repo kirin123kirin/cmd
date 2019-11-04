@@ -6,8 +6,8 @@ __author__ = "m.yama"
 
 
 __all__ = [
-        "parse_lslR",
-        "parse_lsl"
+        "lslR",
+        "lsl"
     ]
 
 import re, sys
@@ -139,6 +139,9 @@ def to_excel(
         if header:
             sheet.autofilter(0, 0, sheet.dim_rowmax, sheet.dim_colmax)
 
+def unicode_escape(x):
+    return x.encode().decode("unicode_escape")
+
 def main():
     from argparse import ArgumentParser
     from glob import  glob
@@ -161,7 +164,7 @@ def main():
          help='run ls -lR Date')
     padd('-c', '--currentdirectory', type=str, default=None,
          help='run ls -lR Current Directory Path String')
-    padd('-s', '--sep', type=str, default=",",
+    padd('-s', '--sep', type=unicode_escape, default=",",
          help='csv output separator (default `,`)')
 
     padd("filename",
@@ -209,6 +212,6 @@ def test(path):
             print("{} : time {}".format(x, t2-t1))
 
 if __name__ == "__main__":
-    test("C:/temp/lsdir.log")
-#    main()
+#    test("C:/temp/lsdir.log")
+    main()
 

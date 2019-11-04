@@ -12,6 +12,8 @@ import_module = [
     "profiler",
     "differ",
     "lslog",
+    "lsdir",
+    "nw",
 ]
 
 

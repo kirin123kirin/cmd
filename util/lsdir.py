@@ -449,7 +449,7 @@ def fileattr(f, stat=None, followlinks=False, result_type=None):
                 link = os.readlink(f)
         except (ValueError, OSError) as e:
                 link = "[{}]: {}".format(type(e).__name__, e)
-    
+
     return (
             filemode(mode),
             getuser(stat.st_uid),
@@ -475,13 +475,13 @@ def _tree(func, fn, exclude=None, followlinks=False, header=True):
             for f in func(g, exclude, followlinks):
                 if func is fwalk and f.name.startswith("~$"):
                     continue
-                
+
                 yield fileattr(f.path, f.stat(), followlinks=followlinks, result_type=str)
                 i += 1
 
         elif func is fwalk and basename(g).startswith("~$"):
             continue
-        
+
         else:
             yield fileattr(g, followlinks=followlinks, result_type=str)
             i += 1
@@ -494,6 +494,9 @@ def filestree(fn, exclude=None, followlinks=False, header=True):
 
 def dirstree(fn, exclude=None, followlinks=False, header=True):
     return _tree(dwalk, fn=fn, exclude=exclude, followlinks=followlinks, header=header)
+
+def unicode_escape(x):
+    return x.encode().decode("unicode_escape")
 
 def main():
     from argparse import ArgumentParser
@@ -515,6 +518,7 @@ def main():
         default="f")
 
     padd('-s', '--sep',
+         type=unicode_escape,
          help='output separator',
          default="\t",
     )

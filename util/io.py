@@ -20,6 +20,7 @@ __all__ = [
     "DBrow",
     "DBgrouprow",
     "Path",
+    "unicode_escape",
 ]
 
 SAMPLEBYTE = 1024
@@ -2349,6 +2350,9 @@ def walk(args):
                 sys.stderr.flush()
             yield f
 
+def unicode_escape(x):
+    return x.encode().decode("unicode_escape")
+
 def main_row():
     from argparse import ArgumentParser
 
@@ -2366,9 +2370,9 @@ def main_row():
 
     padd('-e', '--encoding', type=str, default="cp932",
          help='output fileencoding (default `cp932`)')
-    padd('-s', '--sep', type=str, default=",",
-         help='output separater (default `,`)')
-    padd('-l', '--lineterminator', type=str, default="\r\n",
+    padd('-s', '--sep', type=unicode_escape, default="\t",
+         help='output separater (default `\\t`)')
+    padd('-l', '--lineterminator', type=unicode_escape, default="\r\n",
          help='output fileencoding (default `\\r\\n`)')
     padd('-f', '--filename', action='store_true', default=False,
          help='output filename (default False)')
@@ -2427,9 +2431,9 @@ def main_info():
          nargs="+",  default=[],
          help="infomation filenames")
 
-    padd('-s', '--sep', type=str, default=",",
+    padd('-s', '--sep', type=unicode_escape, default=",",
          help='output separater (default `,`)')
-    padd('-l', '--lineterminator', type=str, default="\r\n",
+    padd('-l', '--lineterminator', type=unicode_escape, default="\r\n",
          help='output fileencoding (default `\\r\\n`)')
     padd('-d', '--dateformat', type=str, default="%Y/%m/%d %H:%M:%S",
          help='output datetimeformat (default `%Y/%m/%d %H:%M:%S`)')
@@ -2475,7 +2479,7 @@ def main_size():
     padd('-u', '--unit', type=str, default="K",
          help='output file unit byte (default `K`) choice=> (`B`, `K`, `M`, `G`)')
 
-    padd('-l', '--lineterminator', type=str, default="\r\n",
+    padd('-l', '--lineterminator', type=unicode_escape, default="\r\n",
          help='output fileencoding (default `\\r\\n`)')
 
     args = ps.parse_args()
