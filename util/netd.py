@@ -157,6 +157,7 @@ def cleansing(rows):
 
 
 def _parsenode(r):
+    #TODO IP address
     src = dict(name=None, group="", icon="", meta={}) #TODO icon
     tar = dict(name=None, group="", icon="", meta={})
 
@@ -168,6 +169,7 @@ def _parsenode(r):
                 if "group" in k:
                     src["group"] += v + "\n"
                 else:
+                    k = k.replace("_nodesource", "").replace("_nodetarget", "")
                     src["meta"][k] = v
         elif "target" in k:
             if k == "target":
@@ -176,6 +178,7 @@ def _parsenode(r):
                 if "group" in k:
                     tar["group"] += v + "\n"
                 else:
+                    k = k.replace("_nodesource", "").replace("_nodetarget", "")
                     tar["meta"][k] = v
 
     src["group"] = src["group"].strip()
@@ -186,6 +189,8 @@ def _parsenode(r):
 def _parselink(r):
     ret = dict(source=None, target=None, meta={})
     for k, v in r.items():
+        if "_node" in k:
+            continue
         if "group" not in k:
             if k in ["source", "target"]:
                 ret[k] = v
@@ -276,9 +281,9 @@ def render(
 
 def test():
     rows = [
-     ["接続元場所", "接続元ラック名", "接続元ホスト", "接続元サーバ名", "接続元ポート", "方向","接続先場所", "接続先ラック名", "接続先ホスト", "接続先サーバ名", "接続先ポート", "種別", "帯域", "ポートVlan", "タグVlan", "チャネル", "備考"],
-     ["西日本DC", "４F", "HOST2", "Webサーバ", "1024～", "→","東日本DC", "３F", "HOST1", "DBサーバ", "80,443", "HTTP", "1M", "", "", "", ""],
-     ["東日本DC", "３F", "HOST1", "DBサーバ", "*", "←","西日本DC", "４F", "HOST2", "Webサーバ", "*", "ICMP", "1M", "", "", "", ""]
+     ["接続元場所", "接続元ラック名", "接続元ホスト", "接続元サーバ名", "接続元IPアドレス","接続元ポート", "方向","接続先場所", "接続先ラック名", "接続先ホスト", "接続先サーバ名", "接続先IPアドレス","接続先ポート", "種別", "帯域", "ポートVlan", "タグVlan", "チャネル", "備考"],
+     ["西日本DC", "４F", "HOST2", "Webサーバ", "10.0.0.1", "1024～", "→","東日本DC", "３F", "HOST1", "DBサーバ", "10.0.1.1", "80,443", "HTTP", "1M", "", "", "", ""],
+     ["東日本DC", "３F", "HOST1", "DBサーバ", "10.0.1.1", "*", "←","西日本DC", "４F", "HOST2", "Webサーバ", "10.0.0.1", "*", "ICMP", "1M", "", "", "", ""]
     ]
     
     html = htmltmpl.format(*parse(rows), 1200, 900)
