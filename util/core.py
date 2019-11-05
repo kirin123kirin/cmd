@@ -142,7 +142,7 @@ def binchunk(path_or_buffer, buffer=1024**2, sep=None):
                     else:
                         prev = r
 
-
+#TODO https://hgotoh.jp/wiki/doku.php/documents/other/other-020
 ZEN = "".join(chr(0xff01 + i) for i in range(94))
 HAN = "".join(chr(0x21 + i) for i in range(94))
 

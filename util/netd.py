@@ -43,6 +43,10 @@ _cleansing = {
     "接続元ポト": "_sourceport",
     "接続先ポト": "_targetport",
 
+    "プロトコル": "_linkprotocol",
+    "protocol": "_linkprotocol",
+    "protcol": "_linkprotocol",
+
     "接続先場所": "_nodetargetgroup1",
     "接続先システム": "_nodetargetgroup3",
     "接続先拠点": "_nodetargetgroup1",
@@ -78,7 +82,7 @@ htmltmpl = """
 
         .node text {{
           font-size: 10px;
-          fill: #fff;
+//          fill: #fff;
         }}
 
         .link {{
@@ -102,7 +106,7 @@ htmltmpl = """
   <script>
     var data = {0};
 
-    var diagram = new Diagram('#diagram', data, {{width: {2}, height: {3}}}, {{ticks: 3000}});
+    var diagram = new Diagram('#diagram', data, {{width: {2}, height: {3}, ticks: 3000}});
 
     diagram.linkWidth(function (link) {{
       if (!link)
@@ -148,16 +152,16 @@ def cleansing(rows):
     ret = []
 
     for row in rows:
-        r = dict(zip(head, map(_dataclean, row)))
-        get = lambda x: r.pop(x, "")
+        r = {h: [] for h in head}
+        for k, v in zip(head, map(_dataclean, row)):
+            r[k].append(v)
 
-        ret.append(r)
+        ret.append({k: "\t".join(v) for k, v in r.items()})
 
     return ret
 
 
 def _parsenode(r):
-    #TODO IP address
     src = dict(name=None, group="", icon="", meta={}) #TODO icon
     tar = dict(name=None, group="", icon="", meta={})
 
@@ -194,6 +198,8 @@ def _parselink(r):
         if "group" not in k:
             if k in ["source", "target"]:
                 ret[k] = v
+            elif k.startswith("_link"):
+                ret["meta"][k.replace("_link", "")] = v
             elif v:
                 c = k.replace("_source", "").replace("_target", "")
                 if "_source" in k:
@@ -222,11 +228,10 @@ def parse(rows):
     nodes = []
     links = []
     metas = set()
-    reappend = False
-    
+
     for r in cleansing(rows):
         r = [{k:v for k, v in r.items() if k[0] in "_st"}]
-        
+
         if "_vector" in r[0]:
             vec = r[0].pop("_vector")
             if vec[0] == "<":
@@ -235,12 +240,12 @@ def parse(rows):
                     r.append(tr)
                 else:
                     r = tr
-        
+
         for c in r:
             nodes.extend(_parsenode(c))
             link = _parselink(c)
             links.append(link)
-    
+
             metas.update([*[y for x in nodes for y in x["meta"]], *list(link["meta"])])
 
     jstr = json.dumps(dict(nodes=dictuniq(nodes), links=dictuniq(links)), indent=4, ensure_ascii=False)
@@ -255,7 +260,7 @@ def render(
     height = 900,
     updatejs = False
     ):
-    
+
     if path_or_buffer:
         rows = readrow(path_or_buffer)
     else:
@@ -269,14 +274,14 @@ def render(
 
     html = htmltmpl.format(*parse(rows), width, height)
 
-    with open(outpath, "w") as fp:
+    with open(outpath, "w", encoding="utf-8") as fp:
         fp.write(html)
 
     if os.name == "nt":
         code, dat = getstatusoutput("start " + outpath)
         if code != 0:
             raise RuntimeError(dat)
-    
+
     print("output: " + outpath)
 
 def test():
@@ -285,7 +290,7 @@ def test():
      ["西日本DC", "４F", "HOST2", "Webサーバ", "10.0.0.1", "1024～", "→","東日本DC", "３F", "HOST1", "DBサーバ", "10.0.1.1", "80,443", "HTTP", "1M", "", "", "", ""],
      ["東日本DC", "３F", "HOST1", "DBサーバ", "10.0.1.1", "*", "←","西日本DC", "４F", "HOST2", "Webサーバ", "10.0.0.1", "*", "ICMP", "1M", "", "", "", ""]
     ]
-    
+
     html = htmltmpl.format(*parse(rows), 1200, 900)
     print(html)
 
@@ -302,9 +307,9 @@ def main():
          help="network diagram source filepath\ndefault clipboard")
     padd('-o', '--outpath', type=str, default=join(gettempdir(), "temp-inet.html"),
          help='output file PATH string `default $TMP/temp-inet.html`')
-    padd('-W', '--width', type=int, default=None,
+    padd('-W', '--width', type=int, default=1200,
          help='output HTML width pixel')
-    padd('-H', '--height', type=int, default=None,
+    padd('-H', '--height', type=int, default=900,
          help='output HTML height pixel')
     padd('-U', '--updatejs', action="store_true", default=False,
          help='update javascript inet-henge.min.js')
@@ -321,7 +326,7 @@ def main():
 
 
 if __name__ == "__main__":
-    #test()
+#    test()
     main()
 
 
