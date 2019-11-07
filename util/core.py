@@ -142,16 +142,22 @@ def binchunk(path_or_buffer, buffer=1024**2, sep=None):
                     else:
                         prev = r
 
-#TODO https://hgotoh.jp/wiki/doku.php/documents/other/other-020
+
 ZEN = "".join(chr(0xff01 + i) for i in range(94))
 HAN = "".join(chr(0x21 + i) for i in range(94))
+
+#thanks https://hgotoh.jp/wiki/doku.php/documents/other/other-020
+#ZEN = """！＂＃＄％＆＇（）＊＋，－．／０１２３４５６７８９：；＜＝＞？＠ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ［＼］＾＿｀ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ｛｜｝～￠￡￢￤￥←↑→↓│■○"""
+#HAN = """!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]＾_`abcdefghijklmnopqrstuvwxyz{｜}~￠￡￢|\￩￪￫￬|￭￮"""
 
 def to_hankaku(s):
     return s.translate(str.maketrans(ZEN, HAN))
 def to_zenkaku(s):
     return s.translate(str.maketrans(HAN, ZEN))
 
-
+def translates(repdic, string):
+    pattern = '({})'.format('|'.join(map(re.escape, repdic.keys())))
+    return re.sub(pattern, lambda m: repdic[m.group()], string)
 
 from socket import gethostname
 from tempfile import TemporaryDirectory

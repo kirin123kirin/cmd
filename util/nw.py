@@ -28,7 +28,9 @@ HAN = "".join(chr(0x21 + i) for i in range(94))
 def to_hankaku(s):
     return s.translate(str.maketrans(ZEN, HAN))
 
-rev4 = re.compile(r"(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)(?:[/:][\.:\d]+)?")
+rev4 = re.compile(r"(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\s*(?:[/:]?[\.:\d]{1,15})?\s*(?:\(?[/:]?[\.:\d]{1,15}\)?)?")
+delws = lambda x: re.compile(r"\s+").sub("", x)
+delkakko = lambda x: re.compile(r"\(.*").sub("", x)
 
 ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast"])
 
@@ -37,7 +39,8 @@ def normip(string):
     if not string:
         raise ValueError("Nothing data.")
 
-    s = to_hankaku(str(string)).strip()
+    s = delws(to_hankaku(delkakko(str(string))))
+
     if not s and s.count(".") < 3 and s.count(":") < 2:
         raise ValueError("Not IPaddress string. -> `{}`".format(string))
 
@@ -132,7 +135,7 @@ def main():
     import sys
     from io import StringIO
     import codecs
-    
+
     try:
         from pyperclip import paste as getclip, copy as setclip
     except ModuleNotFoundError:
@@ -171,9 +174,14 @@ def main():
 
     padd('-o', '--outputfile', type=str, default=None,
          help='Output data filepath')
-         
+
+    padd("address",
+         metavar="<address>",
+         nargs="?",  default=None,
+         help="IP or NW address/subnet")
+
     args = ps.parse_args()
-    
+
     outfile = args.outputfile
 
     callback = lambda x: args.form.format(**x._asdict())
@@ -182,7 +190,7 @@ def main():
 
     with codecs.open(outfile, "w", encoding="cp932") if outfile else StringIO() as ret:
 
-        lines = StringIO(getclip())
+        lines = StringIO(args.adress if args.address else getclip())
 
         for line in lines:
             for n, m, err in tokenip(line, callback=callback):
@@ -196,7 +204,7 @@ def main():
 
         if not outfile:
             print(ret.getvalue())
-            
+
         setclip(ret.getvalue())
 
 if __name__ == "__main__":
