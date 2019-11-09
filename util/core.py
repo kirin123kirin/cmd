@@ -19,6 +19,7 @@ __all__ = [
 isposix = os.name == "posix"
 iswin = os.name == "nt"
 
+import re
 from io import IOBase, StringIO, BytesIO
 import codecs
 try:

@@ -4,28 +4,35 @@ set VERSION=%1
 
 if "%VERSION%" == "" (
   echo "引数がありません。アップデートしたいバージョンを指定してください。"
-  echo "例: pythonupgrade.bat 3.7.2"
+  echo "例: pythonupgrade.bat 3.7.5"
   pause
   exit /b 1
 )
+
+set VNUM=%VERSION:.=%
 
 rd /s /q %WDIR%
 mkdir %WDIR%
 cd %WDIR%
 C:
 
-wget https://www.python.org/ftp/python/%VERSION%/amd64/core.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/dev.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/doc.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/exe.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/launcher.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/lib.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/path.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/test.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/pip.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/tcltk.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/tools.msi
-wget https://www.python.org/ftp/python/%VERSION%/amd64/ucrt.msi
+set PYTHONORG=https://www.python.org/ftp/python/%VERSION%/amd64
+set MYREPO=https://raw.githubusercontent.com/kirin123kirin/cmd/master
+set MYDOTFILE=https://raw.githubusercontent.com/kirin123kirin/dotfile/master/python
+set WGETCMD=wget --no-check-certificate
+
+%WGETCMD% %PYTHONORG%/core.msi
+%WGETCMD% %PYTHONORG%/dev.msi
+%WGETCMD% %PYTHONORG%/doc.msi
+%WGETCMD% %PYTHONORG%/exe.msi
+%WGETCMD% %PYTHONORG%/launcher.msi
+%WGETCMD% %PYTHONORG%/lib.msi
+%WGETCMD% %PYTHONORG%/path.msi
+%WGETCMD% %PYTHONORG%/test.msi
+%WGETCMD% %PYTHONORG%/pip.msi
+%WGETCMD% %PYTHONORG%/tcltk.msi
+%WGETCMD% %PYTHONORG%/tools.msi
+%WGETCMD% %PYTHONORG%/ucrt.msi
 
 mkdir %WDIR%\python
 msiexec /a core.msi targetdir=%WDIR%\python /qn
@@ -48,20 +55,35 @@ del python\pyw.exe
 del python\pyshellext*.dll
 del python\NEWS.txt
 
+rem %ProgramFiles%\api-ms-win-*.dll
 move python\api-*.dll python\DLLs\
 move python\ucrtbase.dll python\DLLs\
 
-copy Y:\usr\local\python\*pth python\
-copy Y:\usr\local\python\Lib\site-packages\custom.pth python\Lib\site-packages\
-
+cd python
+%WGETCMD% %MYDOTFILE%/python37.pth -O python%VNUM:~,2%.pth
+rem copy Y:\usr\local\python\Lib\site-packages\custom.pth python\Lib\site-packages\
 REM rd /s /q Y:\usr\local\python
 REM move python Y:\usr\local\
 
-rem wget https://www.python.org/ftp/python/%VERSION%/python-%VERSION%-embed-amd64.zip
-
-wget --no-check-certificate https://raw.githubusercontent.com/pypa/get-pip/master/get-pip.py
-python get-pip.py install pip
+%WGETCMD% https://raw.githubusercontent.com/pypa/get-pip/master/get-pip.py
+.\python.exe get-pip.py
 del get-pip.py
 
-REM pip install -r Y:\dotfile\python\requirements.txt
-REM pip install -r Y:\dotfile\python\requirements_win.txt
+set PIP=%WDIR%\python\Scripts\pip.exe
+rem %PIP% install -r %MYDOTFILE%/requirements.txt
+%WGETCMD% %MYDOTFILE%/requirements.txt -qO - | grep -v "^#" | grep -v "spyder" > requirement.txt
+%PIP% install -r requirement.txt
+
+%PIP% install -r %MYDOTFILE%/requirements_win.txt
+
+%WGETCMD% %MYREPO%/repair_scripts.py
+%WGETCMD% %MYREPO%/install.bat
+
+cd ..
+7z.exe a python%VNUM%.zip python
+cd python
+
+%PIP% install -r %VNUM%/requirements.txt
+cd ..
+7z.exe a python%VNUM%_full.zip python
+

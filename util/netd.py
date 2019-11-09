@@ -8,7 +8,8 @@ from subprocess import getstatusoutput
 import tarfile
 
 import util
-from util import readrow, to_hankaku
+from util.io import readrow
+from util.core import to_hankaku
 
 _header_replace = {
     "受信": "接続",

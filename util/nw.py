@@ -6,129 +6,229 @@
 __author__  = 'm.yama'
 __license__ = 'MIT'
 __date__    = 'Oct 18 17:35:47 2019'
-__version__ = '0.0.3'
+__version__ = '0.0.4'
 
 __all__ = [
     "isin_nw",
     "getipinfo",
-    "tokenip",
     "formatip",
 ]
 
-from collections import namedtuple
-from ipaddress import ip_interface
 import re
-from itertools import zip_longest
+from collections import namedtuple
+from ipaddress import ip_interface, ip_address
+
+from util.core import to_hankaku
 
 FORMAT = "{nwadr}/{bitmask}\t{netmask}"
-
-ZEN = "".join(chr(0xff01 + i) for i in range(94))
-HAN = "".join(chr(0x21 + i) for i in range(94))
-
-def to_hankaku(s):
-    return s.translate(str.maketrans(ZEN, HAN))
-
-rev4 = re.compile(r"(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\s*(?:[/:]?[\.:\d]{1,15})?\s*(?:\(?[/:]?[\.:\d]{1,15}\)?)?")
-delws = lambda x: re.compile(r"\s+").sub("", x)
-delkakko = lambda x: re.compile(r"\(.*").sub("", x)
-
 ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast"])
 
 
-def normip(string):
+_PATTERN_IPADDR_UNIT = "(?:25[0-4]|2[0-4]\d|1\d{2}|0?[1-9]\d|0{,2}\d)"
+_PATTERN_NETMASK_UNIT = "(?:255|254|248|240|224|192|128|0{1,3})"
+_PATTERN_IPADDR = "((?:{0}\.){{3}}(?:{0}))".format(_PATTERN_IPADDR_UNIT)
+_PATTERN_PREFIX = "\(?[:/]?([1-2]\d|3[12]|[89])\)?"
+_PATTERN_NETMASK = "\(?/?(255\.255\.255\.{0}|255\.255\.{0}\.0{{1,3}}|255\.{0}\.0{{1,3}}\.0{{1,3}})\)?".format(_PATTERN_NETMASK_UNIT)
+DIC_PREFMASK = {
+    "8": "255.0.0.0",
+    "9": "255.128.0.0",
+    "10": "255.192.0.0",
+    "11": "255.224.0.0",
+    "12": "255.240.0.0",
+    "13": "255.248.0.0",
+    "14": "255.252.0.0",
+    "15": "255.254.0.0",
+    "16": "255.255.0.0",
+    "17": "255.255.128.0",
+    "18": "255.255.192.0",
+    "19": "255.255.224.0",
+    "20": "255.255.240.0",
+    "21": "255.255.248.0",
+    "22": "255.255.252.0",
+    "23": "255.255.254.0",
+    "24": "255.255.255.0",
+    "25": "255.255.255.128",
+    "26": "255.255.255.192",
+    "27": "255.255.255.224",
+    "28": "255.255.255.240",
+    "29": "255.255.255.248",
+    "30": "255.255.255.252",
+    "31": "255.255.255.254",
+    "32": "255.255.255.255"
+}
+
+repad = re.compile("(\.)0*(\d+)")
+
+is_ipaddr = re.compile(_PATTERN_IPADDR).search
+is_prefix = re.compile(_PATTERN_PREFIX).search
+is_netmask = re.compile(_PATTERN_NETMASK).search
+is_addrzeropadding = repad.search
+
+prefix_to_mask = DIC_PREFMASK.get
+mask_to_prefix = {v:k for k, v in DIC_PREFMASK.items()}.get
+del_zeropadding = repad.sub
+
+rev4=re.compile("{0}\s*(?:{2}\s*{1}|{1}\s*{2}|{2}|{1})?".format(_PATTERN_IPADDR, _PATTERN_PREFIX, _PATTERN_NETMASK))
+
+
+
+def extractip(string, callback=None):
+    """
+    [Parameter]:
+        string: IPアドレスとサブネットマスク or Nビットマスクを含む文字列
+        callback: 戻り値を変換して出したい場合はコールバック関数を入れる（引数にはIPv4Interfaceオブジェクトが入る）
+          * IPv4Interfaceオブジェクトとは->https://docs.python.org/ja/3/library/ipaddress.html#ipaddress.IPv4Interface
+
+    [Return]:
+        [callback引数なし(None)の場合]
+            リスト: IPv4Interface インスタンス
+        [callback引数ありの場合]
+            リスト: callback関数適用後の結果
+
+    [Example]
+        > extractip("192.168.100.1  255.255.255.0(/24)")
+        [IPv4Interface('192.168.100.1/24')]
+
+        > extractip("192.168.100.1  255.255.255.0(/24)", lambda x: str(x.network))
+        ['192.168.100.0/24']
+    """
     if not string:
-        raise ValueError("Nothing data.")
+        return []
 
-    s = delws(to_hankaku(delkakko(str(string))))
+    ret = []
 
-    if not s and s.count(".") < 3 and s.count(":") < 2:
-        raise ValueError("Not IPaddress string. -> `{}`".format(string))
+    if callback:
+        add = lambda x: ret.append(callback(x))
+    else:
+        add = ret.append
 
-    try:
-        return ip_interface("{}/{}".format(*rev4.findall(s)[0]))
-    except (IndexError, ValueError):
-        return ip_interface(s)
+    for dat in rev4.findall(to_hankaku(string)):
+        ip, prefix, netmask = None, None, None
+
+        for x in dat:
+            if not x:
+                continue
+            if is_addrzeropadding(x):
+                x = del_zeropadding(r"\1\2", x)
+
+            if len(x) < 3:
+                if is_prefix(x):
+                    prefix = x
+            else:
+                if is_netmask(x):
+                    netmask = x
+                elif is_ipaddr(x):
+                    ip = x
+
+        if prefix and netmask:
+            msk = prefix_to_mask(prefix)
+            if msk == netmask:
+                add( ip_interface(ip + "/" + prefix) )
+            else:
+                raise ValueError(
+                    "サブネットマスク`{}` は `{}` ビットマスクではない。もしかして`{}`の誤り?".format(
+                        netmask, prefix, msk))
+        elif prefix:
+            add( ip_interface(ip + "/" + prefix) )
+        elif netmask:
+            add( ip_interface(ip + "/" + netmask) )
+        else:
+            raise ValueError("{} is Unknown Subnetmask or Prefix".format(ip))
+
+    return ret
+
 
 def isin_nw(ipadr, nwadr):
-    ip = normip(ipadr).ip
-    nw = normip(nwadr).network
+    ip = ip_address(ipadr)
+    nw = extractip(nwadr, lambda x: x.network)[0]
 
     if ip == nw.network_address:
         raise ValueError("IP address is Network Address?")
 
     return ip in nw
 
+
 def getipinfo(string, callback=None):
+    ifaces = extractip(string)
 
-    iface = normip(string)
-    s = str(iface)
+    for iface in ifaces:
+        s = str(iface)
 
-    bit = int(s.split("/")[1])
-    ipa = str(iface.ip)
-    nw = iface.network
-    nwa = str(nw.network_address)
+        bit = int(s.split("/")[1])
+        ipa = str(iface.ip)
+        nw = iface.network
+        nwa = str(nw.network_address)
 
-    if bit == 32:
-        raise ValueError("No Subnet Info? -> {}".format(s))
+        if bit == 32:
+            raise ValueError("No Subnet Info? -> {}".format(s))
 
-    ret = ipinfo(
-        None if ipa == nwa else ipa,  # IPaddress
-        str(nw.netmask),  # SubnetMask
-        bit,              # BitMask
-        nwa,              # Network Address
-        nw.num_addresses, # count IP address num
-        str(nw[-1])       # BroadCast Address
-    )
+        ret = ipinfo(
+            None if ipa == nwa else ipa,  # IPaddress
+            str(nw.netmask),  # SubnetMask
+            bit,              # BitMask
+            nwa,              # Network Address
+            nw.num_addresses, # count IP address num
+            str(nw[-1])       # BroadCast Address
+        )
 
-    if callback:
-        return callback(ret)
-    else:
-        return ret
+        if callback:
+            yield callback(ret)
+        else:
+            yield ret
 
-def tokenip(
-        data,
+
+def formatip(string,
         callback=lambda x: FORMAT.format(**x._asdict())):
 
-    nons, mats = rev4.split(data), rev4.findall(data)
+    for mat in rev4.finditer(string):
+        prev, s, fwd = string[:mat.start()], mat.string, string[mat.end():]
 
-    for non, mat in zip_longest(nons, mats, fillvalue=""):
         try:
-            yield non, getipinfo(mat, callback), None
+            r = next(getipinfo(s, callback))
+            yield "{}{}{}".format(prev, r, fwd)
         except ValueError as e:
-            yield non, mat, e.args[0]
+            yield "{}{}[<-ERROR {}]{}".format(prev, s, e, fwd)
 
-def formatip(data,
-    callback=lambda x: FORMAT.format(**x._asdict())):
-
-    ret = ""
-    for n, m, err in tokenip(data, callback=callback):
-        ret += n + m
-    return ret
-
-
-extractip = rev4.findall
 
 
 def test():
-    assert getipinfo("192.168.1.1/27")
-    assert getipinfo("192.168.1.1/255.255.255.240")
-    try:
-        getipinfo("   ")
-        getipinfo(None)
-        getipinfo("192.168.1.0")
-    except ValueError:
-        pass
+    from datetime import datetime
 
-    r=formatip(data = "hoge server 192.168.1.1 192.168.1.0/24")
-    assert r.startswith("hoge server ")
+    def test_getipinfo_simple():
+        assert list(getipinfo("192.168.1.1/27"))
+        assert list(getipinfo("192.168.1.1/255.255.255.240"))
 
-    r = formatip("""Ethernet adapter ローカル エリア接続:
+    def test_getipinfo_expecterror():
+        try:
+            list(getipinfo("   "))
+            list(getipinfo(None))
+            list(getipinfo("192.168.1.0"))
+        except ValueError:
+            pass
 
-        Connection-specific DNS Suffix  . : example.co.jp
-        IP Address. . . . . . . . . . . . : 192.168.1.40
-        Subnet Mask . . . . . . . . . . . : 255.255.255.0 ……サブネットマスク
-        Default Gateway . . . . . . . . . : 192.168.1.2/24""")
-    assert "ローカル エリア接続" in r
+    def test_getipinfo_withword():
+        r=next(formatip("hoge server 192.168.1.1 192.168.1.0/24"))
+        assert r.startswith("hoge server ")
+
+    def test_getipinfo_withmultibytelines():
+        r = formatip("""Ethernet adapter ローカル エリア接続:
+
+            Connection-specific DNS Suffix  . : example.co.jp
+            IP Address. . . . . . . . . . . . : 192.168.1.40
+            Subnet Mask . . . . . . . . . . . : 255.255.255.0 ……サブネットマスク
+            Default Gateway . . . . . . . . . : 192.168.1.2/24""")
+        assert "ローカル エリア接続" in next(r)
+
+    def test_isin_nw():
+        assert(isin_nw("192.168.1.40", "192.168.1.0/24"))
+
+    for x, func in list(locals().items()):
+        if x.startswith("test_") and callable(func):
+            t1 = datetime.now()
+            func()
+            t2 = datetime.now()
+            print("{} : time {}".format(x, t2-t1))
+
 
 def main():
     import os
@@ -186,26 +286,19 @@ def main():
 
     callback = lambda x: args.form.format(**x._asdict())
 
-    wd = args.withorgdata
+    func = formatip if args.withorgdata else getipinfo
 
     with codecs.open(outfile, "w", encoding="cp932") if outfile else StringIO() as ret:
 
-        lines = StringIO(args.adress if args.address else getclip())
+        string = args.adress if args.address else getclip()
 
-        for line in lines:
-            for n, m, err in tokenip(line, callback=callback):
-                if err is None or err.startswith("Nothing data"):
-                    ret.write("{}{}".format(n if wd else "", m))
-                else:
-                    ret.write("{}{}\t<- [ERROR]{}".format(n if wd else "", m, err))
-
-            if not wd:
-                ret.write("\n") #TODO last line in "\n"
+        for r in func(string, callback):
+            print(r, file=ret)
 
         if not outfile:
             print(ret.getvalue())
 
-        setclip(ret.getvalue())
+        setclip(ret.getvalue()[:-1])
 
 if __name__ == "__main__":
 #    test()

@@ -54,6 +54,17 @@ def repair_exe(infile):
         os.remove(infile)
         os.rename(tmp, infile)
 
+def repair_zip():
+    import time
+
+    if "JST" in time.tzname:
+        from fileinput import FileInput
+        import zipfile
+        zf = zipfile.__file__
+        
+        with FileInput(zf, inplace=True, backup=".bak") as f:
+            for line in f:
+                print(line.replace("cp432", "cp932"), end="")
 
 if __name__ == "__main__":
     from collections import Iterable
@@ -72,4 +83,4 @@ if __name__ == "__main__":
     for exe in flatten(exes):
         repair_exe(exe)
 
-
+    repair_zip()
