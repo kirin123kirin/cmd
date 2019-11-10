@@ -47,7 +47,7 @@ _cleansing = {
     "プロトコル": "_linkprotocol",
     "protocol": "_linkprotocol",
     "protcol": "_linkprotocol",
-    
+
     "種類": "_linkcategory",
     "種別": "_linkcategory",
 

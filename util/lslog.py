@@ -202,7 +202,7 @@ def test(path):
         assert len(list(parse(path, True))) == 7
 
     def test_parse_lsl():
-        assert len(list(parse(path))) == 29
+        assert len(list(parse(path))) == 7
 
     for x, func in list(locals().items()):
         if x.startswith("test_") and callable(func):
