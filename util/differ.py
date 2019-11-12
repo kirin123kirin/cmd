@@ -23,7 +23,7 @@ import sys
 from itertools import tee
 
 try:
-    from similar import similar, flatten, sanitize, deephash
+    from util.libs.similar import similar, flatten, sanitize, deephash
 
     from functools import  _CacheInfo, _lru_cache_wrapper
     similar = _lru_cache_wrapper(similar, 128, False, _CacheInfo)
