@@ -29,8 +29,6 @@ setup(
     long_description=readme,
 
     author="m.yama",
-    author_email="kirin123kirin@gmail.com",
-    url="https://github.com/kirin123kirin/cmd",
 
     license="MIT License",
 
