@@ -7,7 +7,7 @@ python-docx
 pdfminer3k
 lhafile
 lxml
-https://github.com/kirin123kirin/mso-dumper.git
+git+https://github.com/kirin123kirin/mso-dumper.git
 nkf
 nwdiag
 olefile
