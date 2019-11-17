@@ -1,8 +1,7 @@
-import sys
 import os
 from os.path import join, dirname
 import json
-from operator import itemgetter, attrgetter
+from operator import attrgetter
 from tempfile import gettempdir
 from subprocess import getstatusoutput
 import tarfile

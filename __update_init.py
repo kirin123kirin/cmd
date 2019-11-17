@@ -2,6 +2,7 @@
 import sys, os
 import inspect
 from io import StringIO
+import pkgutil
 
 
 # target module
@@ -413,8 +414,36 @@ for k, v in lazymodules_src.items():
     r = defstr.format(mod=v.__module__, func=v.__name__)
     ret.write(r)
 
-initfile = os.path.dirname(sys.argv[0]) + "/__init__.py"
-with open(initfile, "w") as f:
-    print("Write file " + initfile)
-    f.write(ret.getvalue())
+
+
+## for make requirements.txt
+
+prefix = os.environ["PYTHONPATH"].lower().replace("\\", "/")
+
+stdmodules = list(sys.builtin_module_names)
+
+for m in pkgutil.iter_modules():
+    sm = str(m.module_finder).lower().replace(r"\\", "/")
+    if prefix in sm and "site-packages" not in sm and "tools/scripts" not in sm:
+        stdmodules.append(m.name)
+
+
+def is_stdmod(modname):
+    return modname.split(".")[0] in stdmodules
+
+
+
+##########
+
+
+
+def main(dirpath):
+    initfile = dirpath + "/__init__.py"
+    with open(initfile, "w") as f:
+        print("Write file " + initfile)
+        f.write(ret.getvalue())
+
+
+if __name__ == "__main__":
+    main(os.path.dirname(sys.argv[0]))
 
