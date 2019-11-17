@@ -23,7 +23,7 @@ cython_module = [
 
 setup(
     name=pkg,
-    version="0.1.1",
+    version="0.1.2",
 
     install_requires=read_requirements(),
 
@@ -42,7 +42,7 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
     ],
-    
+
     package_dir={pkg: ''},
     packages=[pkg],
 
