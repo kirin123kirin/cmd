@@ -9,24 +9,33 @@ readme="""
 
 pkg = "util"
 
-def read_requirements():
-    r = os.path.join(os.path.dirname(sys.argv[0]), "requirements.txt")
-    if os.path.exists(r):
-        with open(r) as f:
-            return [line.rstrip() for line in f]
-    else:
-        return []
+def read_requirements(path):
+    ret = dict(install_requires=[], dependency_links=[])
+    
+    if os.path.exists(path):
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if "://" in line:
+                    ret["dependency_links"].append(line)
+                else:
+                    ret["install_requires"].append(line)
+    
+    return ret
+
 
 cython_module = [
     Extension("util.libs.similar", sources=["libs/similar.pyx"])
 ]
 
+filepath = os.path.join(os.path.dirname(sys.argv[0]), "requirements.txt")
+
 setup(
     name=pkg,
     version="0.1.2",
 
-    install_requires=read_requirements(),
-
+    **read_requirements(filepath),
+    
     description='useful high level interface',
     long_description=readme,
 
