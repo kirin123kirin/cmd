@@ -1,6 +1,7 @@
 import os, sys
 from glob import glob
 from setuptools import setup, Extension
+from Cython.Build import cythonize
 from Cython.Distutils import build_ext
 
 
@@ -11,7 +12,7 @@ pkg = "util"
 
 def read_requirements(path):
     ret = dict(install_requires=[], dependency_links=[])
-    
+
     if os.path.exists(path):
         with open(path) as f:
             for line in f:
@@ -20,13 +21,17 @@ def read_requirements(path):
                     ret["dependency_links"].append(line)
                 else:
                     ret["install_requires"].append(line)
-    
+
     return ret
 
 
-cython_module = [
-    Extension("util.libs.similar", sources=["libs/similar.pyx"])
-]
+def cython_module(modname, sources):
+    try:
+        return cythonize([Extension("util.libs." + modname, sources=sources)])
+    except Exception as e:
+        print(e, file=sys.stderr)
+        # TODO pyd copy
+        return []
 
 filepath = os.path.join(os.path.dirname(sys.argv[0]), "requirements.txt")
 
@@ -35,7 +40,7 @@ setup(
     version="0.1.2",
 
     **read_requirements(filepath),
-    
+
     description='useful high level interface',
     long_description=readme,
 
@@ -57,7 +62,7 @@ setup(
 
     package_data={ pkg : list(glob("libs/*.xz")) },
 
-    ext_modules=cython_module,
+    ext_modules=cython_module("similar", sources=["libs/similar.pyx"]),
     cmdclass={'build_ext': build_ext},
 
     entry_points={
