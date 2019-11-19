@@ -2516,5 +2516,5 @@ def main():
         raise AttributeError("python {} [row|info|size] ...".format(os.path.basename(sys.argv[0])))
 
 if __name__ == "__main__":
-    test()
-#    main()
+#    test()
+    main()

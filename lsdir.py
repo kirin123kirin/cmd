@@ -467,6 +467,9 @@ def _tree(func, fn, exclude=None, followlinks=False, header=True):
 
     i = 0
 
+    if os.path.isdir(fn):
+        fn += "/*"
+
     for g in glob(normpath(fn)):
         if i == 0 and header:
             yield ["mode", "uname", "gname", "mtime", "size", "ext", "name", "fullpath", "link", "dirnest"]
@@ -498,7 +501,7 @@ def dirstree(fn, exclude=None, followlinks=False, header=True):
 def unicode_escape(x):
     return x.encode().decode("unicode_escape")
 
-def main():
+def create_parser():
     from argparse import ArgumentParser
     import io
     import codecs
@@ -544,14 +547,30 @@ def main():
          help='Target Files',
     )
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    func = dict(f=filestree, d=dirstree)[args.type.lower()[0]]
-
+def main_file(args):
     with args.outfile(args.encoding) as outfile:
         for i, filename in enumerate(args.filename):
-            for row in func(filename, exclude=args.exclude, header=args.noheader and i == 0):
+            for row in filestree(filename, exclude=args.exclude, header=args.noheader and i == 0):
                 print(args.sep.join(row), file=outfile)
+
+def main_dir(args):
+    with args.outfile(args.encoding) as outfile:
+        for i, filename in enumerate(args.filename):
+            for row in dirstree(filename, exclude=args.exclude, header=args.noheader and i == 0):
+                print(args.sep.join(row), file=outfile)
+
+def main():
+    args = create_parser()
+    tp = args.type.lower()[0]
+
+    if tp == "f":
+        main_file(args)
+    elif tp == "d":
+        main_dir(args)
+    else:
+        raise ValueError("Unknown --type `{}`\n  Please `--type file` or `--type dir`".format(tp))
 
 
 def test():
