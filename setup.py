@@ -71,7 +71,7 @@ setup(
             "dumper = util.io:main_row",
             "getinfo = util.io:main_info",
             "getsize = util.io:main_size",
-            "lsdirf = util.io:main", #TODO lsdir
+            "lsdirf = util.lsdir:main", #TODO lsdir
             "sankey = util.sankey:main",
             "profiler = util.profiler:main",
             "nwd = util.nwd:main",
