@@ -78,7 +78,7 @@ setup(
             "nw = util.nw:main",
             "netd = util.netd:main",
             "lslog = util.lslog:main",
-            "locate = util.locate:main",
+            "locate = util.io:readrow.locate",
 
         ],
     }
