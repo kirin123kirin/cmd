@@ -196,6 +196,7 @@ start = { # bytes startswith define
   b'II': [[b'II*\x00', 'tiff'],
           [b'II*\x00\x10\x00\x00\x00CR', 'Canon RAW Format Version 2']],
   b'IN': [[b'INDX', 'Index file to a file or tape containing a backup done with AmiBack on an Amiga.']],
+  b'L\x00': [[b'L\x00\x00\x00', 'lnk']],
   b'KD': [[b'KDM', 'vmdk']],
   b'LZ': [[b'LZIP', 'lzip']],
   b'MI': [[b'MIL ', '"SEAN\xa0: Session Analysis" Training file. Also used in compatible software "Rpw\xa0: Rowperfect for Windows" and "RP3W\xa0: ROWPERFECT3 for Windows".']],

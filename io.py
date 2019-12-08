@@ -375,6 +375,12 @@ except ModuleNotFoundError:
         setclip = NotInstalledModuleError("Please Install command: pip3 install pyperclip")
 
 try:
+    import pylnk
+    pylnkfile = pylnk.file
+except ModuleNotFoundError:
+    pylnkfile = NotInstalledModuleError("Please Install command pip3 install pylnk")
+
+try:
     from sqlalchemy import create_engine, Table, MetaData
 except:
     create_engine = Table = MetaData = NotInstalledModuleError("Please Install command: pip3 install sqlalchemy")
@@ -777,6 +783,16 @@ class readrow:
         if not hasattr(path_or_buffer, "close"):
             fp.close()
 
+    @staticmethod
+    def lnk(path_or_buffer):
+        path, fp = pathbin(path_or_buffer)
+        r = pylnkfile()
+        r.open_file_object(fp)
+        for x in dir(r):
+            attr = getattr(r, x)
+            if x[0] == "_" or callable(attr):
+                continue
+            yield pinfo(path, x, attr)
 
     @staticmethod
     def txt(path_or_buffer):
@@ -1256,7 +1272,19 @@ class grouprow(readrow):
         if not hasattr(path_or_buffer, "close"):
             fp.close()
 
-
+    @staticmethod
+    def lnk(path_or_buffer):
+        path, fp = pathbin(path_or_buffer)
+        r = pylnkfile()
+        r.open_file_object(fp)
+        tar = r.environment_variables_location
+        ret = {}
+        for x in dir(r):
+            attr = getattr(r, x)
+            if x[0] == "_" or callable(attr):
+                continue
+            ret[x] = attr
+        yield pinfo(path, tar, ret)
 
     @staticmethod
     def html(path_or_buffer):

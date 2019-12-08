@@ -45,6 +45,7 @@ __all__ = [
     'getdialect',
     'sniffer',
     'back_to_path',
+    'create_shortcut',
 
 ]
 
@@ -67,6 +68,17 @@ try:
     import cloudpickle as pickle
 except ModuleNotFoundError:
     import pickle
+
+class NotInstalledModuleError(Exception):
+    def stderr(self):
+        raise __class__("** {} **".format(*self.args)) if self.args else __class__
+    def __call__(self, *args, **kw): self.stderr()
+    def __getattr__(self, *args, **kw): self.stderr()
+
+try:
+    from win32com import client
+except ModuleNotFoundError:
+    client = NotInstalledModuleError("Please Install command: pip3 install win32com")
 
 from dateutil.parser._parser import parser, parserinfo
 
@@ -857,7 +869,22 @@ def back_to_path(uri:str):
     except IndexError:
         return uri
 
+def create_shortcut(inpath, scFileName, outpath=None, icon=None):
+    shell   = client.Dispatch('WScript.shell')
+    if not outpath:
+        desktop = shell.SpecialFolders('Desktop')
+        outpath = os.path.join(desktop, scFileName+".lnk")
+    
+    if not outpath.lower().endswith(".lnk"):
+        outpath += ".lnk"
+    
+    shCut                  = shell.CreateShortcut(outpath)
+    shCut.TargetPath       = inpath
+    shCut.WindowStyle      = 1
+    shCut.IconLocation     = icon or inpath
+    shCut.WorkingDirectory = os.path.dirname(inpath)
 
+    shCut.Save()
 
 
 if __name__ == "__main__":
