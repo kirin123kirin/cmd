@@ -79,6 +79,7 @@ setup(
             "netd = util.netd:main",
             "lslog = util.lslog:main",
             "locate = util.io:readrow.locate",
+            "maildump = util.mail:main",
 
         ],
     }
