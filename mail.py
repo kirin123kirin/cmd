@@ -569,7 +569,8 @@ def download(folder, data):
 
 
 def bkmailbox(server, uid, passwd,
-    port = "993", outdir=None, threads=10):
+        port = "993", outdir=None,
+        include=[], exclude=[],threads=10):
 
     mail = imaplib.IMAP4_SSL(server, port)
     mail.login(uid, passwd)
@@ -582,6 +583,12 @@ def bkmailbox(server, uid, passwd,
     outdir = outdir or ("bk_" + server)
 
     for folder in folders:
+        if any(re.match(x.lower(), folder.lower()) for x in exclude):
+            continue
+        
+        if include and not any(re.match(x.lower(), folder.lower()) for x in include):
+            continue
+        
         mail.select(folder)
         ids = mail.search(None, 'ALL')[1][0].split()
 
@@ -630,22 +637,30 @@ def main():
          help='IMAP Connect port number')
     padd('-m', '--multithreading', type=int, default=THREAD,
          help=f'multithreading num (default {THREAD})')
+    padd('-E', '--exclude', nargs="+", default=['Trash'],
+         help='Exclude folder Names. (default Trash) regex ok.')
+    padd('-O', '--only', nargs="+", default=[],
+         help='Only folder Names. regex ok')
+    
     padd("outdir",
          metavar="<outdir>",
          nargs=1,
          help="Backup Output Directory Path")
 
     args = ps.parse_args()
+    od = args.outdir[0]
 
-    if not os.path.exists(args.outdir):
-        raise NotADirectoryError(f"Not Found Directory {args.outdir}")
+    if not os.path.exists(od):
+        raise NotADirectoryError(f"Not Found Directory {od}")
 
     bkmailbox(
         server = args.server,
         uid = args.user,
-        passwd = args.passwd,
+        passwd = args.password,
         port = args.port,
-        outdir = args.outdir,
+        outdir = od,
+        include = args.only,
+        exclude = args.exclude,
         threads=10
     )
 

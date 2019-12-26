@@ -60,9 +60,10 @@ setup(
     package_dir={pkg: ''},
     packages=[pkg],
 
-    package_data={ pkg : list(glob("libs/*.xz")) },
+    # package_data={ pkg : list(glob("libs/*.xz")) },
+    package_data={ pkg : list(glob("libs/*")) },
 
-    ext_modules=cython_module("similar", sources=["libs/similar.pyx"]),
+#    ext_modules=cython_module("similar", sources=["libs/similar.pyx"]),
     cmdclass={'build_ext': build_ext},
 
     entry_points={
