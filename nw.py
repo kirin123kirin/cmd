@@ -71,7 +71,6 @@ del_zeropadding = repad.sub
 rev4=re.compile("{0}\s*(?:{2}\s*{1}|{1}\s*{2}|{2}|{1})?".format(_PATTERN_IPADDR, _PATTERN_PREFIX, _PATTERN_NETMASK))
 
 
-
 def extractip(string, callback=None):
     """
     [Parameter]:
@@ -235,28 +234,30 @@ def main():
     import sys
     from io import StringIO
     import codecs
+    
+    if len(sys.argv) == 1:
 
-    try:
-        from pyperclip import paste as getclip, copy as setclip
-    except ModuleNotFoundError:
-        if os.name == "nt":
-            import tkinter as tk
-            def getclip():
-                a=tk.Tk()
-                return a.clipboard_get()
-
-            import subprocess
-            def setclip(text):
-                if not isinstance(text, (str, int, float, bool)):
-                    raise RuntimeError('only str, int, float, and bool values can be copied to the clipboard, not %s' % (text.__class__.__name__))
-                text = str(text)
-                p = subprocess.Popen(['clip.exe'],
-                                     stdin=subprocess.PIPE, close_fds=True)
-                p.communicate(input=text.encode("cp932"))
-
-        else:
-            getclip = ModuleNotFoundError("Please Install command: pip3 install pyperclip")
-            setclip = ModuleNotFoundError("Please Install command: pip3 install pyperclip")
+        try:
+            from pyperclip import paste as getclip, copy as setclip
+        except ModuleNotFoundError:
+            if os.name == "nt":
+                import tkinter as tk
+                def getclip():
+                    a=tk.Tk()
+                    return a.clipboard_get()
+    
+                import subprocess
+                def setclip(text):
+                    if not isinstance(text, (str, int, float, bool)):
+                        raise RuntimeError('only str, int, float, and bool values can be copied to the clipboard, not %s' % (text.__class__.__name__))
+                    text = str(text)
+                    p = subprocess.Popen(['clip.exe'],
+                                         stdin=subprocess.PIPE, close_fds=True)
+                    p.communicate(input=text.encode("cp932"))
+    
+            else:
+                getclip = ModuleNotFoundError("Please Install command: pip3 install pyperclip")
+                setclip = ModuleNotFoundError("Please Install command: pip3 install pyperclip")
 
     from argparse import ArgumentParser
 
@@ -277,7 +278,7 @@ def main():
 
     padd("address",
          metavar="<address>",
-         nargs="?",  default=None,
+         nargs="*",  default=None,
          help="IP or NW address/subnet")
 
     args = ps.parse_args()
@@ -290,7 +291,7 @@ def main():
 
     with codecs.open(outfile, "w", encoding="cp932") if outfile else StringIO() as ret:
 
-        string = args.address if args.address else getclip()
+        string = "\t".join(args.address) if args.address else getclip()
 
         for r in func(string, callback):
             print(r, file=ret)
@@ -298,7 +299,8 @@ def main():
         if not outfile:
             print(ret.getvalue())
 
-        setclip(ret.getvalue()[:-1])
+        if len(sys.argv) == 1:
+            setclip(ret.getvalue()[:-1])
 
 if __name__ == "__main__":
 #    test()
