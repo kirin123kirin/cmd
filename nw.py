@@ -290,7 +290,7 @@ def main():
 
     with codecs.open(outfile, "w", encoding="cp932") if outfile else StringIO() as ret:
 
-        string = args.adress if args.address else getclip()
+        string = args.address if args.address else getclip()
 
         for r in func(string, callback):
             print(r, file=ret)

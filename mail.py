@@ -544,7 +544,9 @@ class Attachment:
         return b''
 
 
-def mkname(msg, mt = str.maketrans(":;/\\?\"<>|", "_________")):
+ngword = ":;/\\?\"<>|\t\n\r\v"
+mt = str.maketrans(ngword, "_" * len(ngword))
+def mkname(msg):
     name = msg.subject
     mid = msg.headers.get("Message-Id", [""])[0]
     if mid:
