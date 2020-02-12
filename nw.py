@@ -159,8 +159,8 @@ def getipinfo(string, callback=None):
         nw = iface.network
         nwa = str(nw.network_address)
 
-        if bit == 32:
-            raise ValueError("No Subnet Info? -> {}".format(s))
+        if bit < 8 or bit > 32:
+            raise ValueError("No validation SubnetMask Value -> {}".format(s))
 
         ret = ipinfo(
             None if ipa == nwa else ipa,  # IPaddress
