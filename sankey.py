@@ -44,7 +44,7 @@ if (document.getElementById("d20ac8fc-6cf3-4c8d-bc7e-ab4d283ae987")) {{
 def buildhtml(
     trace,
     layout,
-    template = join(dirname(sys.argv[0]),"libs/sankey.js.xz"),
+    template = join(dirname(util.__file__),"libs/sankey.js.xz"),
     outpath = join(gettempdir(), "temp-plot.html"),
     updatejs = False
     ):
