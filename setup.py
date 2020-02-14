@@ -3,7 +3,7 @@ from glob import glob
 from setuptools import setup, Extension
 from Cython.Build import cythonize
 from Cython.Distutils import build_ext
-
+from shutil import which
 
 readme="""
 """
@@ -24,20 +24,30 @@ def read_requirements(path):
 
     return ret
 
+def cancompile():
+    if os.name == "posix":
+        if which("gcc"):
+            return True
+        else:
+            return False
+
+    elif which("cl.exe") or list(glob("C:/Program Files*/Microsoft Visual Studio/**/VC/Tools/MSVC/**/bin/**/cl.exe", recursive=True)):
+        return True
+    return False
+
 
 def cython_module(modname, sources):
-    try:
+    if cancompile():
         return cythonize([Extension("util.libs." + modname, sources=sources)])
-    except Exception as e:
-        print(e, file=sys.stderr)
-        # TODO pyd copy
+    else:
+
         return []
 
 filepath = os.path.join(os.path.dirname(sys.argv[0]), "requirements.txt")
 
 setup(
     name=pkg,
-    version="0.1.2",
+    version="0.1.3",
 
     **read_requirements(filepath),
 
@@ -60,10 +70,9 @@ setup(
     package_dir={pkg: ''},
     packages=[pkg],
 
-    # package_data={ pkg : list(glob("libs/*.xz")) },
-    package_data={ pkg : list(glob("libs/*")) },
+    package_data={ pkg : list(glob("libs/*.xz" if cancompile() else "libs/*")) },
 
-#    ext_modules=cython_module("similar", sources=["libs/similar.pyx"]),
+    ext_modules=cythonize([Extension("util.libs.similar", sources=["libs/similar.pyx"])]) if cancompile() else [],
     cmdclass={'build_ext': build_ext},
 
     entry_points={
