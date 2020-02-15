@@ -36,13 +36,6 @@ def cancompile():
     return False
 
 
-def cython_module(modname, sources):
-    if cancompile():
-        return cythonize([Extension("util.libs." + modname, sources=sources)])
-    else:
-
-        return []
-
 filepath = os.path.join(os.path.dirname(sys.argv[0]), "requirements.txt")
 
 setup(
@@ -72,7 +65,7 @@ setup(
 
     package_data={ pkg : list(glob("libs/*.xz" if cancompile() else "libs/*")) },
 
-    ext_modules=cythonize([Extension("util.libs.similar", sources=["libs/similar.pyx"])]) if cancompile() else [],
+    ext_modules=cythonize([Extension(pkg + ".libs.similar", sources=["libs/similar.pyx"])]) if cancompile() else [],
     cmdclass={'build_ext': build_ext},
 
     entry_points={
