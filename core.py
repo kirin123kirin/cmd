@@ -10,6 +10,7 @@ __all__ = [
     "binopen",
     "opener",
     "binchunk",
+    "globbing",
     "to_hankaku",
     "to_zenkaku",
     "tdir",
@@ -22,6 +23,8 @@ iswin = os.name == "nt"
 import re
 from io import IOBase, StringIO, BytesIO
 import codecs
+from os.path import isdir
+from glob import iglob
 try:
     import nkf
     def getencoding(dat:bytes):
@@ -142,6 +145,70 @@ def binchunk(path_or_buffer, buffer=1024**2, sep=None):
                         yield r
                     else:
                         prev = r
+
+
+def globbing(func, ttype="both", callback=None):
+    """ globbable function decorator
+
+         Parameters:
+             func : callable => decorate target function object
+                * `func` Require: 1st Argument is need path_or_buffer
+             ttype : str         => both or file or dir
+             key : callable   => finalize output function
+
+         Return:
+             globbable function
+
+         Examples:
+             @globbing
+             def foo(path_or_buffer, *args, **kw):
+                 return codecs.open(path_or_buffer, *args, **kw)
+
+             for line in foo("/tmp/*.csv", encoding="cp932"):
+                 print(line)
+    """
+    def wrapper(path_or_buffer, *args, **kw):
+        if isinstance(path_or_buffer, (str, bytes)):
+            if len(path_or_buffer) > 1023:
+                raise ValueError("Not Valid file path string.")
+            elif any(x in path_or_buffer for x in "*?["):
+                tp = (ttype or "b").lower()[0]
+                if tp == "b":
+                    it = (dat for x in iglob(path_or_buffer) for dat in func(x, *args, **kw))
+                elif tp == "d":
+                    it = (dat for x in iglob(path_or_buffer) if isdir(x) for dat in func(x, *args, **kw))
+                elif tp == "f":
+                    it = (dat for x in iglob(path_or_buffer) if not isdir(x) for dat in func(x, *args, **kw))
+                else:
+                    raise ValueError("Unknown ttype `both`, `file`, `dir`")
+            else:
+                it = func(path_or_buffer, *args, **kw)
+
+        elif isinstance(path_or_buffer, (list, tuple)) or hasattr(path_or_buffer, "__next__"):
+            it = (dat for x in path_or_buffer for dat in func(x, *args, **kw))
+
+        else:
+            it = func(path_or_buffer, *args, **kw)
+
+        flag = False
+        if callback:
+            for item in it:
+                yield callback(item)
+                if flag is False:
+                    flag = True
+        else:
+            for item in it:
+                yield item
+                if flag is False:
+                    flag = True
+
+        if flag is False:
+            raise FileNotFoundError(path_or_buffer)
+
+    wrapper.__doc__ = func.__doc__
+    wrapper.__name__ = func.__name__
+
+    return wrapper
 
 
 ZEN = "".join(chr(0xff01 + i) for i in range(94))

@@ -14,6 +14,7 @@ __all__ = [
     "lsdir",
     "xmltodict",
     "readrow",
+    "dumper",
     "grouprow",
     "getinfo",
     "getsize",
@@ -394,7 +395,7 @@ except:
         pyodbc = NotInstalledModuleError("Please Install command: pip3 install pyodbc")
 
 from util.filetype import guesstype
-from util.core import binopen, opener, getencoding, binchunk
+from util.core import binopen, opener, getencoding, binchunk, globbing
 
 def lsdir(path, recursive=True):
     func = "rglob" if recursive else "glob"
@@ -1109,6 +1110,8 @@ class readrow:
             bio.name = "clipboad"
             for r in funcs(bio):
                 yield r
+
+dumper = globbing(readrow)
 
 class grouprow(readrow):
 
