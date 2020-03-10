@@ -50,10 +50,17 @@ def findexec(exec, name="*", ignore_name=None, type="both"):
         else:
             raise ValueError("Unkown `{}`".format(pathes))
 
-    if ignore_name is None:
-        def ismatch(p):
-            return fnmatch(p, name)
-    else:
+    if not ignore_name:
+        if isinstance(name, (str, bytes)):
+            def ismatch(p):
+                return fnmatch(p, name)
+        elif hasattr(name, "__next__") or hasattr(name, "__iter__"):
+            def ismatch(p):
+                for n in name:
+                    if fnmatch(p, n):
+                        return True
+                return False
+    else: #TODO list
         def ismatch(p):
             return fnmatch(p, name) and not fnmatch(p, ignore_name)
 
@@ -112,11 +119,16 @@ def create_parser(lowlevel=False):
     )
 
     if lowlevel:
+        padd('-e', '--exec',
+            nargs="*",
+            help='execute command',
+            default=None)
+
         padd('-t', '--type',
             help='filter file type , file=>f or dir=>d or both=>b (default both)',
             default="b")
 
-        padd('-n', '--name',
+        padd('-n', '--name', #TODO list
             help='wildcard string for filter(like is `find -name`)',
             default="*")
         
@@ -124,11 +136,6 @@ def create_parser(lowlevel=False):
             help='wildcard string for ignore filter(like is `find -not -name`)',
             default=None)
             
-        padd('-e', '--exec',
-            type=str,
-            help='execute command',
-            default=None)
-
     padd('directories',
          metavar='<directories>',
          #nargs="*", default=[["."]],
@@ -141,6 +148,9 @@ def create_parser(lowlevel=False):
     args.directories = list(filter(isdir, chain(*args.directories)))
     if not args.directories:
         parser.error("Directories Not Found. Please check directories")
+    if lowlevel and args.exec:
+        args.exec = " ".join(args.exec).replace("\\", "").strip("'\"")
+        
     return args
 
 
@@ -172,7 +182,6 @@ def main():
 
     def oscommand(_target):
         cmd = "{} {}".format(args.exec, _target)
-        print("hoge", cmd)
         if verb:
             print("Run:", cmd)
         code, dat = getstatusoutput(cmd)
@@ -181,7 +190,7 @@ def main():
         else:
             print(dat, file=sys.stderr)
 
-    findexec(oscommand, name=args.name, ignore_name=args.ignore_name, type=args.type)(args.directories)
+    findexec(oscommand if args.exec else print, name=args.name, ignore_name=args.ignore_name, type=args.type)(args.directories)
 
 
 def test():
@@ -231,15 +240,18 @@ def test():
             assert sorted(os.listdir(tmpdir)) == ['.bar', '.foo', '.git', 'hoge.txt']
 
         def test_main_dir():
-            addarg("-v -t d -n .* -e dir " + tmpdir)
+            addarg("-v -e dir -t d -n .* " + tmpdir)
+            maketestdata()
             main()
             
         def test_main_file():
-            addarg("-v -t f -n .* -e dir " + tmpdir)
+            addarg("-v -e dir -t f -n .* " + tmpdir)
+            maketestdata()
             main()
         
         def test_main_file_ignore():
-            addarg("-v -i .* -e dir " + tmpdir)
+            addarg("-v -i h* -e 'ls \-l' -t f " + tmpdir)
+            maketestdata()
             main()
 
         for x, func in list(locals().items()):
