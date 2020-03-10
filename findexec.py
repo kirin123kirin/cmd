@@ -19,7 +19,7 @@ __all__     = [
 ]
 
 
-def findexec(exec, name="*", type="both"):
+def findexec(exec, name="*", ignore_name=None, type="both"):
     """
     Each find file execute function. :decorator function
 
@@ -28,6 +28,7 @@ def findexec(exec, name="*", type="both"):
     Parameters:
         :exec: execute finction callable function
         :name: file or directory name pattern(wildcard string)
+        :ignore_name: ignore name pattern(wildcard string)
         :type: file or dir or both
 
     Example:
@@ -35,8 +36,7 @@ def findexec(exec, name="*", type="both"):
             def rm_rf_old_files(target_directory):
                 os.remove(target_directory)
                 print("delete", target_directory)
-
-            rm_rf_old_files("/tmp")
+        >>> rm_rf_old_files("/tmp")
     """
 
     def it(pathes):
@@ -50,12 +50,19 @@ def findexec(exec, name="*", type="both"):
         else:
             raise ValueError("Unkown `{}`".format(pathes))
 
+    if ignore_name is None:
+        def ismatch(p):
+            return fnmatch(p, name)
+    else:
+        def ismatch(p):
+            return fnmatch(p, name) and not fnmatch(p, ignore_name)
+
     tp = type.lower()[0] if type else "b"
 
     if tp == "b":
         def findexec_both(_directory, verbose=False):
             for p, np in it(_directory):
-                if fnmatch(p, name):
+                if ismatch(p):
                     if verbose:
                         print("Run:{}({})".format(exec.__name__, np))
                     exec(np)
@@ -69,7 +76,7 @@ def findexec(exec, name="*", type="both"):
             for p, np in it(_directory):
                 if isdir(np):
                     findexec_file(np)
-                elif fnmatch(p, name):
+                elif ismatch(p):
                     if verbose:
                         print("Run:{}({})".format(exec.__name__, np))
                     exec(np)
@@ -80,7 +87,7 @@ def findexec(exec, name="*", type="both"):
         def findexec_dir(_directory, verbose=False):
             for p, np in it(_directory):
                 if isdir(np):
-                    if fnmatch(p, name):
+                    if ismatch(p):
                         if verbose:
                             print("Run:{}({})".format(exec.__name__, np))
                         exec(np)
@@ -112,8 +119,13 @@ def create_parser(lowlevel=False):
         padd('-n', '--name',
             help='wildcard string for filter(like is `find -name`)',
             default="*")
-
+        
+        padd('-i', '--ignore_name',
+            help='wildcard string for ignore filter(like is `find -not -name`)',
+            default=None)
+            
         padd('-e', '--exec',
+            type=str,
             help='execute command',
             default=None)
 
@@ -160,6 +172,7 @@ def main():
 
     def oscommand(_target):
         cmd = "{} {}".format(args.exec, _target)
+        print("hoge", cmd)
         if verb:
             print("Run:", cmd)
         code, dat = getstatusoutput(cmd)
@@ -168,7 +181,7 @@ def main():
         else:
             print(dat, file=sys.stderr)
 
-    findexec(oscommand, name=args.name, type=args.type)(args.directories)
+    findexec(oscommand, name=args.name, ignore_name=args.ignore_name, type=args.type)(args.directories)
 
 
 def test():
@@ -217,10 +230,16 @@ def test():
             main_rmsvn()
             assert sorted(os.listdir(tmpdir)) == ['.bar', '.foo', '.git', 'hoge.txt']
 
-        def test_main():
+        def test_main_dir():
             addarg("-v -t d -n .* -e dir " + tmpdir)
             main()
+            
+        def test_main_file():
             addarg("-v -t f -n .* -e dir " + tmpdir)
+            main()
+        
+        def test_main_file_ignore():
+            addarg("-v -i .* -e dir " + tmpdir)
             main()
 
         for x, func in list(locals().items()):
@@ -231,5 +250,5 @@ def test():
                 print("{} : time {}".format(x, t2-t1))
 
 if __name__ == "__main__":
-    # test()
+    #test()
     main()
