@@ -14,6 +14,7 @@ import_module = [
     "differ",
     "lslog",
     "lsdir",
+    "findexec",
     "nw",
 ]
 
@@ -56,7 +57,7 @@ import importlib
 import importlib.util
 import collections.abc as cabc
 
-__version__ = '0.1.4'
+__version__ = '0.1.5'
 
 
 class LazyObject(object):

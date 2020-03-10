@@ -40,7 +40,7 @@ filepath = os.path.join(os.path.dirname(sys.argv[0]), "requirements.txt")
 
 setup(
     name=pkg,
-    version="0.1.3",
+    version="0.1.5",
 
     **read_requirements(filepath),
 
@@ -83,7 +83,11 @@ setup(
             "lslog = util.lslog:main",
             "locate = util.io:readrow.locate",
             "maildump = util.mail:main",
-
+            "findexec = util.findexec:main",
+            "rmdotdir = util.findexec:main_rmdotdir",
+            "rmdotfile = util.findexec:main_rmdotfile",
+            "rmgit = util.findexec:main_rmgit",
+            "rmsvn = util.findexec:main_rmsvn",
         ],
     }
 )
