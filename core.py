@@ -23,7 +23,7 @@ iswin = os.name == "nt"
 import re
 from io import IOBase, StringIO, BytesIO
 import codecs
-from os.path import isdir
+from os.path import isdir, normpath
 from glob import iglob
 try:
     import nkf
@@ -173,19 +173,20 @@ def globbing(func, ttype="both", callback=None):
                 raise ValueError("Not Valid file path string.")
             elif any(x in path_or_buffer for x in "*?["):
                 tp = (ttype or "b").lower()[0]
+                ig = map(normpath, iglob(path_or_buffer))
                 if tp == "b":
-                    it = (dat for x in iglob(path_or_buffer) for dat in func(x, *args, **kw))
+                    it = (dat for x in ig for dat in func(x, *args, **kw))
                 elif tp == "d":
-                    it = (dat for x in iglob(path_or_buffer) if isdir(x) for dat in func(x, *args, **kw))
+                    it = (dat for x in ig if isdir(x) for dat in func(x, *args, **kw))
                 elif tp == "f":
-                    it = (dat for x in iglob(path_or_buffer) if not isdir(x) for dat in func(x, *args, **kw))
+                    it = (dat for x in ig if not isdir(x) for dat in func(x, *args, **kw))
                 else:
                     raise ValueError("Unknown ttype `both`, `file`, `dir`")
             else:
                 it = func(path_or_buffer, *args, **kw)
 
         elif isinstance(path_or_buffer, (list, tuple)) or hasattr(path_or_buffer, "__next__"):
-            it = (dat for x in path_or_buffer for dat in func(x, *args, **kw))
+            it = (y for x in path_or_buffer for y in wrapper(x, *args, **kw))
 
         else:
             it = func(path_or_buffer, *args, **kw)
@@ -209,6 +210,7 @@ def globbing(func, ttype="both", callback=None):
     wrapper.__name__ = func.__name__
 
     return wrapper
+
 
 
 ZEN = "".join(chr(0xff01 + i) for i in range(94))
