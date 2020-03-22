@@ -110,7 +110,7 @@ def findexec(exec, name="*", ignore_name=None, type="both"):
 def create_parser(lowlevel=False):
     from argparse import ArgumentParser
 
-    parser = ArgumentParser(description="find execute comman")
+    parser = ArgumentParser(description="find execute command")
     padd = parser.add_argument
 
     padd('-v', '--verbose',

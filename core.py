@@ -25,6 +25,7 @@ from io import IOBase, StringIO, BytesIO
 import codecs
 from os.path import isdir, normpath
 from glob import iglob
+from functools import wraps
 try:
     import nkf
     def getencoding(dat:bytes):
@@ -147,49 +148,75 @@ def binchunk(path_or_buffer, buffer=1024**2, sep=None):
                         prev = r
 
 
-def globbing(func, ttype="both", callback=None):
+def dynamic_args(func0):
+    def wrapper(*args, **kwargs):
+        if len(args) != 0 and callable(args[0]):
+            func = args[0]
+            return wraps(func)(func0(func))
+        else:
+            def _wrapper(func):
+                return wraps(func)(func0(func, *args, **kwargs))
+            return _wrapper
+    return wrapper
+
+
+@dynamic_args
+def globbing(func, ttype="both", isloop=True, callback=None):
     """ globbable function decorator
 
-         Parameters:
-             func : callable => decorate target function object
+          Parameters:
+              func : callable => decorate target function object
                 * `func` Require: 1st Argument is need path_or_buffer
-             ttype : str         => both or file or dir
-             key : callable   => finalize output function
+              ttype : str         => both or file or dir
+              isloop : boolean    => return of func loop iteration?
+              callback : callable   => finalize output function
 
-         Return:
-             globbable function
+          Return:
+              globbable function
 
-         Examples:
-             @globbing
-             def foo(path_or_buffer, *args, **kw):
-                 return codecs.open(path_or_buffer, *args, **kw)
+          Examples:
+              @globbing
+              def foo(path_or_buffer, *args, **kw):
+                  return codecs.open(path_or_buffer, *args, **kw)
 
-             for line in foo("/tmp/*.csv", encoding="cp932"):
-                 print(line)
+              for line in foo("/tmp/*.csv", encoding="cp932"):
+                  print(line)
     """
     def wrapper(path_or_buffer, *args, **kw):
+        it = None
         if isinstance(path_or_buffer, (str, bytes)):
             if len(path_or_buffer) > 1023:
                 raise ValueError("Not Valid file path string.")
             elif any(x in path_or_buffer for x in "*?["):
                 tp = (ttype or "b").lower()[0]
-                ig = map(normpath, iglob(path_or_buffer))
+                ig = map(normpath, iglob(path_or_buffer, recursive=True))
+
                 if tp == "b":
-                    it = (dat for x in ig for dat in func(x, *args, **kw))
+                    if isloop:
+                        it = (dat for x in ig for dat in func(x, *args, **kw))
+                    else:
+                        it = (func(x, *args, **kw) for x in ig)
                 elif tp == "d":
-                    it = (dat for x in ig if isdir(x) for dat in func(x, *args, **kw))
+                    if isloop:
+                        it = (dat for x in ig if isdir(x) for dat in func(x, *args, **kw))
+                    else:
+                        it = (func(x, *args, **kw) for x in ig if isdir(x))
                 elif tp == "f":
-                    it = (dat for x in ig if not isdir(x) for dat in func(x, *args, **kw))
+                    if isloop:
+                        it = (dat for x in ig if not isdir(x) for dat in func(x, *args, **kw))
+                    else:
+                        it = (func(x, *args, **kw) for x in ig if not isdir(x))
                 else:
                     raise ValueError("Unknown ttype `both`, `file`, `dir`")
-            else:
-                it = func(path_or_buffer, *args, **kw)
 
         elif isinstance(path_or_buffer, (list, tuple)) or hasattr(path_or_buffer, "__next__"):
             it = (y for x in path_or_buffer for y in wrapper(x, *args, **kw))
 
-        else:
-            it = func(path_or_buffer, *args, **kw)
+        if it is None:
+            if isloop:
+                it = func(path_or_buffer, *args, **kw)
+            else:
+                it = [func(path_or_buffer, *args, **kw)]
 
         flag = False
         if callback:
@@ -206,8 +233,10 @@ def globbing(func, ttype="both", callback=None):
         if flag is False:
             raise FileNotFoundError(path_or_buffer)
 
-    wrapper.__doc__ = func.__doc__
-    wrapper.__name__ = func.__name__
+    if hasattr(func, "__doc__"):
+        wrapper.__doc__ = func.__doc__
+    if hasattr(func, "__name__"):
+        wrapper.__name__ = func.__name__
 
     return wrapper
 
