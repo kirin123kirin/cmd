@@ -40,7 +40,7 @@ filepath = os.path.join(os.path.dirname(sys.argv[0]), "requirements.txt")
 
 setup(
     name=pkg,
-    version="0.1.5",
+    version="0.1.6",
 
     **read_requirements(filepath),
 
