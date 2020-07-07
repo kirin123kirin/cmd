@@ -21,7 +21,7 @@ from ipaddress import ip_interface, ip_address
 from util.core import to_hankaku
 
 FORMAT = "{nwadr}/{bitmask}\t{netmask}"
-ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast", "range"])
+ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast", "iprange", "nwrange"])
 
 
 _PATTERN_IPADDR_UNIT = "(?:25[0-4]|2[0-4]\d|1\d{2}|0?[1-9]\d|0{,2}\d)"
@@ -166,6 +166,8 @@ def getipinfo(string, callback=None):
         ipfw, iprf = (".".join(nwsplit[:-1]) ,int(nwsplit[-1]))
         ipfirst = "{}.{}".format(ipfw, iprf + 1)
         iplast = "{}.{}".format(ipfw, iprf + nwnum - 1)
+        nwfirst = "{}.{}".format(ipfw, iprf)
+        nwlast = "{}.{}".format(ipfw, iprf + nwnum)
 
         ret = ipinfo(
             None if ipa == nwa else ipa,  # IPaddress
@@ -175,6 +177,7 @@ def getipinfo(string, callback=None):
             nwnum, # count IP address num
             str(nw[-1]),       # BroadCast Address
             "{} - {}".format(ipfirst, iplast), #Valid Range IPAddress
+            "{} - {}".format(nwfirst, nwlast), #Valid Range IPAddress
         )
 
         if callback:
