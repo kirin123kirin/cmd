@@ -21,7 +21,7 @@ from ipaddress import ip_interface, ip_address
 from util.core import to_hankaku
 
 FORMAT = "{nwadr}/{bitmask}\t{netmask}"
-ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast"])
+ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast", "range"])
 
 
 _PATTERN_IPADDR_UNIT = "(?:25[0-4]|2[0-4]\d|1\d{2}|0?[1-9]\d|0{,2}\d)"
@@ -154,20 +154,27 @@ def getipinfo(string, callback=None):
         s = str(iface)
 
         bit = int(s.split("/")[1])
+        if bit < 8 or bit > 32:
+            raise ValueError("No validation SubnetMask Value -> {}".format(s))
+
         ipa = str(iface.ip)
         nw = iface.network
         nwa = str(nw.network_address)
-
-        if bit < 8 or bit > 32:
-            raise ValueError("No validation SubnetMask Value -> {}".format(s))
+        nwnum = nw.num_addresses
+        
+        nwsplit = nwa.split(".")
+        ipfw, iprf = (".".join(nwsplit[:-1]) ,int(nwsplit[-1]))
+        ipfirst = "{}.{}".format(ipfw, iprf + 1)
+        iplast = "{}.{}".format(ipfw, iprf + nwnum - 1)
 
         ret = ipinfo(
             None if ipa == nwa else ipa,  # IPaddress
             str(nw.netmask),  # SubnetMask
             bit,              # BitMask
             nwa,              # Network Address
-            nw.num_addresses, # count IP address num
-            str(nw[-1])       # BroadCast Address
+            nwnum, # count IP address num
+            str(nw[-1]),       # BroadCast Address
+            "{} - {}".format(ipfirst, iplast), #Valid Range IPAddress
         )
 
         if callback:

@@ -2409,9 +2409,9 @@ def main_row():
     padd('-l', '--lineterminator', type=unicode_escape, default="\r\n",
          help='output fileencoding (default `\\r\\n`)')
     padd('-f', '--filename', action='store_true', default=False,
-         help='output filename (default False)')
+         help='filename print (default False)')
     padd('-t', '--target', action='store_true', default=False,
-         help='output targetname (default False)')
+         help='targetname print (default False)')
     args = ps.parse_args()
 
     encoding = args.encoding
