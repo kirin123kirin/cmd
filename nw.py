@@ -20,7 +20,8 @@ from ipaddress import ip_interface, ip_address
 
 from util.core import to_hankaku
 
-FORMAT = "{nwadr}/{bitmask}\t{netmask}"
+SEP = "\t"
+FORMAT = SEP.join(["{nwadr}/{bitmask}", "{netmask}","{numip}IP", "{iprange}"])
 ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast", "iprange", "nwrange"])
 
 
@@ -70,6 +71,8 @@ del_zeropadding = repad.sub
 
 rev4=re.compile("{0}\s*(?:{2}\s*{1}|{1}\s*{2}|{2}|{1})?".format(_PATTERN_IPADDR, _PATTERN_PREFIX, _PATTERN_NETMASK))
 
+def unicode_escape(x):
+    return x.encode().decode("unicode_escape")
 
 def extractip(string, callback=None):
     """
@@ -161,11 +164,11 @@ def getipinfo(string, callback=None):
         nw = iface.network
         nwa = str(nw.network_address)
         nwnum = nw.num_addresses
-        
+
         nwsplit = nwa.split(".")
         ipfw, iprf = (".".join(nwsplit[:-1]) ,int(nwsplit[-1]))
         ipfirst = "{}.{}".format(ipfw, iprf + 1)
-        iplast = "{}.{}".format(ipfw, iprf + nwnum - 1)
+        iplast = "{}.{}".format(ipfw, iprf + nwnum - 2)
         nwfirst = "{}.{}".format(ipfw, iprf)
         nwlast = "{}.{}".format(ipfw, iprf + nwnum)
 
@@ -244,30 +247,28 @@ def main():
     import sys
     from io import StringIO
     import codecs
-    
-    if len(sys.argv) == 1:
 
-        try:
-            from pyperclip import paste as getclip, copy as setclip
-        except ModuleNotFoundError:
-            if os.name == "nt":
-                import tkinter as tk
-                def getclip():
-                    a=tk.Tk()
-                    return a.clipboard_get()
-    
-                import subprocess
-                def setclip(text):
-                    if not isinstance(text, (str, int, float, bool)):
-                        raise RuntimeError('only str, int, float, and bool values can be copied to the clipboard, not %s' % (text.__class__.__name__))
-                    text = str(text)
-                    p = subprocess.Popen(['clip.exe'],
-                                         stdin=subprocess.PIPE, close_fds=True)
-                    p.communicate(input=text.encode("cp932"))
-    
-            else:
-                getclip = ModuleNotFoundError("Please Install command: pip3 install pyperclip")
-                setclip = ModuleNotFoundError("Please Install command: pip3 install pyperclip")
+    try:
+        from pyperclip import paste as getclip, copy as setclip
+    except ModuleNotFoundError:
+        if os.name == "nt":
+            import tkinter as tk
+            def getclip():
+                a=tk.Tk()
+                return a.clipboard_get()
+
+            import subprocess
+            def setclip(text):
+                if not isinstance(text, (str, int, float, bool)):
+                    raise RuntimeError('only str, int, float, and bool values can be copied to the clipboard, not %s' % (text.__class__.__name__))
+                text = str(text)
+                p = subprocess.Popen(['clip.exe'],
+                                     stdin=subprocess.PIPE, close_fds=True)
+                p.communicate(input=text.encode("cp932"))
+
+        else:
+            getclip = ModuleNotFoundError("Please Install command: pip3 install pyperclip")
+            setclip = ModuleNotFoundError("Please Install command: pip3 install pyperclip")
 
     from argparse import ArgumentParser
 
@@ -277,11 +278,28 @@ def main():
 
     padd('-V','--version', action='version', version='%(prog)s ' + __version__)
 
-    padd('-f', '--form', type=str, default=FORMAT,
+    padd('-f', '--form', type=unicode_escape, default=FORMAT,
          help='Usable Keyword formating {}'.format(tuple("{" + x + "}" for x in ipinfo._fields)))
+
+    padd('-s', '--sep',
+         type=unicode_escape,
+         help='output separator',
+         default=SEP)
+
+    padd('-H', '--header',
+         action='store_true', default=False,
+         help='print header')
+
+    padd('-e', '--encoding',
+        help='output encoding',
+        default=os.name == "nt" and "cp932" or "utf-8")
 
     padd('-w', '--withorgdata', action="store_true",
          help='Output data with original data')
+
+    padd('-c', '--clipboard',
+         action='store_true', default=False,
+         help='output to clipboard')
 
     padd('-o', '--outputfile', type=str, default=None,
          help='Output data filepath')
@@ -295,22 +313,40 @@ def main():
 
     outfile = args.outputfile
 
-    callback = lambda x: args.form.format(**x._asdict())
+    sep = args.sep
+
+    encoding = args.encoding
+
+    form = args.form if sep == SEP else args.form.replace(SEP, sep)
+
+    callback = lambda x: form.format(**x._asdict())
+
+    header = re.sub("[\{\}]", "", form if sep == SEP else form.replace(SEP, sep))
 
     func = formatip if args.withorgdata else getipinfo
 
-    with codecs.open(outfile, "w", encoding="cp932") if outfile else StringIO() as ret:
+    with codecs.open(outfile, "w", encoding=encoding) if outfile else StringIO() as ret:
 
-        string = "\t".join(args.address) if args.address else getclip()
+        string = sep.join(args.address) if args.address else getclip()
 
-        for r in func(string, callback):
-            print(r, file=ret)
+        if not string:
+            ps.print_usage(file=sys.stderr)
+            print("\n", file=sys.stderr)
+            raise ValueError("No Data.")
+
+        if args.header:
+            print(header, file=ret)
+
+        for line in string.splitlines():
+            for r in func(line, callback):
+                print(r, file=ret)
 
         if not outfile:
             print(ret.getvalue())
 
-        if len(sys.argv) == 1:
+        if args.clipboard:
             setclip(ret.getvalue()[:-1])
+
 
 if __name__ == "__main__":
 #    test()
