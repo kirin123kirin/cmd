@@ -167,10 +167,10 @@ def getipinfo(string, callback=None):
 
         nwsplit = nwa.split(".")
         ipfw, iprf = (".".join(nwsplit[:-1]) ,int(nwsplit[-1]))
-        ipfirst = "{}.{}".format(ipfw, iprf + 1)
-        iplast = "{}.{}".format(ipfw, iprf + nwnum - 2)
-        nwfirst = "{}.{}".format(ipfw, iprf)
-        nwlast = "{}.{}".format(ipfw, iprf + nwnum)
+        mkip = lambda x: "{}.{}".format(ipfw, x)
+        mkrange = lambda x, y: "{} - {}".format(mkip(x), mkip(y))
+        iprange = mkrange(iprf + 1, iprf + nwnum - 2) #Valid Range IPAddress
+        nwrange = mkrange(iprf, iprf + nwnum) #Valid Range IPAddress
 
         ret = ipinfo(
             None if ipa == nwa else ipa,  # IPaddress
@@ -179,8 +179,8 @@ def getipinfo(string, callback=None):
             nwa,              # Network Address
             nwnum, # count IP address num
             str(nw[-1]),       # BroadCast Address
-            "{} - {}".format(ipfirst, iplast), #Valid Range IPAddress
-            "{} - {}".format(nwfirst, nwlast), #Valid Range IPAddress
+            iprange,
+            nwrange,
         )
 
         if callback:
