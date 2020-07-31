@@ -3,7 +3,7 @@
 
 __author__  = 'm.yama'
 __license__ = 'MIT'
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 
 __all__     = [
@@ -18,6 +18,7 @@ from tempfile import gettempdir
 from subprocess import getstatusoutput
 from hashlib import md5
 
+import util
 from util.core import flatten
 from util.io import readrow
 
