@@ -40,7 +40,7 @@ filepath = os.path.join(os.path.dirname(sys.argv[0]), "requirements.txt")
 
 setup(
     name=pkg,
-    version="0.1.6",
+    version="0.1.7",
 
     **read_requirements(filepath),
 
@@ -88,6 +88,7 @@ setup(
             "rmdotfile = util.findexec:main_rmdotfile",
             "rmgit = util.findexec:main_rmgit",
             "rmsvn = util.findexec:main_rmsvn",
+            "scpget = util.remote:main_scpget",
         ],
     }
 )
