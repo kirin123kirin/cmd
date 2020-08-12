@@ -25,7 +25,7 @@ FORMAT = SEP.join(["{nwadr}/{bitmask}", "{netmask}","{numip}IP", "{iprange}"])
 ipinfo = namedtuple("IPinfo", ["ipadr", "netmask", "bitmask", "nwadr", "numip", "broadcast", "iprange", "nwrange"])
 
 
-_PATTERN_IPADDR_UNIT = "(?:25[0-4]|2[0-4]\d|1\d{2}|0?[1-9]\d|0{,2}\d)"
+_PATTERN_IPADDR_UNIT = "(?:25[0-4]|2[0-5]\d|1\d{2}|0?[1-9]\d|0{,2}\d)"
 _PATTERN_NETMASK_UNIT = "(?:255|254|248|240|224|192|128|0{1,3})"
 _PATTERN_IPADDR = "((?:{0}\.){{3}}(?:{0}))".format(_PATTERN_IPADDR_UNIT)
 _PATTERN_PREFIX = "\(?[:/]?([1-2]\d|3[12]|[89])\)?"
@@ -121,8 +121,10 @@ def extractip(string, callback=None):
                     netmask = x
                 elif is_ipaddr(x):
                     ip = x
+        if ip is None:
+            raise ValueError("Invalid IP address? {}".format(string))
 
-        if prefix and netmask:
+        elif prefix and netmask:
             msk = prefix_to_mask(prefix)
             if msk == netmask:
                 add( ip_interface(ip + "/" + prefix) )
@@ -131,7 +133,10 @@ def extractip(string, callback=None):
                     "サブネットマスク`{}` は `{}` ビットマスクではない。もしかして`{}`の誤り?".format(
                         netmask, prefix, msk))
         elif prefix:
-            add( ip_interface(ip + "/" + prefix) )
+            try:
+                add( ip_interface(ip + "/" + prefix) )
+            except ValueError:
+                raise ValueError("Invalid Address range {}.".format(ip))
         elif netmask:
             add( ip_interface(ip + "/" + netmask) )
         else:
@@ -164,7 +169,14 @@ def getipinfo(string, callback=None):
         nw = iface.network
         nwa = str(nw.network_address)
         nwnum = nw.num_addresses
-        ipfirst, *_, iplast = list(nw.hosts())
+
+        if bit < 32:
+            ipfirst, *_, iplast = list(nw.hosts())
+            iprange = "{} - {}".format(ipfirst, iplast) #Valid Range IPAddress
+            nwrange = "{} - {}".format(ipfirst-1, iplast+1) #Valid Range IPAddress
+
+        elif bit == 32:
+            iprange = nwrange = str(nw)
 
         ret = ipinfo(
             None if ipa == nwa else ipa,  # IPaddress
@@ -173,8 +185,8 @@ def getipinfo(string, callback=None):
             nwa,              # Network Address
             nwnum, # count IP address num
             str(nw[-1]),       # BroadCast Address
-            "{} - {}".format(ipfirst, iplast), #Valid Range IPAddress
-            "{} - {}".format(ipfirst-1, iplast+1), #Valid Range IPAddress
+            iprange,
+            nwrange,
         )
 
         if callback:
@@ -346,4 +358,3 @@ def main():
 if __name__ == "__main__":
     # test()
     main()
-
