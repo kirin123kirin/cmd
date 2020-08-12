@@ -164,13 +164,7 @@ def getipinfo(string, callback=None):
         nw = iface.network
         nwa = str(nw.network_address)
         nwnum = nw.num_addresses
-
-        nwsplit = nwa.split(".")
-        ipfw, iprf = (".".join(nwsplit[:-1]) ,int(nwsplit[-1]))
-        mkip = lambda x: "{}.{}".format(ipfw, x)
-        mkrange = lambda x, y: "{} - {}".format(mkip(x), mkip(y))
-        iprange = mkrange(iprf + 1, iprf + nwnum - 2) #Valid Range IPAddress
-        nwrange = mkrange(iprf, iprf + nwnum) #Valid Range IPAddress
+        ipfirst, *_, iplast = list(nw.hosts())
 
         ret = ipinfo(
             None if ipa == nwa else ipa,  # IPaddress
@@ -179,8 +173,8 @@ def getipinfo(string, callback=None):
             nwa,              # Network Address
             nwnum, # count IP address num
             str(nw[-1]),       # BroadCast Address
-            iprange,
-            nwrange,
+            "{} - {}".format(ipfirst, iplast), #Valid Range IPAddress
+            "{} - {}".format(ipfirst-1, iplast+1), #Valid Range IPAddress
         )
 
         if callback:
@@ -209,6 +203,7 @@ def test():
     def test_getipinfo_simple():
         assert list(getipinfo("192.168.1.1/27"))
         assert list(getipinfo("192.168.1.1/255.255.255.240"))
+        assert(list(getipinfo("192.168.1.1/23")) == [ipinfo(ipadr='192.168.1.1', netmask='255.255.254.0', bitmask=23, nwadr='192.168.0.0', numip=512, broadcast='192.168.1.255', iprange='192.168.0.1 - 192.168.1.254', nwrange='192.168.0.0 - 192.168.1.255')])
 
     def test_getipinfo_expecterror():
         try:
@@ -349,5 +344,6 @@ def main():
 
 
 if __name__ == "__main__":
-#    test()
+    # test()
     main()
+
