@@ -23,6 +23,7 @@ __all__ = [
     'timestamp2date',
     'lazydate',
     'to_datetime',
+    'to_gengo',
     'isnamedtuple',
     'values_at',
     'values_not',
@@ -169,7 +170,7 @@ def timestamp2date(x, dfm = "%Y/%m/%d %H:%M"):
 class lazydate(object):
     class _jpinfo(parserinfo):
         WEEKDAYS = [
-                ("Mon", "/曜日", "/曜", "Monday"),
+                ("Mon", "月曜日", "月曜", "Monday"),
                 ("Tue", "火曜日", "火曜", "火", "Tuesday"),
                 ("Wed", "水曜日", "水曜", "水", "Wednesday"),
                 ("Thu", "木曜日", "木曜", "木", "Thursday"),
@@ -437,20 +438,30 @@ class lazydate(object):
         datetime(2019,5,1)  : "令和",
     }
 
+    g2d = {k:v for v, k in d2g.items()}
+
     didx = list(d2g)
     rsp = re.compile(r"\s\s+")
+    rym = re.compile("[年月](?!曜日)")
+    rd = re.compile("\s*(\d+)\s*日")
     isdirty = re.compile(r"[^\d\s/\-:]").search
     is4num = re.compile("\d{4}").match
+    dtsep = "/"
 
     def __init__(self, timestr):
         if not timestr:
             raise ValueError(timestr)
-        ts = __class__.rsp.sub("", to_hankaku(timestr).strip().replace("年", "/").replace("月", "/").replace("_", "-"))
+        ts = __class__.rsp.sub("", to_hankaku(timestr).strip().replace("_", "-"))
+        if __class__.rym.search(ts):
+            ts = __class__.rd.sub("\\1", __class__.rym.sub(__class__.dtsep, ts))
+
         self.timestr = self.__repairstr(ts) if __class__.isdirty(ts) else ts
         self._dt = None
 
     def __repairstr(self, timestr):
-        for dy, g in __class__.d2g.items():
+        g = next(filter(timestr.__contains__, __class__.g2d), None)
+        if g:
+            dy = __class__.g2d[g]
             i = dy.year - 1
             pattern = r"(?:" + g + r"[\.,\- ]?)((?:[0-9]{1,2}|元))\s?(年?)"
 
@@ -482,8 +493,11 @@ class lazydate(object):
             return __class__.parse(self.timestr)
         return __class__.parse(self.timestr).strftime(form)
 
-    def to_gengo(self, form="年%m月%d日 %H:%M:%S"):
+    def to_gengo(self, form=None):
         item = self.dt
+        if form is None:
+            form = "年%m月%d日 %H:%M:%S"
+
         if os.name == "nt":
             strftime = lambda x: x.strftime(form.encode('unicode-escape').decode()).encode().decode("unicode-escape")
         else:
@@ -505,7 +519,7 @@ class lazydate(object):
                         keyday = __class__.didx[-1]
 
                 gengo =  __class__.d2g[keyday]
-                gy = item.year - keyday.year - 1
+                gy = item.year - keyday.year + 1
                 if gy < 1:
                     raise ValueError("Unknown Gengo Name. Too old year.", item)
                 elif gy == 1:
@@ -517,6 +531,9 @@ class lazydate(object):
 
 def to_datetime(timestr, form=None):
     return  lazydate(timestr).to_datetime(form)
+
+def to_gengo(timestr, form=None):
+    return  lazydate(timestr).to_gengo(form)
 
 def isnamedtuple(s):
     if not hasattr(s, "_fields"):
@@ -874,10 +891,10 @@ def create_shortcut(inpath, scFileName, outpath=None, icon=None):
     if not outpath:
         desktop = shell.SpecialFolders('Desktop')
         outpath = os.path.join(desktop, scFileName+".lnk")
-    
+
     if not outpath.lower().endswith(".lnk"):
         outpath += ".lnk"
-    
+
     shCut                  = shell.CreateShortcut(outpath)
     shCut.TargetPath       = inpath
     shCut.WindowStyle      = 1
