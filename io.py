@@ -21,6 +21,9 @@ __all__ = [
     "DBrow",
     "DBgrouprow",
     "Path",
+    "to_excel",
+    "to_csv",
+    "to_tsv",
     "unicode_escape",
 ]
 
@@ -2234,6 +2237,74 @@ class Path(type(pathlib.Path())):
         self.close()
 
 
+def to_excel(rows, outputfile,
+                        sheetname="Sheet1",
+                        header = False,
+                        startrow=0,
+                        startcol=0):
+
+    import xlsxwriter
+
+    i = startrow
+    j = startcol
+
+    with xlsxwriter.Workbook(outputfile) as wb:
+        ws = wb.add_worksheet(sheetname)
+        write = ws.write_row
+
+        if header:
+            if hasattr(rows, "__next__"):
+                row = next(rows)
+            else:
+                row, *rows = rows
+            props_h = dict(border=1, bold=True, align="center", valign="center")
+            write(i, startcol, row, wb.add_format(props_h))
+            i += 1
+
+            border = wb.add_format(dict(border=1, valign="center"))
+
+        for row in rows:
+            write(i, startcol, row, border)
+            icol = startcol + len(row) - 1
+            if j < icol:
+                j = icol
+            i += 1
+
+        if header:
+            ws.autofilter(startrow, startcol, i, j)
+
+
+def to_csv(rows, outputfile,
+                    encoding="cp932",
+                    lineterminator="\r\n",
+                    quoting=_csv.QUOTE_MINIMAL,
+                    errors="backslashreplace",
+                    sep="," ):
+
+    kw = dict(delimiter=sep, lineterminator=lineterminator, quoting=quoting)
+    conf = dict(encoding=encoding, errors=errors)
+    if hasattr(outputfile, "write"):
+        if hasattr(outputfile, "reconfigure"):
+            outputfile.reconfigure(**conf, newline=None)
+        writer = _csv.writer(outputfile, **kw)
+        for row in rows:
+            writer.writerow(row)
+    else:
+        with codecs.open(outputfile, "w", **conf) as f:
+            writer = _csv.writer(f, **kw)
+            for row in rows:
+                writer.writerow(row)
+
+
+def to_tsv(rows, outputfile,
+                    encoding="cp932",
+                    lineterminator="\r\n",
+                    quoting=_csv.QUOTE_MINIMAL,
+                    errors="backslashreplace",
+                    sep="\t"):
+    return to_csv(rows, outputfile, encoding, lineterminator, quoting, errors, sep)
+
+
 def test():
     from util.core import tdir
     from glob import glob
@@ -2359,6 +2430,11 @@ def test():
             except Exception as e:
                 print(" ",e.__class__.__name__, e)
 
+    def test_to_csv():
+        to_csv([list("abc"),list("abc"),["1,2", "3"]], sys.stdout)
+
+    def test_to_tsv():
+        to_tsv([list("abc"),list("abc"),["1,2", "3"]], sys.stdout)
 
     t0 = dt.now()
     for x, func in list(locals().items()):
