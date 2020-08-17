@@ -27,7 +27,7 @@ import os
 from itertools import combinations
 from pathlib import Path
 
-from util.io import readrow, grouprow
+from util.io import readrow, grouprow, to_csv, to_tsv, unicode_escape
 from util.filetype import guesstype
 
 BASE_TYPE = [type(None), int, float, str, bytes, bytearray, bool]
@@ -145,7 +145,6 @@ def profiler(
             head = [["columns", *ret._fields]]
         return head + [[k, *v] for k, v in profile_data(rows, **kw).items()]
 
-
 def to_excel(rows, outputfile, sheetname="Sheet1",
             header = True, startrow=0, startcol=0, conditional_value=" ---> "):
     import xlsxwriter
@@ -169,6 +168,7 @@ def to_excel(rows, outputfile, sheetname="Sheet1",
         border = wb.add_format(dict(border=1, valign="center"))
 
         for row in rows:
+            row = [str(x)[1:-1] if isinstance(x, (tuple, list)) else x for x in row]
             write(i, startcol, row, border)
             icol = startcol + len(row) - 1
             if j < icol:
@@ -189,16 +189,8 @@ def to_excel(rows, outputfile, sheetname="Sheet1",
                 format=redfm)
         )
 
+
 defaultencoding = "cp932" if os.name == "nt" else "utf-8"
-
-def to_csv(rows, outputfile, encoding, lineterminator="\r\n", **kw):
-    with open(outputfile, "w", encoding=encoding, newline="") as f:
-        writer = csv.writer(f, lineterminator=lineterminator, **kw)
-        writer.writerows(rows)
-
-def to_tsv(rows, outputfile, encoding, lineterminator="\r\n", **kw):
-    return to_csv(rows, outputfile, encoding, lineterminator, delimiter="\t", quoting=csv.QUOTE_NONE, **kw)
-
 
 def main():
     from glob import glob
@@ -216,10 +208,12 @@ def main():
          nargs="+",  default=[],
          help="target any files(.txt, .csv, .tsv, .xls[x],)")
 
-    padd('-o', '--outfile', type=str, default=None,
+    padd('-o', '--outfile', type=str, default=sys.stdout,
          help='output filepath (default `stdout`)')
-    padd('-e', '--encoding', type=str, default="cp932",
+    padd('-e', '--encoding', type=str, default=defaultencoding,
          help='output fileencoding (default `cp932`)')
+    padd('-s', '--sep', type=unicode_escape, default="\t",
+         help='output separater (default `\\t`)')
     padd('-l', '--lineterminator', type=str, default="\r\n",
          help='output fileencoding (default `\\r\\n`)')
     padd('-H', '--header', type=int, default=0,
@@ -243,8 +237,10 @@ def main():
     na_value.extend(args.navalue.split(",") if args.navalue else args.navalue)
     header = args.header
     encoding = args.encoding
+    sep=args.sep
     lineterminator = args.lineterminator
     top = args.top
+    outfile = args.outfile
 
     def it():
         i = None
@@ -265,19 +261,21 @@ def main():
         if i is None:
             raise FileNotFoundError(str(args.filename))
 
-    if args.outfile:
-        outputfile = Path(args.outfile)
-    else:
-        writer = csv.writer(sys.stdout, lineterminator="\n")
+    kw = dict(encoding=encoding, errors="backslashreplace")
+    if outfile == sys.stdout:
+        if hasattr(outfile, "reconfigure"):
+            outfile.reconfigure(**kw, newline=None)
+        writer = csv.writer(outfile, delimiter=sep, lineterminator=lineterminator)
         return writer.writerows(it())
 
-    ext = outputfile.suffix.startswith
+    ext = os.path.splitext(outfile)[-1].startswith
+    kw["lineterminator"]=lineterminator
     if ext(".xls"):
-        to_excel(it(), outputfile, header=header, conditional_value="False")
+        to_excel(it(), outfile, conditional_value="False")
     elif ext(".tsv"):
-        to_tsv(it(), outputfile, encoding=encoding, lineterminator=lineterminator)
+        to_tsv(it(), outfile, **kw)
     else:
-        to_csv(it(), outputfile, encoding=encoding, lineterminator=lineterminator)
+        to_csv(it(), outfile, **kw)
 
 
 def test():
@@ -369,5 +367,6 @@ def test():
             print("{} : time {}".format(x, t2-t1))
 
 if __name__ == "__main__":
-#    test()
+    #test()
     main()
+
