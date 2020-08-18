@@ -16,7 +16,6 @@ __all__ = ["differ"]
 
 from functools import  lru_cache
 from itertools import zip_longest
-import codecs
 import re
 from operator import itemgetter
 import sys
@@ -386,28 +385,46 @@ def main():
 
     conditional_value = args.condition_value
 
-    try:
-        notarget = ["ppt","doc","csv","txt","html","pickle"]
-        if guesstype(p1) in notarget or guesstype(p2) in notarget:
-            raise ValueError
+    notarget = ["ppt","doc","csv","txt","html","pickle"]
+    if guesstype(p1) not in notarget and guesstype(p2) not in notarget:
 
-        #TODO sheet name similar
+        #TODO very big data dictionary memory NG
         tar1select = args.target1 or args.target
         tar2select = args.target2 or args.target
-        a = tar1select(grouprow(p1)) if tar1select else grouprow(p1)
-        b = tar2select(grouprow(p2)) if tar2select else grouprow(p2)
+        a = {x.target:x.value for x in (tar1select(grouprow(p1)) if tar1select else grouprow(p1))}
+        b = {x.target:x.value for x in (tar2select(grouprow(p2)) if tar2select else grouprow(p2))}
 
-        it = (["targetname" if i == 0 and d[0] == "tag" else sanitize(aa.target, bb.target), *d] for i, (aa, bb) in enumerate(zip(a, b)) for d in differ(
-            aa.value, bb.value,
-            header= header is True and i==0,
+        #similar target
+        kw = dict(
+            header=header,
             diffonly=diffonly,
             rep_rate=rep_rate,
             na_val=na_value,
             startidx=1,
-            conditional_value=conditional_value
-        ))
+            conditional_value=conditional_value)
 
-    except ValueError:
+        def _simtar(tag, tar, a, b, i):
+            kw["header"] = i==0 and kw["header"]
+
+            if tag == "equal":
+                row = ([tar,*r] for r in differ(a[tar], b[tar], **kw))
+            elif tag == "replace":
+                ta, tb = tar.split(conditional_value)
+                row = ([tar,*r] for r in differ(a[ta], b[tb], **kw))
+            elif tag == "delete":
+                row = ([tar, tag, j, na_value,*r] for j, r in enumerate(a[tar], 1))
+            elif tag == "insert":
+                row = ([tar, tag, na_value, j, *r] for j, r in enumerate(b[tar], 1))
+            else:
+                return []
+
+            return row
+
+        it = (["targetname", *r[1:]] if r[1] == "tag" else r
+                  for i, (tag, *_, tar) in enumerate(differ(a, b))
+                      for r in _simtar(tag, tar, a, b, i))
+
+    else:
         a = map(attrgetter("value"), readrow(p1))
         b = map(attrgetter("value"), readrow(p2))
 
