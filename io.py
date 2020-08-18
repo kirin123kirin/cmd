@@ -2514,9 +2514,9 @@ def main_row():
     for i, f in enumerate(walk(args)):
         for x in readrow(f):
             if filename:
-                write("{}:\t".format(x.path).encode(encoding))
+                write("{}:{}".format(x.path, sep).encode(encoding))
             if target:
-                write("[{}]\t".format(x.target).encode(encoding))
+                write("[{}]{}".format(x.target, sep).encode(encoding))
             try:
                 write((x.value + lineterminator).encode(encoding))
             except TypeError:

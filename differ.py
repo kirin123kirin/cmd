@@ -22,6 +22,7 @@ from operator import itemgetter
 import sys
 from itertools import tee
 
+
 try:
     from util.libs.similar import similar, flatten, sanitize, deephash
 
@@ -280,21 +281,6 @@ def to_excel(rows, outputfile, sheetname="Sheet1",
                 format=redfm)
         )
 
-def to_csv(rows, outputfile, encoding, lineterminator="\r\n"):
-    sep = '","'
-    if hasattr(outputfile, "write"):
-        for row in rows:
-            outputfile.write('"{}"{}'.format(sep.join(map(str,row)), lineterminator))
-    else:
-        with codecs.open(outputfile, "w", encoding=encoding) as f:
-            for row in rows:
-                f.write('"{}"{}'.format(sep.join(map(str,row)), lineterminator))
-
-def to_tsv(rows, outputfile, encoding, lineterminator="\r\n"):
-    sep = '\t'
-    with codecs.open(outputfile, "w", encoding=encoding) as f:
-        for row in rows:
-            f.write('{}{}'.format(sep.join(map(str,row)), lineterminator))
 
 def selector(key, start=0, tar="target"):
     if not key:
@@ -345,12 +331,10 @@ def selector(key, start=0, tar="target"):
 
 def main():
     import os
-    from pathlib import Path
     from argparse import ArgumentParser
     from operator import attrgetter
-    from util.io import readrow, grouprow
+    from util.io import readrow, grouprow, to_csv, to_tsv, unicode_escape
     from util.filetype import guesstype
-
 
     ps = ArgumentParser(prog="differ",
                         description="2 file diff compare program\n")
@@ -368,7 +352,9 @@ def main():
          help='output fileencoding (default `cp932`)')
     padd('-r', '--rate', type=float, default=0.6,
          help='matched score rate (default `0.6`)')
-    padd('-l', '--lineterminator', type=str, default="\r\n",
+    padd('-s', '--sep', type=unicode_escape, default="\t",
+         help='output separater (default `\\t`)')
+    padd('-l', '--lineterminator', type=unicode_escape, default="\r\n",
          help='output llineterminator (default `\\r\\n`)')
     padd('-n', '--noheader', action="store_true", default=False,
          help='file no header (default `False`)')
@@ -391,8 +377,10 @@ def main():
 
     na_value = args.navalue
     diffonly = not args.all
+    outputfile = args.outfile
     header = not args.noheader
     encoding = args.encoding
+    sep = args.sep
     lineterminator = args.lineterminator
     rep_rate = args.rate
 
@@ -433,15 +421,13 @@ def main():
             conditional_value=conditional_value
         )
 
-    outputfile = Path(args.outfile) if args.outfile else sys.stdout
-    if outputfile is sys.stdout:
-        return to_csv(it, outputfile, encoding="cp932" if os.name == "nt" else "utf8")
+    if outputfile is None:
+        return to_csv(it, sys.stdout, encoding=encoding, sep=sep)
 
+    ext = os.path.splitext(outputfile)[-1].startswith
 
-
-    ext = outputfile.suffix.startswith
     if ext(".xls"):
-        to_excel(it, outputfile, header=header, conditional_value=conditional_value)
+        to_excel(it, outputfile, header=True, conditional_value=conditional_value)
     elif ext(".tsv"):
         to_tsv(it, outputfile, encoding=encoding, lineterminator=lineterminator)
     else:
@@ -533,7 +519,7 @@ def test():
     def test_default_main():
         from collections import Counter as cc
         sio = stdoutcapture(["-n", tdir+"diff1.xlsx", tdir+"diff2.xlsx"])
-        assert(cc(x.replace('"', '').split(",")[1] for x in sio) == cc({"replace": 3, "insert": 2, "delete": 1}))
+        assert(cc(x.replace('"', '').split("\t")[1] for x in sio) == cc({"replace": 3, "insert": 2, "delete": 1}))
 
     def test_main_encoding():
         pass
