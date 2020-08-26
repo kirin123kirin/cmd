@@ -16,6 +16,7 @@ __all__ = [
     "readrow",
     "dumper",
     "grouprow",
+    "unixlog",
     "getinfo",
     "getsize",
     "DBrow",
@@ -399,6 +400,7 @@ except:
 
 from util.filetype import guesstype
 from util.core import binopen, opener, getencoding, binchunk, globbing
+from util.utils import to_datetime
 
 def lsdir(path, recursive=True):
     func = "rglob" if recursive else "glob"
@@ -1350,6 +1352,113 @@ class grouprow(readrow):
 
         for k, v in ret.items():
             yield pinfo(path, k, v)
+
+class StdoutLog(object):
+    def __init__(self, dt, output):
+        self.dt = self.datetime = dt
+        self.output = output
+
+    def __str__(self):
+        return str(self.output)
+
+    def __repr__(self):
+        return repr(self.output)
+
+    def __hash__(self):
+        return hash((self.dt, self.output))
+
+class UnixLogs(object):
+    def __init__(self, dt, host, cmdin, cmdout):
+        self.dt = self.datetime = dt
+        self._host = host.strip(":[]").split(" ")[0] if host else ""
+        self.input = str(cmdin)
+        self.output = [StdoutLog(dt, cmdout)] if cmdout else []
+
+    def __str__(self):
+        input = ";".join([self.host or self._host, self.input])
+        output = "\n".join(map(str, self.output))
+        return input + ((";" + output) if output else "") + ";;"
+
+    def __hash__(self):
+        return hash((self.dt, self.input, tuple(self.output)))
+
+    def append(self, dt, output):
+        return self.output.append(StdoutLog(dt, output))
+
+    @property
+    def user(self):
+        return self._host.split("@")[0]
+
+    @property
+    def host(self):
+        try:
+            return self._host.split("@")[1].strip("#$") or None
+        except IndexError:
+            return
+
+re_log = re.compile("\s*(?:\[?([SMTFJAONDa-z\d /\-:\.]+)\]? *)?(?:(.*?[\$#]) *)?([^\r\n]*)\r?\n", re.MULTILINE)
+def _parser_unixlog(dat):
+    host = None
+    for x in re_log.finditer(dat):
+        if x is None or x.group(3) in [None, "", "^C"]:
+            continue
+
+        dt, a1, a2 = x.groups()
+
+        if a1 is None and str(a2).startswith("Last login:"):
+            continue
+
+        cmdin = cmdout = None
+
+        if a1 is None:
+            cmdout = a2
+        else:
+            cmdin = a2
+            host = a1
+
+        if dt:
+            dt = to_datetime(dt)
+
+        yield dt, host, cmdin, cmdout
+
+def unixlog(path_or_buffer, mode="r", targets=[]):
+    """
+    Returns:
+        termlog Instance
+    """
+    if targets:
+        def _get(res):
+            if res.input in targets:
+                return res
+    else:
+        _get = lambda res: res
+
+    try:
+        with opener(path_or_buffer, mode=mode) as f:
+            dat = f.read()
+    except FileNotFoundError:
+        dat = path_or_buffer
+
+    r = hist = None
+
+    for dt, host, cmdin, cmdout in _parser_unixlog(dat):
+        if r and hist and cmdin is None:
+            if cmdout:
+                r.append(dt, cmdout)
+        else:
+            res = _get(r)
+            if res:
+                yield r
+
+            r = UnixLogs(dt, host, cmdin, cmdout)
+
+        hist = cmdin or hist
+
+    else:
+        res = _get(r)
+        if res:
+            yield r
+
 
 @lru_cache()
 def ts2date(x):#, dfm = "%Y/%m/%d %H:%M"):
@@ -2623,5 +2732,5 @@ def main():
         raise AttributeError("python {} [row|info|size] ...".format(os.path.basename(sys.argv[0])))
 
 if __name__ == "__main__":
-#    test()
+    # test()
     main()

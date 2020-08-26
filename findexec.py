@@ -131,11 +131,11 @@ def create_parser(lowlevel=False):
         padd('-n', '--name', #TODO list
             help='wildcard string for filter(like is `find -name`)',
             default="*")
-        
+
         padd('-i', '--ignore_name',
             help='wildcard string for ignore filter(like is `find -not -name`)',
             default=None)
-            
+
     padd('directories',
          metavar='<directories>',
          #nargs="*", default=[["."]],
@@ -150,7 +150,7 @@ def create_parser(lowlevel=False):
         parser.error("Directories Not Found. Please check directories")
     if lowlevel and args.exec:
         args.exec = " ".join(args.exec).replace("\\", "").strip("'\"")
-        
+
     return args
 
 
@@ -243,12 +243,12 @@ def test():
             addarg("-v -e dir -t d -n .* " + tmpdir)
             maketestdata()
             main()
-            
+
         def test_main_file():
             addarg("-v -e dir -t f -n .* " + tmpdir)
             maketestdata()
             main()
-        
+
         def test_main_file_ignore():
             addarg("-v -i h* -e 'ls \-l' -t f " + tmpdir)
             maketestdata()
@@ -262,5 +262,5 @@ def test():
                 print("{} : time {}".format(x, t2-t1))
 
 if __name__ == "__main__":
-    #test()
+    # test()
     main()

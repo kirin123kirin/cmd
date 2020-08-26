@@ -212,6 +212,6 @@ def test(path):
             print("{} : time {}".format(x, t2-t1))
 
 if __name__ == "__main__":
-#    test("C:/temp/lsdir.log")
+    # test("C:/temp/lsdir.log")
     main()
 

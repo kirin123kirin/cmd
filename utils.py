@@ -1107,7 +1107,7 @@ if __name__ == "__main__":
             assert(isdataframe(pd.DataFrame()))
             assert(isdataframe([]) is False)
             assert(isdataframe({1:1}) is False)
-            assert(isdataframe(pd.Series()) is False)
+            assert(isdataframe(pd.Series([],dtype=pd.StringDtype())) is False)
 
         def test_sortedrows():
             assert(list(sortedrows(iter([[3],[2],[5],[1]]))) == [[4, [1]], [2, [2]], [1, [3]], [3, [5]]])

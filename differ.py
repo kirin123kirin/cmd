@@ -598,4 +598,5 @@ def test():
 
 if __name__ == "__main__":
     # test()
+    # sys.argv.extend("C:/temp/diff1.xlsx C:/temp/diff2.xlsx".split(" "))
     main()
