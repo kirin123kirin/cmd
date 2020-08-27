@@ -367,13 +367,13 @@ except ModuleNotFoundError:
             return a.clipboard_get()
 
         import subprocess
-        def setclip(text):
+        def setclip(text, encoding="cp932"):
             if not isinstance(text, (str, int, float, bool)):
                 raise RuntimeError('only str, int, float, and bool values can be copied to the clipboard, not %s' % (text.__class__.__name__))
             text = str(text)
             p = subprocess.Popen(['clip.exe'],
                                  stdin=subprocess.PIPE, close_fds=True)
-            p.communicate(input=text.encode("cp932"))
+            p.communicate(input=text.encode(encoding, errors="backslashreplace"))
 
     else:
         getclip = NotInstalledModuleError("Please Install command: pip3 install pyperclip")
@@ -1396,7 +1396,7 @@ class UnixLogs(object):
         except IndexError:
             return
 
-re_log = re.compile("\s*(?:\[?([SMTFJAONDa-z\d /\-:\.]+)\]? *)?(?:(.*?[\$#]) *)?([^\r\n]*)\r?\n", re.MULTILINE)
+re_log = re.compile("\s*(?:\[([SMTFJAONDa-z\d /\-:\.]+)\] *)?(?:(.*?[\$#]) *)?([^\r\n]*)\r?\n", re.MULTILINE)
 def _parser_unixlog(dat):
     host = None
     for x in re_log.finditer(dat):
@@ -1436,7 +1436,7 @@ def unixlog(path_or_buffer, mode="r", targets=[]):
     try:
         with opener(path_or_buffer, mode=mode) as f:
             dat = f.read()
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         dat = path_or_buffer
 
     r = hist = None
@@ -2623,13 +2623,13 @@ def main_row():
     for i, f in enumerate(walk(args)):
         for x in readrow(f):
             if filename:
-                write("{}:{}".format(x.path, sep).encode(encoding))
+                write("{}:{}".format(x.path, sep).encode(encoding, errors="backslashreplace"))
             if target:
-                write("[{}]{}".format(x.target, sep).encode(encoding))
+                write("[{}]{}".format(x.target, sep).encode(encoding, errors="backslashreplace"))
             try:
-                write((x.value + lineterminator).encode(encoding))
+                write((x.value + lineterminator).encode(encoding, errors="backslashreplace"))
             except TypeError:
-                write((sep.join(map(oneliner,x.value)) + lineterminator).encode(encoding))
+                write((sep.join(map(oneliner,x.value)) + lineterminator).encode(encoding, errors="backslashreplace"))
 
     if i is None:
         raise FileNotFoundError(str(args.files))
