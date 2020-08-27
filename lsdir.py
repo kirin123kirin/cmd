@@ -510,9 +510,9 @@ def create_parser():
     padd = parser.add_argument
 
     padd('-o', '--outfile',
-         type=lambda f: lambda e: codecs.open(f, mode="w", encoding=e, errors="replace"),
+         type=lambda f: lambda e: codecs.open(f, mode="w", encoding=e, errors="backslashreplace"),
          help='outputfile path',
-         default=lambda e: io.TextIOWrapper(sys.stdout.buffer, encoding=e, errors="replace"),
+         default=lambda e: io.TextIOWrapper(sys.stdout.buffer, encoding=e, errors="backslashreplace"),
     )
 
     padd('-t',
