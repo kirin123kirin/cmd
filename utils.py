@@ -4,7 +4,7 @@
 __author__  = 'm.yama'
 __license__ = 'MIT'
 __date__    = 'Wed Jul 31 17:35:47 2019'
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 
 import os
 
@@ -20,6 +20,8 @@ __all__ = [
     'geturi',
     'csvreader',
     'Counter',
+    'duplicates',
+    'uniq',
     'timestamp2date',
     'lazydate',
     'to_datetime',
@@ -159,10 +161,64 @@ def csvreader(itertable, encoding=None, delimiter=',',
 
     return csv.reader(map(decoder, itertable), **userkw)
 
-def Counter(*iterable):
+def Counter(iterable):
     d = {}
-    _count_elements(d, *iterable)
+    _count_elements(d, iterable)
     return d
+
+def duplicates(iterable, key=None, uniq_return=True, callback=lambda x: x):
+    d = {}
+    get = d.get
+    if key is None:
+        for e in iterable:
+            ke = tuple(e)
+            d[ke] = get(ke, []) + [e]
+    else:
+        for e in iterable:
+            ke = tuple(key(e))
+            d[ke] = get(ke, []) + [e]
+    
+    if uniq_return:
+        r = []
+        radd = r.append
+        for v in d.values():
+            if len(v) > 1:
+                for _w in v:
+                    w = callback(_w)
+                    if w in r:
+                        continue
+                    radd(w)
+        return r
+    else:
+        return sum((callback(v) for v in d.values() if len(v) > 1), [])
+
+
+def uniq(iterable, key=None, callback=None):
+    l = []
+    if callback:
+        def ladd(x):
+            l.append(callback(x))
+    else:
+        ladd = l.append
+    
+    if key is None:
+        for i in iterable:
+            if i in l:
+                continue
+            ladd(i)
+    else:
+        kl = []
+        kadd = kl.append
+
+        for i in iterable:
+            k = key(i)
+            if k in kl:
+                continue
+            kadd(k)
+            ladd(i)
+        del kl
+    return l
+
 
 def timestamp2date(x, dfm = "%Y/%m/%d %H:%M"):
     return datetime.fromtimestamp(x).strftime(dfm)

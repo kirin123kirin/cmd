@@ -16,6 +16,7 @@ import_module = [
     "lsdir",
     "findexec",
     "nw",
+    "remote",
 ]
 
 

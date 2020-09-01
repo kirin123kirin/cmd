@@ -6,6 +6,10 @@ from os import makedirs
 import paramiko
 from scp import SCPClient
 
+__all__ = [
+    "scpget",
+    "sshcmd",
+]
 def _prog(target, dlsize, completesize):
     if completesize == 0:
         print("Downloading:", normpath(target))
