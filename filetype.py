@@ -258,6 +258,7 @@ start = { # bytes startswith define
   b'\xcf\x84': [[b'\xcf\x84\x01', 'jpg']],
   b'\xcf\xfa': [[b'\xcf\xfa\xed\xfe', 'Mach-O binary ']],
   b'\xd0\xcf': [[b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1', 'Microsoft Office 2003older']],
+  b'\xd4\xc3': [[b'\xd4\xc3\xb2\xa1', 'pcap']],
   b'\xed\xab': [[b'\xed\xab\xee\xdb', 'rpm ']],
   b'\xef\xbb': [[b'\xef\xbb\xbf', 'UTF-8 encoded Unicode byte order mark']],
   b'\xfd7': [[b'\xfd7zXZ\x00\x00', 'xz']],

@@ -1096,6 +1096,111 @@ class readrow:
             fp.close()
 
     @staticmethod
+    def pcap(path_or_buffer, targets=[]):
+        """
+        packet capture file parser
+
+        Parameters
+        ----------
+        path_or_buffer : str or fileobj
+            filepath or binary open file object
+        targets : itertable, optional
+            The default is [].
+
+        Raises
+        ------
+        ValueError
+            Unknown targets value exists
+
+        Yields
+        ------
+        list
+            parsed packet data parsed list.
+
+        """
+        # from scapy.all import *
+        from scapy.utils import rdpcap
+        from scapy.packet import Raw
+        from scapy.layers.inet import IP, TCP
+
+        from operator import itemgetter
+
+        def parser_pcap(fp, keyunion=set()):
+            fob = rdpcap(fp)
+            ret = {}
+            cnt = len(fob)
+            idget = itemgetter("id")
+
+            for i, p in enumerate(fob, -cnt):
+                dt = datetime.fromtimestamp(float(p.time))
+                raw = bytes(p.getlayer(Raw) or b"")
+                try:
+                    ip = p.getlayer(IP).fields
+                    tcp = p.getlayer(TCP).fields
+                except AttributeError:
+                    k = -cnt - 1
+                    ret[k] = {"time": dt, "id": k, "lad": raw}
+                    continue
+
+                r = {"time": dt, "layer3": p.getlayer(IP).name, **ip, **tcp, "load": raw}
+                if "checksum" in r:
+                    del r["checksum"]
+                if "len" in r:
+                    del r["len"]
+                if "psrc" in r:
+                    r["src"] = r.pop("psrc")
+                if "pdst" in r:
+                    r["dst"] = r.pop("pdst")
+                if "id" not in r:
+                     r["id"] = i
+                if "flags" in ip:
+                    r["ipflags"] = str(ip["flags"])
+                    r["flags"] = str(tcp.get("flags", ""))
+
+                if "ack" in r:
+                    ack = r["ack"]
+                    if ack in ret:
+                        ret[ack]["load"] += r["load"]
+                    else:
+                        ret[ack] = r
+                else:
+                    ret[r["id"]] = r
+
+                keyunion.update(r.keys())
+
+            return sorted(ret.values(), key=idget)
+
+        COLUMNS = [
+            'time', 'layer3', 'src', 'sport',
+            'dst', 'dport', 'proto', 'ttl', 'load', 'raw',
+            'ptype', 'ipflags', 'flags', 'id', 'seq', 'ack', 'window',
+            'dataofs', 'chksum',
+            'urgptr', 'hwlen', 'plen', 'ihl', 'hwtype',
+            'options', 'version', 'hwsrc', 'hwdst', 'op',
+            'reserved', 'tos', 'frag'
+        ]
+
+        def myorder(name, default=2**16):
+            return {key: i for i, key in enumerate(COLUMNS)}.get(name, default)
+
+        path, fp = pathbin(path_or_buffer)
+        cols = set()
+        r = parser_pcap(fp, cols)
+        if not targets:
+            targets = sorted(cols, key=myorder)
+            targets = "time,src,dst,layer3,sport,dport,load".split(",")
+
+        for i, row in enumerate(r):
+            res = list(map(row.get,targets))
+            if i == 0:
+                if set(targets) - set(COLUMNS):
+                    raise ValueError("Unknown targets {}\n Valdated {}".format(targets, COLUMNS))
+                yield pinfo(path, "", targets)
+
+            yield pinfo(path, "", res)
+
+
+    @staticmethod
     def clipboard(ftype="csv"):
         """
         clipboard read parse
