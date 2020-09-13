@@ -1099,6 +1099,7 @@ class readrow:
     def pcap(path_or_buffer, targets=[]):
         """
         packet capture file parser
+        Example. pcap("C:/temp/http.pcap", targets="time,src,dst,layer3,sport,dport,load".split(","))
 
         Parameters
         ----------
@@ -1139,14 +1140,14 @@ class readrow:
                     tcp = p.getlayer(TCP).fields
                 except AttributeError:
                     k = -cnt - 1
-                    ret[k] = {"time": dt, "id": k, "lad": raw}
+                    ret[k] = {"time": dt, "id": k, "load": raw}
                     continue
 
                 r = {"time": dt, "layer3": p.getlayer(IP).name, **ip, **tcp, "load": raw}
-                if "checksum" in r:
-                    del r["checksum"]
-                if "len" in r:
-                    del r["len"]
+                if "checksum" in ip:
+                    r["ipchecksum"] = ip["checksum"]
+                if "len" in ip:
+                    r["iplen"] = ip["len"]
                 if "psrc" in r:
                     r["src"] = r.pop("psrc")
                 if "pdst" in r:
@@ -1172,32 +1173,31 @@ class readrow:
 
         COLUMNS = [
             'time', 'layer3', 'src', 'sport',
-            'dst', 'dport', 'proto', 'ttl', 'load', 'raw',
+            'dst', 'dport', 'proto', 'ttl', 'load',
             'ptype', 'ipflags', 'flags', 'id', 'seq', 'ack', 'window',
-            'dataofs', 'chksum',
+            'dataofs', 'ipchecksum', 'checksum', 'chksum',
+            'iplen', 'len',
             'urgptr', 'hwlen', 'plen', 'ihl', 'hwtype',
             'options', 'version', 'hwsrc', 'hwdst', 'op',
             'reserved', 'tos', 'frag'
         ]
 
-        def myorder(name, default=2**16):
-            return {key: i for i, key in enumerate(COLUMNS)}.get(name, default)
-
         path, fp = pathbin(path_or_buffer)
+
+        if targets and set(targets) - set(COLUMNS):
+            raise ValueError("Unknown targets {}\n Valdated {}".format(targets, COLUMNS))
+        else:
+            targets = COLUMNS
+
+
+        yield pinfo(path, "", targets)
+
         cols = set()
-        r = parser_pcap(fp, cols)
-        if not targets:
-            targets = sorted(cols, key=myorder)
-            targets = "time,src,dst,layer3,sport,dport,load".split(",")
+        for row in parser_pcap(fp, cols):
+            yield pinfo(path, "", list(map(row.get,targets)))
 
-        for i, row in enumerate(r):
-            res = list(map(row.get,targets))
-            if i == 0:
-                if set(targets) - set(COLUMNS):
-                    raise ValueError("Unknown targets {}\n Valdated {}".format(targets, COLUMNS))
-                yield pinfo(path, "", targets)
-
-            yield pinfo(path, "", res)
+        if cols - set(COLUMNS):
+            print("WARN. Undefined Columuns {}".format(cols - set(COLUMNS)), file=sys.stderr)
 
 
     @staticmethod
@@ -2716,13 +2716,13 @@ def main_row():
     def oneliner(b:str):
         if b is None:
             return ""
-        try:
+        elif isinstance(b, str):
             if "\r" in b:
                 b = b.replace("\r", "\\r")
             if "\n" in b:
                 b = b.replace("\n", "\\n")
             return b
-        except TypeError:
+        else:
             return str(b)
 
     for i, f in enumerate(walk(args)):
