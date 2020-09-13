@@ -1187,7 +1187,7 @@ class readrow:
         if targets and set(targets) - set(COLUMNS):
             raise ValueError("Unknown targets {}\n Valdated {}".format(targets, COLUMNS))
         else:
-            targets = COLUMNS
+            targets = targets or COLUMNS
 
 
         yield pinfo(path, "", targets)
