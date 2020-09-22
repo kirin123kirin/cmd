@@ -177,7 +177,7 @@ def duplicates(iterable, key=None, uniq_return=True, callback=lambda x: x):
         for e in iterable:
             ke = tuple(key(e))
             d[ke] = get(ke, []) + [e]
-    
+
     if uniq_return:
         r = []
         radd = r.append
@@ -200,7 +200,7 @@ def uniq(iterable, key=None, callback=None):
             l.append(callback(x))
     else:
         ladd = l.append
-    
+
     if key is None:
         for i in iterable:
             if i in l:
@@ -586,10 +586,12 @@ class lazydate(object):
                 raise KeyError(item)
 
 def to_datetime(timestr, form=None):
+    if isinstance(timestr, datetime):
+        return timestr
     return  lazydate(timestr).to_datetime(form)
 
 def to_gengo(timestr, form=None):
-    return  lazydate(timestr).to_gengo(form)
+    return  lazydate(str(timestr)).to_gengo(form)
 
 def isnamedtuple(s):
     if not hasattr(s, "_fields"):

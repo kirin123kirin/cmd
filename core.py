@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import os
+import os, sys
 
 __all__ = [
     "isposix",
@@ -46,6 +46,12 @@ except ModuleNotFoundError:
     except ModuleNotFoundError:
         raise ModuleNotFoundError("please install `nkf` or `chardet`")
 
+def thisfile():
+    return os.path.abspath(sys.argv[0])
+
+def thisdir():
+    return os.path.dirname(thisfile())
+
 def flatten(x):
     return [z for y in x for z in (flatten(y)
              if y is not None and hasattr(y, "__iter__") and not isinstance(y, (str, bytes, bytearray)) else (y,))]
@@ -87,7 +93,7 @@ def binopen(f, mode="rb", *args, **kw):
 
 def opener(f, mode="r", *args, **kw):
     if isinstance(f, IOBase):
-        if isinstance(f, StringIO):
+        if isinstance(f, StringIO) or f in [sys.stdout, sys.stderr, sys.stdin]:
             return f
         elif isinstance(f, BytesIO):
             if "encoding" in kw:
@@ -114,8 +120,9 @@ def opener(f, mode="r", *args, **kw):
             r.seek(p)
             return r
     elif isinstance(f, str) or hasattr(f, "joinpath"):
-        with open(f, "rb") as fp:
-            kw["encoding"] = getencoding(fp.read(92160))
+        if not any(x in mode for x in "aw+"):
+            with open(f, "rb") as fp:
+                kw["encoding"] = getencoding(fp.read(92160))
         return codecs.open(f, mode=mode.replace("b", ""), *args, **kw)
     else:
         raise ValueError("Unknown Object. filename or filepointer buffer")
