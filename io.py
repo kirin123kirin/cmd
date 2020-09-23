@@ -2488,7 +2488,7 @@ def to_excel(rows, outputfile,
             ws.autofilter(startrow, startcol, i, j)
 
 
-def to_csv(rows, outputfile,
+def to_csv(rows, outputfile, mode="w",
                     encoding="cp932",
                     lineterminator="\r\n",
                     quoting=_csv.QUOTE_MINIMAL,
@@ -2499,12 +2499,12 @@ def to_csv(rows, outputfile,
     conf = dict(encoding=encoding, errors=errors)
     if hasattr(outputfile, "write"):
         if hasattr(outputfile, "reconfigure"):
-            outputfile.reconfigure(**conf, newline=None)
+            outputfile.reconfigure(**conf, newline="")
         writer = _csv.writer(outputfile, **kw)
         for row in rows:
             writer.writerow(row)
     else:
-        with codecs.open(outputfile, "w", **conf) as f:
+        with codecs.open(outputfile, mode, **conf) as f:
             writer = _csv.writer(f, **kw)
             for row in rows:
                 writer.writerow(row)

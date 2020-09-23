@@ -19,6 +19,7 @@ __all__ = [
     'decompressor',
     'geturi',
     'csvreader',
+    'csvwriter',
     'Counter',
     'duplicates',
     'uniq',
@@ -165,6 +166,53 @@ def csvreader(itertable, encoding=None, delimiter=',',
     if strict           != False : userkw["strict"] = strict
 
     return csv.reader(map(decoder, itertable), **userkw)
+
+class _CsvWriter:
+    def __init__(self, fp, mode="w", encoding="cp932", errors="backslashreplace", *args, **kw):
+        self._writer = None
+        self._entered = False
+        self._args = args
+        self._kw = kw
+        self.fp = opener(fp, mode)
+
+        if hasattr(self.fp, "reconfigure"):
+            self.fp.reconfigure(encoding=encoding, errors=errors, newline="")
+
+    @property
+    def writer(self):
+        if self._writer is None:
+            self._writer = csv.writer(self.fp, *self._args, **self._kw)
+        return self._writer
+
+    def writerow(self, row):
+        self.writer.writerow(row)
+
+    def writerows(self, rows):
+        self.writer.writerows(rows)
+
+    # backward compatibility
+    write = writerow
+    writelines = writerows
+
+    def __enter__(self):
+        self._entered = True
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._entered:
+            self._entered = False
+            self.fp.close()
+        if exc_type:
+            return
+
+    def __del__(self):
+        if self._entered:
+            self.fp.close()
+
+def csvwriter(rows, fp, mode="w", encoding="cp932", *args, **kw):
+    cf = _CsvWriter(fp, mode=mode, encoding=encoding, *args, **kw)
+    cf.writerows(rows)
+    return cf
 
 def Counter(iterable):
     d = {}

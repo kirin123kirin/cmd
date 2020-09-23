@@ -612,6 +612,10 @@ def isnamedtuple():
     return getattr(__import__('util.utils', fromlist=['isnamedtuple']), 'isnamedtuple')
 
 @lazyobject
+def csvwriter():
+    return getattr(__import__('util.utils', fromlist=['csvwriter']), 'csvwriter')
+
+@lazyobject
 def back_to_path():
     return getattr(__import__('util.utils', fromlist=['back_to_path']), 'back_to_path')
 
@@ -628,24 +632,16 @@ def sortedrows():
     return getattr(__import__('util.utils', fromlist=['sortedrows']), 'sortedrows')
 
 @lazyobject
-def profiler():
-    return getattr(__import__('util.profiler', fromlist=['profiler']), 'profiler')
-
-@lazyobject
-def profile_data():
-    return getattr(__import__('util.profiler', fromlist=['profile_data']), 'profile_data')
-
-@lazyobject
-def differ():
-    return getattr(__import__('util.differ', fromlist=['differ']), 'differ')
-
-@lazyobject
 def lsl():
     return getattr(__import__('util.lslog', fromlist=['lsl']), 'lsl')
 
 @lazyobject
 def lslR():
     return getattr(__import__('util.lslog', fromlist=['lslR']), 'lslR')
+
+@lazyobject
+def findexec():
+    return getattr(__import__('util.findexec', fromlist=['findexec']), 'findexec')
 
 @lazyobject
 def getipinfo():
