@@ -26,6 +26,8 @@ __all__ = [
     'lazydate',
     'to_datetime',
     'to_gengo',
+    'hashdigest',
+    'hashset',
     'isnamedtuple',
     'values_at',
     'values_not',
@@ -67,6 +69,9 @@ from collections import namedtuple, _count_elements
 
 import gzip
 from subprocess import getstatusoutput
+import hashlib
+import io
+
 try:
     import cloudpickle as pickle
 except ModuleNotFoundError:
@@ -592,6 +597,43 @@ def to_datetime(timestr, form=None):
 
 def to_gengo(timestr, form=None):
     return  lazydate(str(timestr)).to_gengo(form)
+
+def hashdigest(x, argo=hashlib.md5):
+    return argo(repr(x).encode()).digest()
+
+class hashset(set):
+    def __init__(self, bucketfile=None):
+        self.bucketfile = bucketfile
+        if bucketfile:
+            self.bucketfile = os.path.abspath(bucketfile)
+            if not os.path.exists(os.path.dirname(self.bucketfile)):
+                raise FileNotFoundError("Not Found Directory")
+            elif os.path.exists(self.bucketfile):
+                with open(self.bucketfile, "rb") as f:
+                    super().__init__(pickle.load(f))
+                    return
+
+        super().__init__()
+
+    def __contains__(self, val):
+        return super().__contains__(hashdigest(val))
+
+    def add(self, val):
+        return super().add(hashdigest(val))
+
+    def pop(self, val):
+        return super().pop(hashdigest(val))
+
+    def remove(self, val):
+        return super().remove(hashdigest(val))
+
+    def update(self, row):
+        return super().update(map(hashdigest, row))
+
+    def __del__(self):
+        if self and self.bucketfile:
+            with io.open(self.bucketfile, "wb") as w:
+                pickle.dump(set(self), w)
 
 def isnamedtuple(s):
     if not hasattr(s, "_fields"):
