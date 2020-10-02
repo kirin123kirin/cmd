@@ -26,6 +26,8 @@ import codecs
 from os.path import isdir, normpath
 from glob import iglob
 from functools import wraps
+from socket import gethostname, gethostbyname
+
 try:
     import nkf
     def getencoding(dat:bytes):
@@ -265,7 +267,15 @@ def translates(repdic, string):
     pattern = '({})'.format('|'.join(map(re.escape, repdic.keys())))
     return re.sub(pattern, lambda m: repdic[m.group()], string)
 
-from socket import gethostname
+def hostname():
+    return gethostname()
+
+def getipaddr():
+    return gethostbyname(hostname())
+
+def gethost():
+    return "{}({})".format(hostname(),getipaddr())
+
 from tempfile import TemporaryDirectory
 
 __tdpath = "/portable.app/usr/share/testdata/"
