@@ -20,3 +20,4 @@ xlrd
 xlsxwriter
 xsorted
 scapy
+selenium

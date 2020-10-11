@@ -1,7 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+__author__  = 'm.yama'
+__license__ = 'MIT'
+__date__    = 'Sun Oct 11 19:39:02 2020'
+__version__ = '0.0.1'
+
+__all__     = [
+    "ChromeSync"
+]
+
 __doc__ = """
+Summary:
+    selenuim Chromeは非同期処理として各find_elemnet*の関数は動作するが、
+    これを同期処理として動くように拡張した。
+
+Description:
+    ref. https://qiita.com/kirin123kirin/items/ec5777e1977bd7414ece
+
 * *1 sleepじゃうまくコントロールできない。標準的なChromeクラスの使い方ではsleepで待ち合わせを入れることが一般的だが、長くsleepし無駄な時間になったり、逆にsleepが早すぎてNoSuchElementExceptionエラーでストップしてしまったり腹立たしい。そもそも何秒待てば必ず処理が終わるのか？なんてわからない。
 * *2 ファイルをダウンロードする処理の場合同じファイル名があると自動的に(1)とか連番をつけられ勝手に増えていく。
 * *3 オプション設定がだるい。
@@ -10,6 +26,10 @@ __doc__ = """
 * *6 実行PCによっては'Bluetooth: bluetooth_adapter_winrt.cc:1074 Getting Default Adapter failed'が出てしまう
 * *7 ファイルダウンロード途中で進まなくなった場合、タイムアウト設定秒を超えたら中断させダウンロード完了済みのものだけを残したい
 * *8 PDFをダウンロードしたいが、Chromeブラウザ中に表示されてしまう。
+
+:REQUIRES:
+    selenium
+
 """
 
 import selenium.webdriver
@@ -29,6 +49,79 @@ class _tmpdir(TemporaryDirectory):
 
 cls = selenium.webdriver.Chrome
 class ChromeSync(cls):
+    """
+    selenium.webdriver.Chromeを同期型クラスに拡張したクラス
+    インスタンス初期化後の使用方法は、selenium.webdriver.Chromeと全く同じ
+
+    ChromeDriver のダウンロードは
+    http://chromedriver.storage.googleapis.com/index.html
+
+    主な拡張(selenium.webdriver.Chromeとの違い)
+
+    * ページ表示や、ダウンロードが完全に終わるまで待ち合わせる
+    * デフォルトダウンロードフォルダの任意変更できる
+    * 同名のダウンロードファイルが存在している場合は、上書き保存する
+    * ダウンロードファイルを保存しますか？等のユーザー確認プロンプトをスキップし、実行処理の邪魔をさせない
+    * find_element...の長い関数名ではなく短縮形の使用ができる
+        find_element_by_xpath -> xpath
+        find_elements_by_xpath -> xpaths
+    * インスタンス作成時に初期アクセスURLを一気に指定できる
+
+    引数パラメータ
+    ----------
+    init_url : str, optional
+        初期表示URL. The default is None.
+    executable_path : str, optional (selenium.webdriver.Chrome original parameter)
+        path to the executable. If the default is used it assumes the executable is in the $PATH. The default is "chromedriver".
+    port : int, optional (selenium.webdriver.Chrome original parameter)
+        port you would like the service to run, if left as 0, a free port will be found. The default is 0.
+    options : ChromeOption, optional (selenium.webdriver.Chrome original parameter)
+        this takes an instance of ChromeOptions. The default is None.
+    service_args : TYPE, optional (selenium.webdriver.Chrome original parameter)
+        List of args to pass to the driver service. The default is None.
+    desired_capabilities : TYPE, optional (selenium.webdriver.Chrome original parameter)
+        Dictionary object with non-browser specific. The default is None.
+    service_log_path : str, optional (selenium.webdriver.Chrome original parameter)
+        Where to log information from the driver. The default is None.
+    keep_alive : bool, optional (selenium.webdriver.Chrome original parameter)
+        Whether to configure ChromeRemoteConnection to use HTTP keep-alive. The default is True.
+    download_dir : str, optional
+        ファイルダウンロードするパス. The default is None.
+    background : bool, optional
+        ブラウザをバックグラウンドで起動するかどうか. The default is False.
+    timeout : int, optional
+        画面遷移時のタイムアウト秒数. The default is 300.
+        0 か 負の値を設定した場合はブラウザエラーが発生しない限りずっと待ち合わせる。
+    disable_extensions : bool, optional
+        Chrome拡張を無効にするかどうか. The default is True.
+    maximized : bool, optional
+        ブラウザ画面を最大化するかどうか. The default is False.
+    sync : bool, optional
+        一つ一つの処理全てを同期処理するかどうか. The default is True.
+    proxy_direct : bool, optional
+        プロキシ経由せず直接接続するかどうか. The default is True.
+
+    例外
+    ------
+    FileNotFoundError
+        download_dir ディレクトリが、見つからない
+    NotADirectoryError
+        download_dir がディレクトリでない
+
+    戻値
+    -------
+    None.
+
+    使用例
+    -------
+    >>> url = "https://www.google.com"
+    >>> with ChromeSync(url, download_dir="C:/temp/hoge",timeout=5) as driver:
+            search = driver.xpath('//*[@name="q"]')
+            search.send_keys("hoge")
+            search.submit()
+            time.sleep(3)
+    """
+
     # *4
     xpath = cls.find_element_by_xpath
     xpaths = cls.find_elements_by_xpath
@@ -58,76 +151,6 @@ class ChromeSync(cls):
                  maximized=False,
                  sync=True,
                  proxy_direct=True):
-
-        """
-        selenium.webdriver.Chromeを同期型クラスに拡張したクラス
-        インスタンス初期化後の使用方法は、selenium.webdriver.Chromeと全く同じ
-
-        主な拡張(selenium.webdriver.Chromeとの違い)
-
-        * ページ表示や、ダウンロードが完全に終わるまで待ち合わせる
-        * デフォルトダウンロードフォルダの任意変更できる
-        * 同名のダウンロードファイルが存在している場合は、上書き保存する
-        * ダウンロードファイルを保存しますか？等のユーザー確認プロンプトをスキップし、実行処理の邪魔をさせない
-        * find_element...の長い関数名ではなく短縮形の使用ができる
-            find_element_by_xpath -> xpath
-            find_elements_by_xpath -> xpaths
-        * インスタンス作成時に初期アクセスURLを一気に指定できる
-
-        引数パラメータ
-        ----------
-        init_url : str, optional
-            初期表示URL. The default is None.
-        executable_path : str, optional (selenium.webdriver.Chrome original parameter)
-            path to the executable. If the default is used it assumes the executable is in the $PATH. The default is "chromedriver".
-        port : int, optional (selenium.webdriver.Chrome original parameter)
-            port you would like the service to run, if left as 0, a free port will be found. The default is 0.
-        options : ChromeOption, optional (selenium.webdriver.Chrome original parameter)
-            this takes an instance of ChromeOptions. The default is None.
-        service_args : TYPE, optional (selenium.webdriver.Chrome original parameter)
-            List of args to pass to the driver service. The default is None.
-        desired_capabilities : TYPE, optional (selenium.webdriver.Chrome original parameter)
-            Dictionary object with non-browser specific. The default is None.
-        service_log_path : str, optional (selenium.webdriver.Chrome original parameter)
-            Where to log information from the driver. The default is None.
-        keep_alive : bool, optional (selenium.webdriver.Chrome original parameter)
-            Whether to configure ChromeRemoteConnection to use HTTP keep-alive. The default is True.
-        download_dir : str, optional
-            ファイルダウンロードするパス. The default is None.
-        background : bool, optional
-            ブラウザをバックグラウンドで起動するかどうか. The default is False.
-        timeout : int, optional
-            画面遷移時のタイムアウト秒数. The default is 300.
-            0 か 負の値を設定した場合はブラウザエラーが発生しない限りずっと待ち合わせる。
-        disable_extensions : bool, optional
-            Chrome拡張を無効にするかどうか. The default is True.
-        maximized : bool, optional
-            ブラウザ画面を最大化するかどうか. The default is False.
-        sync : bool, optional
-            一つ一つの処理全てを同期処理するかどうか. The default is True.
-        proxy_direct : bool, optional
-            プロキシ経由せず直接接続するかどうか. The default is True.
-
-        例外
-        ------
-        FileNotFoundError
-            download_dir ディレクトリが、見つからない
-        NotADirectoryError
-            download_dir がディレクトリでない
-
-        戻値
-        -------
-        None.
-
-        使用例
-        -------
-        url = "https://www.google.com"
-        with ChromeSync(url, download_dir="C:/temp/hoge",timeout=5) as driver:
-            search = driver.xpath('//*[@name="q"]')
-            search.send_keys("hoge")
-            search.submit()
-            time.sleep(3)
-        """
 
         self.init_url = init_url
         self._tmpdir = None
