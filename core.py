@@ -13,6 +13,10 @@ __all__ = [
     "globbing",
     "to_hankaku",
     "to_zenkaku",
+    "hostname",
+    "getipaddr",
+    "mkdirs",
+    "move",
     "tdir",
     "TMPDIR",
 ]
@@ -23,10 +27,11 @@ iswin = os.name == "nt"
 import re
 from io import IOBase, StringIO, BytesIO
 import codecs
-from os.path import isdir, normpath
-from glob import iglob
+from os.path import isdir, normpath, abspath, dirname, basename, exists, join as pathjoin
+from glob import glob, iglob
 from functools import wraps
 from socket import gethostname, gethostbyname
+import shutil
 
 try:
     import nkf
@@ -49,10 +54,10 @@ except ModuleNotFoundError:
         raise ModuleNotFoundError("please install `nkf` or `chardet`")
 
 def thisfile():
-    return os.path.abspath(sys.argv[0])
+    return abspath(sys.argv[0])
 
 def thisdir():
-    return os.path.dirname(thisfile())
+    return dirname(thisfile())
 
 def flatten(x):
     return [z for y in x for z in (flatten(y)
@@ -267,8 +272,7 @@ def translates(repdic, string):
     pattern = '({})'.format('|'.join(map(re.escape, repdic.keys())))
     return re.sub(pattern, lambda m: repdic[m.group()], string)
 
-def hostname():
-    return gethostname()
+hostname = gethostname
 
 def getipaddr():
     return gethostbyname(hostname())
@@ -276,10 +280,39 @@ def getipaddr():
 def gethost():
     return "{}({})".format(hostname(),getipaddr())
 
+def mkdirs(tar):
+    if not exists(tar):
+        os.makedirs(tar)
+        return True
+    return False
+
+def move(src, dst, makedirs=True):
+    try:
+        if exists(src):
+            shutil.move(src, dst)
+            return
+        
+        sources = glob(src, recursive=True)
+        if not sources:
+            raise OSError("Files not found `src path` is " + src)
+        
+        for s in sources:
+            tar = pathjoin(dst, basename(s))
+            if exists(tar):
+                os.remove(tar)
+            
+            shutil.move(s, tar)
+    except FileNotFoundError as e:
+        if makedirs:
+            mkdirs(dst)
+            return move(src, dst)
+        else:
+            raise(e)
+
 from tempfile import TemporaryDirectory
 
 __tdpath = "/portable.app/usr/share/testdata/"
-if gethostname() == "localhost":
+if hostname() == "localhost":
     tdir = "/storage/emulated/0/Android/data/com.dropbox.android/files/u9335201/scratch" + __tdpath
 elif os.name == "posix":
     tdir = os.getenv("HOME") + "/Dropbox/" + __tdpath
