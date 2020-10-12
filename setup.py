@@ -63,7 +63,7 @@ setup(
     package_dir={pkg: ''},
     packages=[pkg],
 
-    package_data={ pkg : list(glob("libs/*.xz" if cancompile() else "libs/*")) },
+    package_data={ pkg : glob("webbrowser/*.py") + glob("libs/*.xz" if cancompile() else "libs/*") },
 
     ext_modules=cythonize([Extension(pkg + ".libs.similar", sources=["libs/similar.pyx"])]) if cancompile() else [],
     cmdclass={'build_ext': build_ext},

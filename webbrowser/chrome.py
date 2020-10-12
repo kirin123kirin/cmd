@@ -203,7 +203,7 @@ class ChromeSync(cls):
             "plugins.always_open_pdf_externally": True, # *8
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
-            "safebrowsing" : {"enabled": True}, # *5
+            "safebrowsing.enabled" : True, # *5
         }
 
         self.download_dir = download_dir
@@ -369,6 +369,29 @@ class ChromeSync(cls):
         return ret
 
 
+    #TODO
+    # def direct_download(self, url=None):
+    #     from urllib.request import urlopen
+    #     from urllib.request import urlretrieve
+    #     url = url or self.current_url
+    #     bn = basename(url)
+    #     out = pathjoin(self.download_dir, bn)
+
+    #     tmpfn, headers = urlretrieve(url)
+
+    #     if url.count("/") == 2 or "." not in bn:
+    #         out += "." + headers['Content-Type'].split(";")[0].split("/")[-1]
+
+    #     shutil.move(tmpfn, out)
+
+    # def direct_download(self, url=None):
+    #     url = url or self.current_url
+    #     html = self.page_source.encode('utf-8')
+    #     from bs4 import BeautifulSoup
+    #     soup = BeautifulSoup(html, "lxml")
+    #     print(soup.text)
+
+
 def test():
     from datetime import datetime as dt
 
@@ -384,36 +407,43 @@ def test():
 
         with ChromeSync(url, download_dir=download_dir,timeout=5) as d:
             # print(d.page_source)
-            pass
+            d
         target = pathjoin(download_dir, basename(url))
         assert(exists(target))
         os.remove(target)
 
-    def test_1_normal_google():
-        url = "https://www.google.com"
-        __test_normal(url)
+    # def test_1_normal_google():
+    #     url = "https://www.google.com"
+    #     __test_normal(url)
 
-    def test_2_delay_google():
-        url = "https://deelay.me/4000/https://www.google.com"
-        __test_normal(url)
+    # def test_2_delay_google():
+    #     url = "https://deelay.me/4000/https://www.google.com"
+    #     __test_normal(url)
 
-    def test_3_csv_download():
-        url = "https://file-examples-com.github.io/uploads/2017/02/file_example_CSV_5000.csv"
-        __test_download(url)
+    # def test_3_csv_download():
+    #     url = "https://file-examples-com.github.io/uploads/2017/02/file_example_CSV_5000.csv"
+    #     __test_download(url)
 
-    def test_4_pdf_download():
-        url = "https://helpx.adobe.com/jp/acrobat/kb/cq07071635/_jcr_content/main-pars/download-section/download-1/file.res/sample.pdf"
-        __test_download(url)
+    # def test_4_pdf_download():
+    #     url = "https://helpx.adobe.com/jp/acrobat/kb/cq07071635/_jcr_content/main-pars/download-section/download-1/file.res/sample.pdf"
+    #     __test_download(url)
 
-    def test_5_xlsx_download():
-        url = "https://file-examples-com.github.io/uploads/2017/02/file_example_XLSX_10.xlsx"
-        __test_download(url)
+    # def test_5_xlsx_download():
+    #     url = "https://file-examples-com.github.io/uploads/2017/02/file_example_XLSX_10.xlsx"
+    #     __test_download(url)
 
     def test_6_json_download():
         url = "https://file-examples-com.github.io/uploads/2017/02/file_example_JSON_1kb.json"
         __test_download(url)
 
 
+    # def test_7_xml_download():
+    #     url = "https://file-examples-com.github.io/uploads/2017/02/file_example_XML_24kb.xml"
+    #     __test_download(url)
+
+    # def test_8_exe_download():
+    #     url = "https://www.python.org/ftp/python/3.9.0/python-3.9.0-amd64.exe"
+    #     __test_download(url)
 
     for x, func in sorted(locals().items()):
         if x.startswith("test_") and callable(func):
