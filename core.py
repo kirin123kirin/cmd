@@ -63,6 +63,14 @@ def flatten(x):
     return [z for y in x for z in (flatten(y)
              if y is not None and hasattr(y, "__iter__") and not isinstance(y, (str, bytes, bytearray)) else (y,))]
 
+def listify(x):
+    if not x:
+        return []
+    elif hasattr(x, "__iter__") and not isinstance(x, (str, bytes, bytearray)):
+        return list(x)
+    else:
+        return [x]
+
 def binopen(f, mode="rb", *args, **kw):
     check = lambda *tp: isinstance(f, tp)
 
@@ -291,16 +299,16 @@ def move(src, dst, makedirs=True):
         if exists(src):
             shutil.move(src, dst)
             return
-        
+
         sources = glob(src, recursive=True)
         if not sources:
             raise OSError("Files not found `src path` is " + src)
-        
+
         for s in sources:
             tar = pathjoin(dst, basename(s))
             if exists(tar):
                 os.remove(tar)
-            
+
             shutil.move(s, tar)
     except FileNotFoundError as e:
         if makedirs:
