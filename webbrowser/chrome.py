@@ -463,7 +463,7 @@ def test():
         url = "https://file-examples-com.github.io/uploads/2017/02/file_example_JSON_1kb.json"
         __test_direct_download(url)
 
-    def test_7_xml_download(): #TODO bug
+    def test_7_xml_download():
         url = "https://file-examples-com.github.io/uploads/2017/02/file_example_XML_24kb.xml"
         __test_direct_download(url)
 
