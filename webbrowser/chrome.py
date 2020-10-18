@@ -61,10 +61,15 @@ from selenium.common.exceptions import (
 import os
 import time
 import shutil
+from urllib.request import urlretrieve
 from glob import glob
 from tempfile import TemporaryDirectory
 from os.path import isdir, exists, join as pathjoin, basename
 from collections import defaultdict
+
+def direct_download(url, download_dir):
+    bn = basename(url)
+    return urlretrieve(url, filename=pathjoin(download_dir, bn))
 
 class _tmpdir(TemporaryDirectory):
     def __del__(self):
@@ -404,29 +409,9 @@ class ChromeSync(cls):
 
         return ret
 
-
-    #TODO
-    # def direct_download(self, url=None):
-    #     from urllib.request import urlopen
-    #     from urllib.request import urlretrieve
-    #     url = url or self.current_url
-    #     bn = basename(url)
-    #     out = pathjoin(self.download_dir, bn)
-
-    #     tmpfn, headers = urlretrieve(url)
-
-    #     if url.count("/") == 2 or "." not in bn:
-    #         out += "." + headers['Content-Type'].split(";")[0].split("/")[-1]
-
-    #     shutil.move(tmpfn, out)
-
-    # def direct_download(self, url=None):
-    #     url = url or self.current_url
-    #     html = self.page_source.encode('utf-8')
-    #     from bs4 import BeautifulSoup
-    #     soup = BeautifulSoup(html, "lxml")
-    #     print(soup.text)
-
+    @classmethod
+    def direct_download(cls, url, download_dir):
+        return direct_download(url=url, download_dir=download_dir)
 
 def test():
     from datetime import datetime as dt
@@ -444,6 +429,12 @@ def test():
         with ChromeSync(url, download_dir=download_dir,timeout=5) as d:
             # print(d.page_source)
             d
+        target = pathjoin(download_dir, basename(url))
+        assert(exists(target))
+        os.remove(target)
+
+    def __test_direct_download(url, download_dir="C:/temp/hoge"):
+        direct_download(url, download_dir)
         target = pathjoin(download_dir, basename(url))
         assert(exists(target))
         os.remove(target)
@@ -468,14 +459,13 @@ def test():
         url = "https://file-examples-com.github.io/uploads/2017/02/file_example_XLSX_10.xlsx"
         __test_download(url)
 
-    # def test_6_json_download(): #TODO bug
-    #     url = "https://file-examples-com.github.io/uploads/2017/02/file_example_JSON_1kb.json"
-    #     __test_download(url)
+    def test_6_json_download():
+        url = "https://file-examples-com.github.io/uploads/2017/02/file_example_JSON_1kb.json"
+        __test_direct_download(url)
 
-
-    # def test_7_xml_download(): #TODO bug
-    #     url = "https://file-examples-com.github.io/uploads/2017/02/file_example_XML_24kb.xml"
-    #     __test_download(url)
+    def test_7_xml_download(): #TODO bug
+        url = "https://file-examples-com.github.io/uploads/2017/02/file_example_XML_24kb.xml"
+        __test_direct_download(url)
 
     def test_8_exe_download():
         url = "https://www.python.org/ftp/python/3.9.0/python-3.9.0-amd64.exe"
