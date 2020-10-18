@@ -400,7 +400,7 @@ except:
 
 from util.filetype import guesstype
 from util.core import binopen, opener, getencoding, binchunk, globbing
-from util.utils import to_datetime
+from util.utils import to_datetime, is1darray
 
 def lsdir(path, recursive=True):
     func = "rglob" if recursive else "glob"
@@ -2494,7 +2494,6 @@ def to_csv(rows, outputfile, mode="w",
                     quoting=_csv.QUOTE_MINIMAL,
                     errors="backslashreplace",
                     sep="," ):
-
     kw = dict(delimiter=sep, lineterminator=lineterminator, quoting=quoting)
     conf = dict(encoding=encoding, errors=errors)
     if hasattr(outputfile, "write"):
@@ -2510,13 +2509,13 @@ def to_csv(rows, outputfile, mode="w",
                 writer.writerow(row)
 
 
-def to_tsv(rows, outputfile,
+def to_tsv(rows, outputfile,mode="w",
                     encoding="cp932",
                     lineterminator="\r\n",
                     quoting=_csv.QUOTE_MINIMAL,
                     errors="backslashreplace",
                     sep="\t"):
-    return to_csv(rows, outputfile, encoding, lineterminator, quoting, errors, sep)
+    return to_csv(rows, outputfile, mode, encoding, lineterminator, quoting, errors, sep)
 
 
 def test():
@@ -2773,14 +2772,21 @@ def main_info():
 
     write((sep.join(sinfo._fields) + lineterminator))
 
-    for i, f in enumerate(walk(args)):
-        ret = [x if x else "" for x in getinfo(f)]
+    def writer(ret):
         idx = sinfo._fields.index("LF")
         ret[idx] = repr(ret[idx])
         for j, r in enumerate(ret):
             if isinstance(r, datetime):
                 ret[j] = r.strftime(dateformat)
         write((sep.join(map(str, ret)) + lineterminator))
+
+
+    for i, r in enumerate(globbing(getinfo)(args.files)):
+        if is1darray(r):
+            writer(list(r))
+        else:
+            for rc in r:
+                writer(list(r))
 
     if i is None:
         raise FileNotFoundError(str(args.files))
@@ -2837,5 +2843,5 @@ def main():
         raise AttributeError("python {} [row|info|size] ...".format(os.path.basename(sys.argv[0])))
 
 if __name__ == "__main__":
-    # test()
-    main()
+    test()
+    # main()
