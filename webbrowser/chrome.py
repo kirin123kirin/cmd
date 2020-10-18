@@ -44,6 +44,7 @@ Description:
 * *6 実行PCによっては'Bluetooth: bluetooth_adapter_winrt.cc:1074 Getting Default Adapter failed'が出てしまう
 * *7 ファイルダウンロード途中で進まなくなった場合、タイムアウト設定秒を超えたら中断させダウンロード完了済みのものだけを残したい
 * *8 PDFをダウンロードしたいが、Chromeブラウザ中に表示されてしまう。
+* *9 新しいタブやウィンドウが開いたときにcurrent_windowが元のタブやウィンドウのままであり、イチイチ最後のタブやウィンドウを見つけてdriver.to_switch.windowをやらないといけない
 
 :REQUIRES:
     selenium
@@ -51,7 +52,11 @@ Description:
 """
 
 import selenium.webdriver
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    TimeoutException,
+    InvalidSessionIdException,
+    )
 
 import os
 import time
@@ -260,6 +265,26 @@ class ChromeSync(cls):
         """
         self.execute_script("window.scrollTo(0, document.body.scrollHeight);")
 
+    def select_tab(self, n):
+        """
+        n番目のタブやWindowに制御を変更する
+        """
+        # time.sleep(0.1)
+        self.switch_to.window(self.window_handles[n])
+
+    def first_tab(self):
+        """
+        最初のタブやWindowに制御を変更する
+        """
+        self.select_tab(0)
+
+
+    def last_tab(self): # *9
+        """
+        最後のタブやWindowに制御を変更する
+        """
+        self.select_tab(-1)
+
     # *7
     def _add_dlhist(self, f):
         """
@@ -316,6 +341,15 @@ class ChromeSync(cls):
             self.organize_download_files()
 
 
+    def close(self):
+        super().close()
+        try:
+            if self.download_dir:
+                self.wait_for_downloads() # *2
+            self.last_tab()
+        except InvalidSessionIdException:
+            return
+
     def quit(self):
         # 終了する前にダウンロード完了を待つ
         if self.download_dir:
@@ -363,9 +397,11 @@ class ChromeSync(cls):
             ret = super().execute(driver_command, params)
 
         if driver_command == "get":
+            self.last_tab() # *9
             if self.page_source == "<html><head></head><body></body></html>":
                 # ダウンロードする処理だった場合、次の処理に進んでしまうのでダウンロードが終わるまで待つことにした
                 self.wait_for_downloads()
+
         return ret
 
 
@@ -412,38 +448,48 @@ def test():
         assert(exists(target))
         os.remove(target)
 
-    # def test_1_normal_google():
-    #     url = "https://www.google.com"
-    #     __test_normal(url)
+    def test_1_normal_google():
+        url = "https://www.google.com"
+        __test_normal(url)
 
-    # def test_2_delay_google():
-    #     url = "https://deelay.me/4000/https://www.google.com"
-    #     __test_normal(url)
+    def test_2_delay_google():
+        url = "https://deelay.me/4000/https://www.google.com"
+        __test_normal(url)
 
-    # def test_3_csv_download():
-    #     url = "https://file-examples-com.github.io/uploads/2017/02/file_example_CSV_5000.csv"
-    #     __test_download(url)
-
-    # def test_4_pdf_download():
-    #     url = "https://helpx.adobe.com/jp/acrobat/kb/cq07071635/_jcr_content/main-pars/download-section/download-1/file.res/sample.pdf"
-    #     __test_download(url)
-
-    # def test_5_xlsx_download():
-    #     url = "https://file-examples-com.github.io/uploads/2017/02/file_example_XLSX_10.xlsx"
-    #     __test_download(url)
-
-    def test_6_json_download():
-        url = "https://file-examples-com.github.io/uploads/2017/02/file_example_JSON_1kb.json"
+    def test_3_csv_download():
+        url = "https://file-examples-com.github.io/uploads/2017/02/file_example_CSV_5000.csv"
         __test_download(url)
 
+    def test_4_pdf_download():
+        url = "https://helpx.adobe.com/jp/acrobat/kb/cq07071635/_jcr_content/main-pars/download-section/download-1/file.res/sample.pdf"
+        __test_download(url)
 
-    # def test_7_xml_download():
+    def test_5_xlsx_download():
+        url = "https://file-examples-com.github.io/uploads/2017/02/file_example_XLSX_10.xlsx"
+        __test_download(url)
+
+    # def test_6_json_download(): #TODO bug
+    #     url = "https://file-examples-com.github.io/uploads/2017/02/file_example_JSON_1kb.json"
+    #     __test_download(url)
+
+
+    # def test_7_xml_download(): #TODO bug
     #     url = "https://file-examples-com.github.io/uploads/2017/02/file_example_XML_24kb.xml"
     #     __test_download(url)
 
-    # def test_8_exe_download():
-    #     url = "https://www.python.org/ftp/python/3.9.0/python-3.9.0-amd64.exe"
-    #     __test_download(url)
+    def test_8_exe_download():
+        url = "https://www.python.org/ftp/python/3.9.0/python-3.9.0-amd64.exe"
+        __test_download(url)
+
+    def test_9_new_tab():
+        url = 'http://www.tagindex.com/html_tag/link/a_target.html'
+        download_dir="C:/temp/hoge"
+
+        with ChromeSync(url, download_dir=download_dir,timeout=5) as d:
+            d.cssselector('[href="target_example.html"]').click()
+            d.last_tab()
+            assert(d.current_window_handle == d.window_handles[-1])
+            assert(d.current_url == "https://www.tagindex.com/html_tag/link/target_example.html")
 
     for x, func in sorted(locals().items()):
         if x.startswith("test_") and callable(func):
