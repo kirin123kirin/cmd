@@ -7,8 +7,10 @@ import paramiko
 from scp import SCPClient
 
 __all__ = [
+    "sshclient",
     "scpget",
     "sshcmd",
+    "
 ]
 def _prog(target, dlsize, completesize):
     if completesize == 0:

@@ -17,6 +17,8 @@ __all__ = [
     "getipaddr",
     "mkdirs",
     "move",
+    "rdict",
+    "re_call",
     "tdir",
     "TMPDIR",
 ]
@@ -32,6 +34,7 @@ from glob import glob, iglob
 from functools import wraps
 from socket import gethostname, gethostbyname
 import shutil
+from functools import lru_cache
 
 try:
     import nkf
@@ -316,6 +319,242 @@ def move(src, dst, makedirs=True):
             return move(src, dst)
         else:
             raise(e)
+
+@lru_cache(16)
+def re_call(pattern, flags=0, call_re_func="search"):
+    return re.compile(pattern, flags=flags).__getattribute__(call_re_func)
+
+class rdict(dict):
+    """
+    Summary
+    ----------
+        python辞書キーを正規表現でも探索できるよう拡張した辞書
+
+    Example
+    ----------
+    >>> a = rdict()
+    >>> a["abc"] = 1
+    >>> a
+    {'abc': 1}
+
+    まず普通に辞書として使える
+
+    >>> a["abc"]
+    1
+
+    キーを正規表現パターンで検索する
+
+    >>> a.search(".b.*")
+    [1]
+
+    パターンが見つからない場合は空の配列を返す
+
+    >>> a.search(".z.*")
+    []
+
+    正規表現パターンで一致するキーがあるかどうかを調べる
+
+    >>> a.isin(re.compile(".b.*").search)
+    True
+    >>> a.isin(re.compile(".z.*").search)
+    False
+
+    その他１、条件が真になる場合のキーを持つ場合の値を返す
+
+    >>> a.findall(lambda x: len(x) == 3)
+    [1]
+
+    findallの引数はcallableな関数ならば何でも良いので以下のような応用もできる
+    その他２、キーを範囲で検索し、値を返す
+
+    >>> from datetime import datetime
+    >>> b = rdict()
+    >>> b[datetime(2020,1,1)] = "2020/01/01"
+    >>> b[datetime(2020,2,1)] = "2020/02/01"
+    >>> b[datetime(2020,3,1)] = "2020/03/01"
+
+    >>> def between_0131_0202(x):
+    ...    return datetime(2020,1,31) < x and x < datetime(2020,2,2)
+    >>> b.findall(between_0131_0202)
+    ['2020/02/01']
+
+    >>> def less_0401(x):
+    ...    return x < datetime(2020, 4, 1)
+    >>> b.isin(less_0401)
+    True
+
+    >>> def grater_0401(x):
+    ...    return x > datetime(2020, 4, 1)
+    >>> b.isin(grater_0401)
+    False
+
+    >>> b.findall(less_0401)
+    ['2020/01/01', '2020/02/01', '2020/03/01']
+
+    条件にマッチするキーの値を一括で変更する
+
+    >>> b[less_0401] = "test"
+    >>> b
+    {datetime.datetime(2020, 1, 1, 0, 0): 'test',
+     datetime.datetime(2020, 2, 1, 0, 0): 'test',
+     datetime.datetime(2020, 3, 1, 0, 0): 'test'}
+
+    条件にマッチするキーを一括で削除する
+
+    >>> del b[between_0131_0202]
+    >>> b
+    {datetime.datetime(2020, 1, 1, 0, 0): 'test',
+     datetime.datetime(2020, 3, 1, 0, 0): 'test'}
+
+    """
+    def _filter(self, _callable):
+        return (k for k in self if _callable(k))
+
+    def isin(self, key_or_function):
+        """
+        key_or_function が真を返すkeyが一つでも存在する場合、真を返します。
+        一つも存在しない場合は偽を返します。
+        """
+        if callable(key_or_function):
+            return any(True for _ in self._filter(key_or_function))
+        return dict.__contains__(self, key_or_function)
+
+    def findall(self, key_or_function):
+        """
+        function が真を返すkeyがあるvalueをリストで返します。
+        一つも存在しない場合は空の配列を返します
+        """
+        if callable(key_or_function):
+            return [dict.__getitem__(self, key) for key in self._filter(key_or_function)]
+        return dict.__getitem__(self, key_or_function)
+
+    def search(self, pattern, flags=0):
+        """
+        正規表現patternがマッチ(部分一致)するdict keyがあればそれらのvalueの配列を返します。
+        一つもpattenにマッチしない場合は空の配列を返します。
+        引数の意味は `re.compile <https://docs.python.org/ja/3/library/re.html#re.compile>`_ と等価です。
+        """
+        return [dict.__getitem__(self,key) for key in self if re_call(pattern, flags, "search")(key)]
+
+    def fullmatch(self, pattern, flags=0):
+        """
+        正規表現patternがマッチ(完全一致)するdict keyがあればそれらのvalueの配列を返します。
+        一つもpattenにマッチしない場合は空の配列を返します。
+        引数の意味は `re.compile <https://docs.python.org/ja/3/library/re.html#re.compile>`_ と等価です。
+        """
+        return [dict.__getitem__(self,key) for key in self if re_call(pattern, flags, "fullmatch")(key)]
+
+    def __setitem__(self, key_or_function, value):
+        """
+        function が真のkeyに対してvalueを設定します。
+        一つも存在しない場合は何も行われません。
+        """
+        if callable(key_or_function):
+            for key in self._filter(key_or_function):
+                dict.__setitem__(self, key, value)
+        else:
+            return dict.__setitem__(self, key_or_function, value)
+
+    def __delitem__(self, key_or_function):
+        """
+        function が真のkeyに対して辞書からキーと値を削除します。
+        一つも存在しない場合は何も行われません。
+        """
+        if callable(key_or_function):
+            for key in list(self._filter(key_or_function)):
+                dict.__delitem__(self, key)
+        else:
+            return dict.__delitem__(self, key_or_function)
+
+    def between(self, start, stop):
+        """
+        startよりも大きく、stopよりも小さいkeyがある場合、見つかったvalueの配列を返します。
+        一つも存在しない場合は空の配列を返します。
+        start, stopは keyと比較可能な値である必要があります。
+        比較できない値が入力された場合はTypeErrorが発生します。
+        """
+        return [dict.__getitem__(self,key) for key in self if start < key and key < stop]
+
+    def startswith(self, prefix, start=None, end=None):
+        """
+        prefixの文字を前方一致でkeyを探し、一致するkeyがある場合、見つかったvalueの配列を返します。
+        一つも存在しない場合は空の配列を返します。
+        引数の意味は `str.startswith <https://docs.python.org/ja/3/library/stdtypes.html#str.startswith>`_ と等価です。
+        """
+        return [dict.__getitem__(self,key) for key in self if key.startswith(prefix, start, end)]
+
+    def endswith(self, suffix, start=None, end=None):
+        """
+        prefixの文字を前方一致でkeyを探し、一致するkeyがある場合、見つかったvalueの配列を返します。
+        一つも存在しない場合は空の配列を返します。
+        引数の意味は `str.endswith <https://docs.python.org/ja/3/library/stdtypes.html#str.endswith>`_ と等価です。
+        """
+        return [dict.__getitem__(self,key) for key in self if key.endswith(suffix, start, end)]
+
+    def append(self, k, x):
+        """
+        dict keyのvalueに対して配列としてxを末尾に追加します。
+        """
+        if dict.__contains__(self, k):
+            r = dict.__getitem__(self, k)
+            if isinstance(r, list):
+                r.append(x)
+                dict.__setitem__(self, k, r)
+            else:
+                dict.__setitem__(self, k, [r, x])
+        else:
+            dict.__setitem__(self, k, [x])
+
+    def extend(self, k, iterable):
+        """
+        dict keyのvalueに対して配列としてiterableを拡張します
+        """
+        if dict.__contains__(self, k):
+            r = dict.__getitem__(self, k)
+            if isinstance(r, list):
+                r.extend(iterable)
+                dict.__setitem__(self, k, r)
+            else:
+                dict.__setitem__(self, k, [r, *iterable])
+        else:
+            dict.__setitem__(self, k, iterable)
+
+    def merge(self, other):
+        """
+        otherの辞書とマージします。
+        マージする場合に同じdict keyがある場合、valueは配列として結合します。
+        updateの場合は同じdict keyがある場合は上書きする点が違います。
+        """
+        for k, value in other.items():
+            if isinstance(value, (list, tuple)):
+                self.extend(k, value)
+            else:
+                self.append(k, value)
+
+    def values_count(self):
+        """
+        dict key 毎の 値の件数をカウントした結果を返します。
+        戻値は dictです。
+        """
+        return {k: len(v) if isinstance(v, list) else 1 for k, v in dict.items(self)}
+
+    def iteritems(self):
+        return ((k, v if isinstance(v, list) else [v]) for k, v in dict.items(self))
+
+    def values_flatten(self):
+        def flatten(x):
+            return [z for y in x for z in (flatten(y)
+             if y is not None and hasattr(y, "__iter__") and not isinstance(y, (str, bytes, bytearray)) else (y,))]
+        return flatten(dict.values(self))
+
+    def items_flatten(self):
+        for k, v in dict.items(self):
+            if isinstance(v, list):
+                for vv in v:
+                    yield k, vv
+            else:
+                yield k, v
+
 
 from tempfile import TemporaryDirectory
 
