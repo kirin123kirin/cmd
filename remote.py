@@ -10,7 +10,6 @@ __all__ = [
     "sshclient",
     "scpget",
     "sshcmd",
-    "
 ]
 def _prog(target, dlsize, completesize):
     if completesize == 0:
