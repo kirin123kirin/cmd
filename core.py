@@ -69,10 +69,15 @@ def flatten(x):
 def listify(x):
     if not x:
         return []
-    elif hasattr(x, "__iter__") and not isinstance(x, (str, bytes, bytearray)):
+    elif isinstance(x, list):
+        return x
+    elif isinstance(x, (str, bytes, bytearray, int, float, bool, )):
+        return [x]
+    elif hasattr(x, "__iter__") or hasattr(x, "__next__"):
         return list(x)
     else:
         return [x]
+
 
 def binopen(f, mode="rb", *args, **kw):
     check = lambda *tp: isinstance(f, tp)
