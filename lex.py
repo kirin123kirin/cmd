@@ -18,6 +18,19 @@ __all__ = [
     "LexerError",
 ]
 
+rules = [
+    ('\d+',             'NUMBER'),
+    ('[a-zA-Z_]\w+',    'IDENTIFIER'),
+    ('\+',              'PLUS'),
+    ('\-',              'MINUS'),
+    ('\*',              'MULTIPLY'),
+    ('\/',              'DIVIDE'),
+    ('\(',              'LP'),
+    ('\)',              'RP'),
+    (',',               'COM'),
+    ('=',               'EQUALS'),
+]
+
 class Token(object):
     """ A simple Token structure.
         Contains the token type, value and position.
@@ -134,22 +147,10 @@ def lexer(text, rules, skip_whitespace=True):
         yield tok.type, tok.val
 
 if __name__ == '__main__':
-    rules = [
-        ('\d+',             'NUMBER'),
-        ('[a-zA-Z_]\w+',    'IDENTIFIER'),
-        ('\+',              'PLUS'),
-        ('\-',              'MINUS'),
-        ('\*',              'MULTIPLY'),
-        ('\/',              'DIVIDE'),
-        ('\(',              'LP'),
-        ('\)',              'RP'),
-        (',',               'COM'),
-        ('=',               'EQUALS'),
+    rules.extend([
         ("(Oct|Dec|Jan) *\d{1,2} *\d{4} *\d{1,2}:\d{1,2}", "DATETIME"),
         ("\d{4}[-/]\d{1,2}[-/]\d{1,2}[ T]*\d{1,2}:\d{1,2}", "DATETIME"),
-
-
-    ]
+    ])
 
     lx = Lexer(rules, skip_whitespace=True)
     #lx.input('erw = _abc + 12*(R4-623902)  ')
