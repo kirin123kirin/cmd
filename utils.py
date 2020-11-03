@@ -27,6 +27,8 @@ __all__ = [
     'lazydate',
     'to_datetime',
     'to_gengo',
+    'is_datetime',
+    'finddatetime',
     'hashdigest',
     'hashset',
     'isnamedtuple',
@@ -92,6 +94,7 @@ except ModuleNotFoundError:
 from dateutil.parser._parser import parser, parserinfo
 
 from util.core import flatten, binopen, opener, getencoding, isposix, to_hankaku
+from util.lex import DATETIME, DATE, ampm, _time
 
 def command(cmd):
     code, dat = getstatusoutput(cmd)
@@ -276,16 +279,24 @@ def uniq(iterable, key=None, callback=None):
 def timestamp2date(x, dfm = "%Y/%m/%d %H:%M"):
     return datetime.fromtimestamp(x).strftime(dfm)
 
+#TODO
+re_ampm = lambda s: re.compile(f"({ampm})({_time}[^\s]*)").sub(" \\2 \\1", s).replace("  ", " ")
+del_week = lambda s: re.compile("\([日月火水木金土]\)").sub("", s)
+
 class lazydate(object):
     class _jpinfo(parserinfo):
+        JUMP = [" ", ".", ",", ";", "-", "/", "'",
+            "at", "on", "and", "ad", "m", "t", "of",
+            "st", "nd", "rd", "th"]
+
         WEEKDAYS = [
-                ("Mon", "月曜日", "月曜", "Monday"),
-                ("Tue", "火曜日", "火曜", "火", "Tuesday"),
-                ("Wed", "水曜日", "水曜", "水", "Wednesday"),
-                ("Thu", "木曜日", "木曜", "木", "Thursday"),
-                ("Fri", "金曜日", "金曜", "金", "Friday"),
-                ("Sat", "土曜日", "土曜", "土", "Saturday"),
-                ("Sun", "日曜日", "日曜", "日", "Sunday")]
+                ("Mon", "月曜日", "月曜", "(月)", "Monday"),
+                ("Tue", "火曜日", "火曜", "(火)", "Tuesday"),
+                ("Wed", "水曜日", "水曜", "(水)", "Wednesday"),
+                ("Thu", "木曜日", "木曜", "(木)", "Thursday"),
+                ("Fri", "金曜日", "金曜", "(金)", "Friday"),
+                ("Sat", "土曜日", "土曜", "(土)", "Saturday"),
+                ("Sun", "日曜日", "日曜", "(日)", "Sunday")]
         HMS = [
                 ("h", "時", "hour", "hours"),
                 ("m", "分", "minute", "minutes"),
@@ -561,9 +572,9 @@ class lazydate(object):
         if not timestr:
             raise ValueError(timestr)
         ts = __class__.rsp.sub("", to_hankaku(timestr).strip().replace("_", "-"))
+        ts = re_ampm(del_week(ts))
         if __class__.rym.search(ts):
             ts = __class__.rd.sub("\\1", __class__.rym.sub(__class__.dtsep, ts))
-
         self.timestr = self.__repairstr(ts) if __class__.isdirty(ts) else ts
         self._dt = None
 
@@ -645,6 +656,22 @@ def to_datetime(timestr, form=None):
 
 def to_gengo(timestr, form=None):
     return  lazydate(str(timestr)).to_gengo(form)
+
+re_datetime = re.compile(DATETIME)
+re_date = re.compile(DATE)
+
+def is_datetime(text):
+    return re_datetime.search(text) is not None
+
+def is_date(text):
+    return re_date.search(text) is not None
+
+def finddatetime(text, callback=to_datetime):
+    if is_datetime(text):
+        return [callback(x) for x in re_datetime.findall(text) if x.strip()]
+    if is_date(text):
+        return [callback(x) for x in re_date.findall(text) if x.strip()]
+    return []
 
 def hashdigest(x, argo=hashlib.md5):
     return argo(repr(x).encode()).digest()
@@ -1319,6 +1346,29 @@ if __name__ == "__main__":
             assert(kwtolist("1,2,3") == [0,1,2])
             assert(kwtolist("1-3,5") == [0,1,2,4])
             assert(kwtolist("1-3,5",0) == [1,2,3,5])
+
+        def test_datetime():
+            a1 = datetime(2001,8,24)
+            a2 = datetime(2001,8,24,20,10)
+            a3 = datetime(2019,8,24,20,10)
+
+            #日本
+            assert(to_datetime("2001/08/24") == a1)
+            assert(to_datetime("平成13年08月24日") == a1)
+            assert(to_datetime("2001/08/24 20:10") == a2)
+            assert(to_datetime("2001年8月24日金曜日 20時10分") == a2)
+            assert(to_datetime("2001年8月24日(金) 20時10分") == a2)
+            assert(to_datetime("令和元年08月24日PM 08時10分") == a3)
+            assert(to_datetime("令和元年08月24日　PM08時10分") == a3)
+            assert(to_datetime("令和元年08月24日　午後8時10分") == a3)
+            assert(to_datetime("令和元年08/24午後08:10") == a3)
+
+            # #米国 mm-dd-yy
+            assert(to_datetime("08-24-01") == a1)
+            assert(to_datetime("Friday, August 24th, 2001") == a1)
+            assert(to_datetime("Fri Aug. 24, 2001 8:10 p.m.") == a2)
+            assert(to_datetime("Fri Aug. 24, 2001 20:10") == a2)
+
 
         t0 = datetime.now()
         for x, func in list(locals().items()):

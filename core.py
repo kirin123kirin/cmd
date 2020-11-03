@@ -284,6 +284,49 @@ def to_hankaku(s):
 def to_zenkaku(s):
     return s.translate(str.maketrans(HAN, ZEN))
 
+def kanji2int(kstring: str, sep=False,
+    tt_knum = str.maketrans('一二三四五六七八九〇壱弐参', '1234567890123'),
+    re_num = re.compile(r'[十拾百千万億兆\d]+'),
+    re_kunit = re.compile(r'[十拾百千]|\d+'),
+    re_manshin = re.compile(r'[万億兆]|[^万億兆]+'),
+    TRANSUNIT = {'十': 10,
+                 '拾': 10,
+                 '百': 100,
+                 '千': 1000},
+    TRANSMANS = {'万': 10000,
+                 '億': 100000000,
+                 '兆': 1000000000000}
+    ):
+    def _transvalue(sj: str, re_obj=re_kunit, transdic=TRANSUNIT):
+        unit = 1
+        result = 0
+        for piece in reversed(re_obj.findall(sj)):
+            if piece in transdic:
+                if unit > 1:
+                    result += unit
+                unit = transdic[piece]
+            else:
+                val = int(piece) if piece.isdecimal() else _transvalue(piece)
+                result += val * unit
+                unit = 1
+
+        if unit > 1:
+            result += unit
+
+        return result
+
+    trannum = kstring.translate(tt_knum)
+    for num in sorted(set(re_num.findall(trannum)), key=lambda s: len(s),
+                           reverse=True):
+        if not num.isdecimal():
+            arabic = _transvalue(num, re_manshin, TRANSMANS)
+            arabic = '{:,}'.format(arabic) if sep else str(arabic)
+            trannum = trannum.replace(num, arabic)
+        elif sep and len(num) > 3:
+            trannum = trannum.replace(num, '{:,}'.format(int(num)))
+
+    return trannum
+
 def translates(repdic, string):
     pattern = '({})'.format('|'.join(map(re.escape, repdic.keys())))
     return re.sub(pattern, lambda m: repdic[m.group()], string)
