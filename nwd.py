@@ -305,9 +305,9 @@ def main():
     render(rows, outpath=args.outputfile, outtype=args.type, autoopen=not args.quiet)
 
 if __name__ == "__main__":
-#    import sys
-#    sys.argv.append("-q")
+    # import sys
+    # sys.argv.append("-q")
 
     main()
-#    test()
+    # test()
 

@@ -13,6 +13,8 @@ __all__ = [
     "globbing",
     "to_hankaku",
     "to_zenkaku",
+    "kanji2int",
+    "translates",
     "hostname",
     "getipaddr",
     "mkdirs",
