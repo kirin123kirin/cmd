@@ -20,14 +20,13 @@ __all__ = [
     "RULES",
 ]
 
-day = "\s*(?:[12][0-9]|3[01]|0?[1-9])\s*?(?:th\s*)?[日\-/\.,]?"
-month = "\s*(?:(?:1[0-2]|0?[1-9])\s*?[月\-/\.,]?|(?:Jan(?:uary|\.)?|Feb(?:ruary|\.)?|Mar(?:ch|\.)?|Apr(?:il|\.)?|May\.?|Jun[e|\.]?|Jul[y|\.]?|Aug(?:ust|\.)?|Sep(?:tember|\.)?|Oct(?:ober|\.)?|Nov(?:ember|\.)?|Dec(?:ember|\.)?)\s*)"
+day = "\s*(?:[12][0-9]|3[01]|0?[1-9])\s*(?:th\s*)?[日\-/\.,]?"
+month = "\s*(?:(?:1[0-2]|0?[1-9])\s*[月\-/\.,]?|(?:Jan(?:uary|\.)?|Feb(?:ruary|\.)?|Mar(?:ch|\.)?|Apr(?:il|\.)?|May\.?|Jun[e|\.]?|Jul[y|\.]?|Aug(?:ust|\.)?|Sep(?:tember|\.)?|Oct(?:ober|\.)?|Nov(?:ember|\.)?|Dec(?:ember|\.)?)\s*)"
 year = "\s*(?:\d{4}|[\']?\d{2})\s*[年\-/\.,]?"
-gengo = "\s*(?:[ABDEHIKM-PR-UWYZ]\.?|[万久乾享仁令保元和嘉大天安宝寛寿平康延建弘徳応慶承文斉昌明昭暦朱正永治白神至興観貞長霊養][万中久亀亨享仁保元化吉同和喜嘉国安宝寛寿平延弘徳応慶成承授政文明暦正武永治泰祚祥禄禎福老衡観護貞銅長雉雲養鳥][勝宝感景神]?[字宝護雲]?)\s*?(?:\d{1,2}|元)[年\-/\.,]?"
-hour="\s*(?:1[0-9]|2[0-4]||0?[0-9])\s*?[\.:時]?"
-minute="\s*(?:[1-5][0-9]|0?[0-9])\s*?[\.:分]?"
-sec="\s*(?:[1-5][0-9]|0?[0-9])\s*?(?:秒|[Ss]ec(?:onds)?)?"
-milsec="\s*(?:[,\.]?\d+)"
+gengo = '\\s*(?:[ABDEHIKM-PR-UWYZ]\\.?|[万久乾享仁令保元和嘉大天安宝寛寿平康延建弘徳応慶承文斉昌明昭暦朱正永治白神至興観貞長霊養][万中久亀亨享仁保元化吉同和喜嘉国安宝寛寿平延弘徳応慶成承授政文明暦正武永治泰祚祥禄禎福老衡観護貞銅長雉雲養鳥][勝宝感景神]?[字宝護雲]?)\\s*?(?:\\d{1,2}|元)[年\\-/\\.,]?'
+hour="\s*(?:1[0-9]|2[0-4]||0?[0-9])\s*[\.:時]"
+minute="\s*(?:[1-5][0-9]|0?[0-9])\s*[\.:分]"
+sec="\s*(?:[1-5][0-9]|0?[0-9])\s*(?:秒|[Ss]ec(?:onds)?)?\s*(?:[,\.]?\s*\d+)?"
 timezone = "\s*(?:[+\-]\d{4})"
 timediff = "\s*\(?(?:[ABCDEFGHIJKLMNOPRSTUVWY][ABCDEFGHIJKLMNOPRSTUVWXYZ][ABCDGHKLMNORSTUVWZ][1DST][T])\)?"
 tzinfo = f"(?:{timezone}{timediff}|{timezone}|{timediff})"
@@ -36,10 +35,10 @@ ampm = "\s*(?:[AaPp]\.?[Mm]\.?|午[前後])"
 MONTHDAY = f"(?:{month}{day}|{day}{month})"
 WDATE = f"{weekday}?(?:{year}?{MONTHDAY}|{MONTHDAY}{year})"
 JDATE = f"(?:{year}|{gengo}){month}{day}{weekday}?"
-_time = f"(?:{hour}{minute}{sec}?{milsec}?{tzinfo}?)"
-TIME = f"(?:{ampm}?{hour}{minute}{sec}?{milsec}?{tzinfo}?{ampm}?)"
+TIME = f"(?:{ampm})?(?:{hour})(?:{minute})?(?:{sec})?(?:{timezone})?(?:{timediff})?(?:{tzinfo})?(?:{ampm})?"
 DATE = f"(?:{JDATE}|{WDATE})"
-DATETIME = f"{DATE}(?:\s+|[T:]){TIME}"
+DATETIME = f"(?:{DATE}(?:\s*|[T:])?{TIME})"
+
 
 RULES = [
     ('\d+',             'NUMBER'),
@@ -174,24 +173,27 @@ def lexer(text, rules=RULES, skip_whitespace=True):
 
 def test():
     from datetime import datetime
-
+    
     x = " Oct 8 2020 13:11"
     y=",".join("xyz".split() * 2) + " "
     z="2021-01-10 13:50"
-
+    
     for r in lexer(x+y+z):
         print(r)
-
+   
     for r in lexer("2021-1-10 10:20 p.m."):
         print(r)
-
+    
     for r in lexer("午後10:20"):
         print(r)
-
+    
     for r in lexer("20:02"):
         print(r)
 
     for r in lexer("2019年10月1日"):
+        print(r)
+    
+    for r in lexer("令和元年08月24日 08時10分2秒"):
         print(r)
 
 if __name__ == '__main__':
