@@ -95,7 +95,7 @@ except ModuleNotFoundError:
 from dateutil.parser._parser import parser, parserinfo
 
 from util.core import flatten, binopen, opener, getencoding, isposix, to_hankaku, kanji2int
-from util.lex import DATETIME, DATE, ampm, _time
+from util.lex import DATETIME, DATE
 
 def command(cmd):
     code, dat = getstatusoutput(cmd)
@@ -304,34 +304,34 @@ class lazydate(object):
         '平治': datetime(1159, 5, 9), '保元': datetime(1156, 5, 18), '久寿': datetime(1154, 12, 4), '仁平': datetime(1151, 2, 14), '久安': datetime(1145, 8, 12), '天養': datetime(1144, 3, 28), '康治': datetime(1142, 5, 25), '永治': datetime(1141, 8, 13), '保延': datetime(1135, 6, 10), '長承': datetime(1132, 9, 21), '天承': datetime(1131, 2, 28), '大治': datetime(1126, 2, 15), '天治': datetime(1124, 5, 18), '保安': datetime(1120, 5, 9), '元永': datetime(1118, 4, 25), '永久': datetime(1113, 8, 25), '天永': datetime(1110, 7, 31), '天仁': datetime(1108, 9, 9), '嘉承': datetime(1106, 5, 13), '長治': datetime(1104, 3, 8), '康和': datetime(1099, 9, 15), '承徳': datetime(1097, 12, 27), '永長': datetime(1097, 1, 3), '嘉保': datetime(1095, 1, 23), '寛治': datetime(1087, 5, 11), '応徳': datetime(1084, 3, 15), '永保': datetime(1081, 3, 22), '承暦': datetime(1077, 12, 5), '承保': datetime(1074, 9, 16), '延久': datetime(1069, 5, 6), '治暦': datetime(1065, 9, 4), '康平': datetime(1058, 9, 19), '天喜': datetime(1053, 2, 2), '永承': datetime(1046, 5, 22), '寛徳': datetime(1044, 12, 16), '長久': datetime(1040, 12, 16), '長暦': datetime(1037, 5, 9), '長元': datetime(1028, 8, 18), '万寿': datetime(1024, 8, 19), '治安': datetime(1021, 3, 17), '寛仁': datetime(1017, 5, 21), '長和': datetime(1013, 2, 8), '寛弘': datetime(1004, 8, 8), '長保': datetime(999, 2, 1), '長徳': datetime(995, 3, 25), '正暦': datetime(990, 11, 26), '永祚': datetime(989, 9, 10), '永延': datetime(987, 5, 5), '寛和': datetime(985, 5, 19), '永観': datetime(983, 5, 29), '天元': datetime(978, 12, 31), '貞元': datetime(976, 8, 11), '天延': datetime(974, 1, 16), '天禄': datetime(970, 5, 3), '安和': datetime(968, 9, 8), '康保': datetime(964, 8, 19), '応和': datetime(961, 3, 5), '天徳': datetime(957, 11, 21), '天暦': datetime(947, 5, 15), '天慶': datetime(938, 6, 22), '承平': datetime(931, 5, 16), '延長': datetime(923, 5, 29), '延喜': datetime(901, 8, 31), '昌泰': datetime(898, 5, 20), '寛平': datetime(889, 5, 30), '仁和': datetime(885, 3, 11), '元慶': datetime(877, 6, 1), '貞観': datetime(859, 5, 20), '天安': datetime(857, 3, 20), '斉衡': datetime(854, 12, 23), '仁寿': datetime(851, 6, 1), '嘉祥': datetime(848, 7, 16), '承和': datetime(834, 2, 14), '天長': datetime(824, 2, 8), '弘仁': datetime(810, 10, 20), '大同': datetime(806, 6, 8), '延暦': datetime(782, 9, 30), '天応': datetime(781, 1, 30), '宝亀': datetime(770, 10, 23), '神護景雲': datetime(767, 9, 13), '天平神護': datetime(765, 2, 1), '天平宝字': datetime(757, 9, 6), '天平勝宝': datetime(749, 8, 19), '天平感宝': datetime(749, 5, 4), '天平': datetime(729, 9, 2), '神亀': datetime(724, 3, 3), '養老': datetime(717, 12, 24), '霊亀': datetime(715, 10, 3), '和銅': datetime(708, 2, 7), '慶雲': datetime(704, 6, 16), '大宝': datetime(701, 5, 3), '朱鳥': datetime(686, 8, 14), '白雉': datetime(650, 3, 22),
         '大化': datetime(645, 7, 17)
     }
-    
+
     def __init__(self, timestr, parserinfo=None, **kwargs):
         """
-    
+
         Parse a string in one of the supported formats, using the
         ``parserinfo`` parameters.
-        
+
             default object -> lazydate.jpinfo
-    
+
         :param timestr:
             A string containing a date/time stamp.
-    
+
         :param parserinfo:
             A :class:`parserinfo` object containing parameters for the parser.
             If ``None``, the default arguments to the :class:`parserinfo`
             constructor are used.
-    
+
         The ``**kwargs`` parameter takes the following keyword arguments:
-    
+
         :param default:
             The default datetime object, if this is a datetime object and not
             ``None``, elements specified in ``timestr`` replace elements in the
             default object.
-    
+
         :param ignoretz:
             If set ``True``, time zones in parsed strings are ignored and a naive
             :class:`datetime` object is returned.
-    
+
         :param tzinfos:
             Additional time zone names / aliases which may be present in the
             string. This argument maps time zone names (and optionally offsets
@@ -339,13 +339,13 @@ class lazydate(object):
             dictionary with timezone aliases mapping time zone names to time
             zones or a function taking two parameters (``tzname`` and
             ``tzoffset``) and returning a time zone.
-    
+
             The timezones to which the names are mapped can be an integer
             offset from UTC in seconds or a :class:`tzinfo` object.
-    
+
             .. doctest::
                :options: +NORMALIZE_WHITESPACE
-    
+
                 >>> from dateutil.parser import parse
                 >>> from dateutil.tz import gettz
                 >>> tzinfos = {"BRST": -7200, "CST": gettz("America/Chicago")}
@@ -354,51 +354,51 @@ class lazydate(object):
                 >>> parse("2012-01-19 17:21:00 CST", tzinfos=tzinfos)
                 datetime(2012, 1, 19, 17, 21,
                                   tzinfo=tzfile('/usr/share/zoneinfo/America/Chicago'))
-    
+
             This parameter is ignored if ``ignoretz`` is set.
-    
+
         :param dayfirst:
             Whether to interpret the first value in an ambiguous 3-integer date
             (e.g. 01/05/09) as the day (``True``) or month (``False``). If
             ``yearfirst`` is set to ``True``, this distinguishes between YDM and
             YMD. If set to ``None``, this value is retrieved from the current
             :class:`parserinfo` object (which itself defaults to ``False``).
-    
+
         :param yearfirst:
             Whether to interpret the first value in an ambiguous 3-integer date
             (e.g. 01/05/09) as the year. If ``True``, the first number is taken to
             be the year, otherwise the last number is taken to be the year. If
             this is set to ``None``, the value is retrieved from the current
             :class:`parserinfo` object (which itself defaults to ``False``).
-    
+
         :param fuzzy:
             default True.
             Whether to allow fuzzy parsing, allowing for string like "Today is
             January 1, 2047 at 8:21:00AM".
-    
+
         :param fuzzy_with_tokens:
             If ``True``, ``fuzzy`` is automatically set to True, and the parser
             will return a tuple where the first element is the parsed
             :class:`datetime` datetimestamp and the second element is
             a tuple containing the portions of the string which were ignored:
-    
+
             .. doctest::
-    
+
                 >>> from dateutil.parser import parse
                 >>> parse("Today is January 1, 2047 at 8:21:00AM", fuzzy_with_tokens=True)
                 (datetime(2047, 1, 1, 8, 21), (u'Today is ', u' ', u'at '))
-    
+
         :return:
             Returns a :class:`datetime` object or, if the
             ``fuzzy_with_tokens`` option is ``True``, returns a tuple, the
             first element being a :class:`datetime` object, the second
             a tuple containing the fuzzy tokens.
-    
+
         :raises ValueError:
             Raised for invalid or unknown string format, if the provided
             :class:`tzinfo` is not in a valid format, or if an invalid date
             would be created.
-    
+
         :raises OverflowError:
             Raised if the parsed date exceeds the largest valid C integer on
             your system.
@@ -407,58 +407,58 @@ class lazydate(object):
         self.timestr = timestr
         self.parserinfo = parserinfo or __class__.jpinfo()
         self._kwargs = kwargs
-        
+
         if isinstance(timestr, datetime):
             self._dt = timestr
             self.timestr = self.repairstr = str(timestr)
-        
+
         if not isinstance(timestr, str):
             self.timestr = str(timestr)
-            
+
         if "fuzzy" not in kwargs:
             self._kwargs["fuzzy"] = True
-    
+
     @classmethod
     @lru_cache(8)
     def gengo2date(cls, timestr):
         g = next((d for d in cls.g2d if d in timestr), None)
         if g is None:
             return timestr
-    
+
         dy = cls.g2d[g]
         i = dy.year - 1
         pattern = r"(?:" + g + r"[\.,\- ]?)((?:[0-9]{1,2}|元))\s?(年?)"
-    
+
         reret = re.search(pattern, timestr)
         if reret:
             n = reret.group(1)
             edit = "{}{}".format(int("1" if n == "元" else n) + i, reret.group(2))
             return timestr.replace(reret.group(0), edit)
-    
+
         return timestr
-    
+
     @staticmethod
     def repair_ampm(s,
         _ng_ampm = re.compile('(\\s*(?:[AaPp]\\.?[Mm]\\.?|午[前後]))((?:\\s*(?:1[0-9]|2[0-4]||0?[0-9])\\s*?[\\.:時]?\\s*(?:[1-5][0-9]|0?[0-9])\\s*?[\\.:分]?\\s*(?:[1-5][0-9]|0?[0-9])\\s*?(?:秒|[Ss]ec(?:onds)?)??\\s*(?:[,\\.]?\\d+)?(?:\\s*(?:[+\\-]\\d{4})\\s*\\(?(?:[ABCDEFGHIJKLMNOPRSTUVWY][ABCDEFGHIJKLMNOPRSTUVWXYZ][ABCDGHKLMNORSTUVWZ][1DST][T])\\)?|\\s*(?:[+\\-]\\d{4})|\\s*\\(?(?:[ABCDEFGHIJKLMNOPRSTUVWY][ABCDEFGHIJKLMNOPRSTUVWXYZ][ABCDGHKLMNORSTUVWZ][1DST][T])\\)?)?)[^\\s]*)')
         ):
         return _ng_ampm.sub(" \\2 \\1", s).replace("  ", " ")
-    
+
     def parse(self, timestr=None, **kw):
         """
         :param timestr:
             A string containing a date/time stamp.
-    
+
         The ``**kw`` parameter takes the following keyword arguments:
-    
+
         :param default:
             The default datetime object, if this is a datetime object and not
             ``None``, elements specified in ``timestr`` replace elements in the
             default object.
-    
+
         :param ignoretz:
             If set ``True``, time zones in parsed strings are ignored and a naive
             :class:`datetime` object is returned.
-    
+
         :param tzinfos:
             Additional time zone names / aliases which may be present in the
             string. This argument maps time zone names (and optionally offsets
@@ -466,13 +466,13 @@ class lazydate(object):
             dictionary with timezone aliases mapping time zone names to time
             zones or a function taking two parameters (``tzname`` and
             ``tzoffset``) and returning a time zone.
-    
+
             The timezones to which the names are mapped can be an integer
             offset from UTC in seconds or a :class:`tzinfo` object.
-    
+
             .. doctest::
                :options: +NORMALIZE_WHITESPACE
-    
+
                 >>> from dateutil.parser import parse
                 >>> from dateutil.tz import gettz
                 >>> tzinfos = {"BRST": -7200, "CST": gettz("America/Chicago")}
@@ -481,51 +481,51 @@ class lazydate(object):
                 >>> parse("2012-01-19 17:21:00 CST", tzinfos=tzinfos)
                 datetime(2012, 1, 19, 17, 21,
                                   tzinfo=tzfile('/usr/share/zoneinfo/America/Chicago'))
-    
+
             This parameter is ignored if ``ignoretz`` is set.
-    
+
         :param dayfirst:
             Whether to interpret the first value in an ambiguous 3-integer date
             (e.g. 01/05/09) as the day (``True``) or month (``False``). If
             ``yearfirst`` is set to ``True``, this distinguishes between YDM and
             YMD. If set to ``None``, this value is retrieved from the current
             :class:`parserinfo` object (which itself defaults to ``False``).
-    
+
         :param yearfirst:
             Whether to interpret the first value in an ambiguous 3-integer date
             (e.g. 01/05/09) as the year. If ``True``, the first number is taken to
             be the year, otherwise the last number is taken to be the year. If
             this is set to ``None``, the value is retrieved from the current
             :class:`parserinfo` object (which itself defaults to ``False``).
-    
+
         :param fuzzy:
             default True.
             Whether to allow fuzzy parsing, allowing for string like "Today is
             January 1, 2047 at 8:21:00AM".
-    
+
         :param fuzzy_with_tokens:
             If ``True``, ``fuzzy`` is automatically set to True, and the parser
             will return a tuple where the first element is the parsed
             :class:`datetime` datetimestamp and the second element is
             a tuple containing the portions of the string which were ignored:
-    
+
             .. doctest::
-    
+
                 >>> from dateutil.parser import parse
                 >>> parse("Today is January 1, 2047 at 8:21:00AM", fuzzy_with_tokens=True)
                 (datetime(2047, 1, 1, 8, 21), (u'Today is ', u' ', u'at '))
-    
+
         :return:
             Returns a :class:`datetime` object or, if the
             ``fuzzy_with_tokens`` option is ``True``, returns a tuple, the
             first element being a :class:`datetime` object, the second
             a tuple containing the fuzzy tokens.
-    
+
         :raises ValueError:
             Raised for invalid or unknown string format, if the provided
             :class:`tzinfo` is not in a valid format, or if an invalid date
             would be created.
-    
+
         :raises OverflowError:
             Raised if the parsed date exceeds the largest valid C integer on
             your system.
@@ -534,48 +534,48 @@ class lazydate(object):
             return self._dt
         if isinstance(timestr, datetime):
             return timestr
-        
+
         repairstr = to_hankaku(timestr or self.timestr)
         repairstr = kanji2int(repairstr)
         repairstr = __class__.gengo2date(repairstr)
         repairstr = __class__.repair_ampm(repairstr)
-        
+
         return parser(self.parserinfo).parse(timestr or repairstr, **{**self._kwargs, **kw})
-    
+
     @property
     def dt(self):
         if self._dt is None:
             self._dt = self.parse()
         return self._dt
-    
+
     def to_datetime(self, timestr=None, form=None):
         if form is None:
             return self.parse(timestr, fuzzy_with_tokens=False)
         if "%ggg" in form:
             return self.to_gengo(timestr, form)
         return self.parse(timestr, fuzzy_with_tokens=False).strftime(form)
-    
-    
+
+
     def to_gengo(self, timestr, form="%ggg年%m月%d日 %H:%M:%S"):
         """
         和暦変換関数
-    
+
         Parameters
         ----------
         timestr : TYPE
             DESCRIPTION.
         form : TYPE, optional
             DESCRIPTION. The default is "%ggg年%m月%d日 %H:%M:%S".
-    
+
         Returns
         -------
         TYPE
             DESCRIPTION.
-    
+
         """
         dt = self.parse(timestr, fuzzy_with_tokens=False)
         g2d = __class__.g2d
-    
+
         gname, gyear = next((g, dt.year - g2d[g].year + 1) for g in g2d if g2d[g] <= dt)
         gengo = "{}{}".format(gname, "元" if gyear == 1 else gyear)
         form = form.replace("%ggg", gengo)
