@@ -64,7 +64,8 @@ def parse(
     path_or_buffer,
     recursive=False,
     parent=None,
-    base_date=None
+    base_date=None,
+    offset=None,
     ):
 
     prefix = "-dlcb"
@@ -72,7 +73,7 @@ def parse(
     with opener(path_or_buffer) as fp:
         if recursive:
             for x in fp:
-                line = x.rstrip()
+                line = x.rstrip()[offset:]
                 if line == "":
                     continue
 
@@ -83,7 +84,7 @@ def parse(
                     yield split_ls(line, parent)
         else:
             for x in fp:
-                line = x.rstrip()
+                line = x.rstrip()[offset:]
                 if line and line[0] in prefix:
                     yield split_ls(line, parent=parent, base_date=base_date)
 
@@ -166,6 +167,8 @@ def main():
          help='run ls -lR Current Directory Path String')
     padd('-s', '--sep', type=unicode_escape, default=",",
          help='csv output separator (default `,`)')
+    padd('--offset', type=int, default=None,
+         help='offset bytes Ex. skip bytes timestamp.')
 
     padd("filename",
          metavar="<filename>",
@@ -178,12 +181,13 @@ def main():
     sep = args.sep
     BASE_DATE = args.basedate
     PARENT = args.currentdirectory
+    offset = args.offset
 
     files = [g for fn in args.filename for g in glob(fn)]
     if not files:
         raise FileNotFoundError("Not found files {}".format(args.filename))
 
-    rows = (row for f in files for row in parse(f, recursive=recursive, parent=PARENT, base_date=BASE_DATE))
+    rows = (row for f in files for row in parse(f, recursive=recursive, parent=PARENT, base_date=BASE_DATE, offset=offset))
 
     ext = str(outfile).lower().rsplit(".", 1)[1]
 
