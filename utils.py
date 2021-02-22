@@ -540,7 +540,7 @@ class lazydate(object):
         repairstr = __class__.gengo2date(repairstr)
         repairstr = __class__.repair_ampm(repairstr)
 
-        return parser(self.parserinfo).parse(timestr or repairstr, **{**self._kwargs, **kw})
+        return parser(self.parserinfo).parse(repairstr, **{**self._kwargs, **kw})
 
     @property
     def dt(self):
@@ -589,6 +589,12 @@ def to_datetime(timestr, form=None):
 
 def to_gengo(timestr, form=None):
     return  lazydate(str(timestr)).to_gengo(form)
+
+def to_epoch(timestr, form=None):
+    return to_datetime(timestr, form).timestamp()
+
+def from_epoch(epochstr):
+    return datetime.fromtimestamp(int(epochstr))
 
 re_datetime = re.compile(DATETIME)
 re_date = re.compile(DATE)

@@ -64,9 +64,11 @@ def thisfile():
 def thisdir():
     return dirname(thisfile())
 
-def flatten(x):
-    return [z for y in x for z in (flatten(y)
-             if y is not None and hasattr(y, "__iter__") and not isinstance(y, (str, bytes, bytearray)) else (y,))]
+def flatten(x, notype=(str, bytes, bytearray), _recur=False):
+    if _recur is False and isinstance(x, notype) or not hasattr(x, "__iter__"):
+        return [x]
+    return [z for y in x for z in (flatten(y, _recur=True)
+              if y is not None and hasattr(y, "__iter__") and not isinstance(y, notype) else (y,))]
 
 def listify(x):
     if not x:
