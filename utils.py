@@ -251,30 +251,30 @@ def duplicates(iterable, key=None, uniq_return=True, callback=lambda x: x):
 
 
 def uniq(iterable, key=None, callback=None):
-    l = []
+    s = set()
+    add = s.add
+    ret = []
+
     if callback:
-        def ladd(x):
-            l.append(callback(x))
+        retadd = ret.append
+        def radd(x):
+            retadd(callback(x))
     else:
-        ladd = l.append
+        radd = ret.append
 
-    if key is None:
-        for i in iterable:
-            if i in l:
-                continue
-            ladd(i)
+    if key:
+        for elem in iterable:
+            k = key(elem)
+            if k not in s:
+                add(k)
+                radd(elem)
     else:
-        kl = []
-        kadd = kl.append
-
-        for i in iterable:
-            k = key(i)
-            if k in kl:
-                continue
-            kadd(k)
-            ladd(i)
-        del kl
-    return l
+        for elem in iterable:
+            if elem not in s:
+                add(elem)
+                radd(elem)
+    del s
+    return ret
 
 
 def timestamp2date(x, dfm = "%Y/%m/%d %H:%M"):

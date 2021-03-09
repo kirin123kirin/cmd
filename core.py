@@ -71,16 +71,13 @@ def flatten(x, notype=(str, bytes, bytearray), _recur=False):
               if y is not None and hasattr(y, "__iter__") and not isinstance(y, notype) else (y,))]
 
 def listify(x):
-    if not x:
+    if x is None:
         return []
-    elif isinstance(x, list):
+    if isinstance(x, list):
         return x
-    elif isinstance(x, (str, bytes, bytearray, int, float, bool, )):
-        return [x]
-    elif hasattr(x, "__iter__") or hasattr(x, "__next__"):
+    if (hasattr(x, "__iter__") or hasattr(x, "__next__")) and not hasattr(x, "startswith"):
         return list(x)
-    else:
-        return [x]
+    return [x]
 
 
 def binopen(f, mode="rb", *args, **kw):
@@ -276,17 +273,18 @@ def globbing(func, ttype="both", isloop=True, callback=None):
 
 
 
-ZEN = "".join(chr(0xff01 + i) for i in range(94))
-HAN = "".join(chr(0x21 + i) for i in range(94))
+ZEN = chr(0x3000) + "".join(chr(0xff01 + i) for i in range(94))
+HAN = "".join(chr(0x20 + i) for i in range(95))
 
 #thanks https://hgotoh.jp/wiki/doku.php/documents/other/other-020
 #ZEN = """！＂＃＄％＆＇（）＊＋，－．／０１２３４５６７８９：；＜＝＞？＠ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ［＼］＾＿｀ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ｛｜｝～￠￡￢￤￥←↑→↓│■○"""
 #HAN = """!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]＾_`abcdefghijklmnopqrstuvwxyz{｜}~￠￡￢|\￩￪￫￬|￭￮"""
 
-def to_hankaku(s):
-    return s.translate(str.maketrans(ZEN, HAN))
-def to_zenkaku(s):
-    return s.translate(str.maketrans(HAN, ZEN))
+def to_hankaku(s, tdic=str.maketrans(ZEN, HAN)):
+    return s.translate(tdic)
+
+def to_zenkaku(s, tdic=str.maketrans(HAN, ZEN)):
+    return s.translate(tdic)
 
 def kanji2int(kstring: str, sep=False,
     tt_knum = str.maketrans('一二三四五六七八九〇壱弐参', '1234567890123'),

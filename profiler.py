@@ -25,15 +25,14 @@ import sys
 import csv
 import os
 from itertools import combinations
-from pathlib import Path
 
 from util.io import readrow, grouprow, to_csv, to_tsv, unicode_escape
 from util.filetype import guesstype
 
-BASE_TYPE = [type(None), int, float, str, bytes, bytearray, bool]
+BASE_TYPE = (type(None), int, float, str, bytes, bytearray, bool)
 def deeptuple(x):
     try:
-        return tuple([y if type(y) in BASE_TYPE else deeptuple(y) for y in x])
+        return tuple([y if isinstance(y, BASE_TYPE) else deeptuple(y) for y in x])
     except:
         return (x, )
 
@@ -131,7 +130,7 @@ def profiler(
     head = []
 
     try:
-        if guesstype(path_or_buffer) in ["ppt","doc","csv","txt","html","pickle"]:
+        if guesstype(path_or_buffer) in {"ppt","doc","csv","txt","html","pickle"}:
             raise ValueError
 
         rows = grouprow(path_or_buffer)

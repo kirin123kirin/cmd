@@ -27,7 +27,7 @@ import os
 import re
 from io import BytesIO, StringIO
 import csv
-from util.core import getencoding
+from chardet import detect
 
 def is_office(b:bytes):
     if b[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':
@@ -108,11 +108,13 @@ def is_html(b:bytes):
 def is_json(b:bytes):
     return is_text(b) and b.lstrip(b"\xef\xbb\xbf")[0] == b"{" and b":" in b and b.rstrip()[-1] == 125 # 125 is `}`
 
+sniffer=csv.Sniffer()
+sniffer.preferred = [',', '\t', ';', ' ', ':', '|']
 def is_csv(b:bytes):
     try:
-        e = getencoding(b)
-        d = csv.Sniffer().sniff(b.decode(e) if e else b.decode())
-        return d.delimiter in [",", "\t", " ", "|"]
+        e = detect(b)["encoding"]
+        d = sniffer.sniff(b.decode(e) if e else b.decode())
+        return d.delimiter in sniffer.preferred
     except csv.Error:
         return False
 
