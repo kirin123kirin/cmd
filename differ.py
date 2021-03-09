@@ -29,6 +29,7 @@ try:
     similar = _lru_cache_wrapper(similar, 128, False, _CacheInfo)
 except:
     from collections import _count_elements
+    from collections import defaultdict
 
     BASE_TYPE = [type(None), int, float, str, bytes, bytearray, bool]
 
@@ -67,35 +68,56 @@ except:
         except:
             return (hash(x), )
 
+    def snake(k:int, y:int, left:object, right:object):
+        x = y - k
+        while x < len(left) and y < len(right) and left[x] == right[y]:
+            x += 1
+            y += 1
+        return y
+
     @lru_cache()
-    def similar(a:tuple, b:tuple):
+    def similar(left, right):
         """
             Parameters:
-                a: tuple (Compare target data left)
-                b: tuole (Compare target data right)
+                left: ex.tuple (Compare target data left)
+                right: ex.tuple (Compare target data right)
             Return:
                 float (0.0 < return <= 1.000000000002)
         """
-        prod = 0.0
-        ca = {}
-        cb = {}
-        _count_elements(ca, a)
-        _count_elements(cb, b)
+        if left == right:
+            return 1.0
 
-        if ca and cb:
-            in_b = cb.__contains__
+        if not (left and right):
+            return 0.0
 
-            for k, na in ca.items():
-                if in_b(k):
-                    nb = cb[k]
-                    if na <= nb:
-                        prod += na
-                    else:
-                        prod += nb
+        try:
+            l1, l2 = len(left), len(right)
+            o1, o2 = left, right
+        except:
+            o1 = list(left)
+            o2 = list(right)
+            l1, l2 = len(o1), len(o2)
 
-            if prod:
-                return 2*prod / (len(a) + len(b))
-        return 0.0
+        s1 = o2 if l1 > l2 else o1
+        s2 = o1 if l1 > l2 else o2
+        sl1 = len(s1)
+        sl2 = len(s2)
+        fp = defaultdict(lambda:-1)
+        offset = sl1 + 1
+        delta = sl2 - sl1
+
+        p = 0
+        while fp[delta + offset] != sl2:
+            for k in range(-p, delta):
+                fp[k + offset] = snake(k, max(fp[k-1+offset] + 1, fp[k+1+offset]), s1, s2)
+            for k in range(delta + p, delta, -1):
+                fp[k + offset] = snake(k, max(fp[k-1+offset] + 1, fp[k+1+offset]), s1, s2)
+            fp[delta + offset] = snake(delta, max(fp[delta-1+offset] + 1, fp[delta+1+offset]), s1, s2)
+
+            p += 1
+        ed = delta + (p - 1)
+        return 1.0 - (ed / max(l1,l2))
+
 
 def countby(seq, func=None, return_index=False):
     result = {}
