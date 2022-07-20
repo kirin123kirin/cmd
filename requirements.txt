@@ -18,6 +18,7 @@ rarfile
 sqlalchemy
 xlrd
 xlsxwriter
+openpyxl
 xsorted
 scapy
 selenium
