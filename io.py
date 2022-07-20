@@ -84,9 +84,9 @@ except ModuleNotFoundError:
 
 ## xls/xlsx
 try:
-    import xlrd
+    import openpyxl
 except ModuleNotFoundError:
-    xlrd = NotInstalledModuleError("Please Install command: pip3 install xlrd")
+    openpyxl = NotInstalledModuleError("Please Install command: pip3 install openpyxl")
 
 ## docx
 try:
@@ -704,11 +704,18 @@ class readrow:
     def xlsx(path_or_buffer):
         path, fp = pathbin(path_or_buffer)
 
-        with xlrd.open_workbook(file_contents=fp.read()) as wb:
-            for sh in wb.sheets():
-                sname = sh.name
-                for i in range(sh.nrows):
-                    yield pinfo(path, sname, sh.row_values(i))
+#         with xlrd.open_workbook(file_contents=fp.read()) as wb:
+#             for sh in wb.sheets():
+#                 sname = sh.name
+#                 for i in range(sh.nrows):
+#                     yield pinfo(path, sname, sh.row_values(i))
+
+        wb = openpyxl.load_workbook(fp)
+        for sh in wb.worksheets:
+            sname = sh.title
+
+            for row in sh.rows:
+                yield pinfo(path, sname, [r.value for r in row])
 
         if not hasattr(path_or_buffer, "close"):
             fp.close()
