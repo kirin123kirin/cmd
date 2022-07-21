@@ -312,7 +312,7 @@ def headtail(fp, buf):
     return ret
 
 def guesstype(f):
-    buf = 516
+    buf = 65536
     check = lambda *tp: isinstance(f, tp)
 
     if hasattr(f, "seek"):
